@@ -1,88 +1,42 @@
-# =========================================
-# 🔥 Celery Worker (Fixed OpenCV + SSL Bypass + Tesseract)
-# =========================================
+FROM python:3.12-slim
 
-# 1️⃣ Base image (match your main service)
-FROM python:3.12-slim AS celery-base
-
-# 2️⃣ Set working directory
 WORKDIR /app
 
-# 3️⃣ Install system dependencies (ADDED: Tesseract OCR)
+# Install essential dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     curl \
     ffmpeg \
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    ca-certificates \
-    openssl \
     tesseract-ocr \
-    tesseract-ocr-eng \
-    libtesseract-dev \
+    ca-certificates \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 4️⃣ Copy ONLY requirements file first (for better layer caching)
+# Install Python dependencies
 COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir numpy==1.26.4 && \
+    pip install --no-cache-dir opencv-python-headless==4.10.0.84 && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir --upgrade yt-dlp
 
-# 5️⃣ Install Python dependencies in correct order (NumPy → OpenCV → rest)
-RUN pip install --upgrade pip && \
-    pip install numpy==1.26.4 && \
-    pip install opencv-python-headless==4.10.0.84 && \
-    pip install -r requirements.txt
-
-# 6️⃣ Install yt-dlp separately (ensure latest version)
-RUN pip install --upgrade yt-dlp
-
-# 7️⃣ Set transformers cache directory (if needed for your AI models)
+# Pre-download model
 ENV TRANSFORMERS_CACHE=/app/.cache/huggingface
-RUN mkdir -p /app/.cache/huggingface
+RUN mkdir -p /app/.cache/huggingface && \
+    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" || true
 
-# 8️⃣ Pre-download models if needed
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" || true
-
-# 9️⃣ Copy all source code
+# Copy code
 COPY . .
 
-# 🔟 Create necessary directories
+# Create directories
 RUN mkdir -p /tmp/videos /app/uploads /app/uploads/individual/timetables /app/uploads/individual/schemes
 
-# 1️⃣1️⃣ Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    ENVIRONMENT=production
-
-# ⚠️ CRITICAL SSL BYPASS - Only for Celery worker
-# This is needed because yt-dlp has issues with SSL in Docker
-ENV PYTHONHTTPSVERIFY=0 \
+    ENVIRONMENT=production \
+    PYTHONHTTPSVERIFY=0 \
     CURL_CA_BUNDLE="" \
-    REQUESTS_CA_BUNDLE="" \
-    SSL_CERT_FILE=""
+    REQUESTS_CA_BUNDLE=""
 
-# 1️⃣2️⃣ Create startup script that ensures SSL is disabled
-RUN echo '#!/bin/bash\n\
-# Ensure SSL bypass environment variables are set\n\
-export PYTHONHTTPSVERIFY=0\n\
-export CURL_CA_BUNDLE=""\n\
-export REQUESTS_CA_BUNDLE=""\n\
-export SSL_CERT_FILE=""\n\
-\n\
-# Disable SSL in Python itself\n\
-python3 -c "import ssl; ssl._create_default_https_context = ssl._create_unverified_context" 2>/dev/null || true\n\
-\n\
-echo "🔓 SSL verification disabled for yt-dlp"\n\
-echo "📸 Tesseract OCR enabled for timetable extraction"\n\
-echo "🚀 Starting Celery worker..."\n\
-\n\
-# Start Celery worker\n\
-exec celery -A app.celery_worker worker --loglevel=info\n\
-' > /start-worker.sh && chmod +x /start-worker.sh
-
-# 1️⃣3️⃣ Use the wrapper script as entrypoint
-CMD ["/start-worker.sh"]
+CMD ["celery", "-A", "app.celery_worker", "worker", "--loglevel=info"]
