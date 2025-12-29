@@ -1,0 +1,254 @@
+version: "3.9"
+
+services:
+  # 🐘 PostgreSQL Database
+  postgres:
+    image: postgres:16
+    container_name: edu_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: edu_admin
+      POSTGRES_PASSWORD: edu_password
+      POSTGRES_DB: edu_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./java-service/docker/postgres/init:/docker-entrypoint-initdb.d
+      - edu_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edu_admin -d edu_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 🔴 Redis (Caching & Celery Broker)
+  redis:
+    image: redis:7-alpine
+    container_name: edu_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # 📦 MinIO (Object Storage for Videos)
+  minio:
+    image: minio/minio:latest
+    container_name: edu_minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ☕ Java Spring Boot Service
+  java-service:
+    build:
+      context: ./java-service
+      dockerfile: Dockerfile
+    container_name: edu_java_service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/edu_db
+      SPRING_DATASOURCE_USERNAME: edu_admin
+      SPRING_DATASOURCE_PASSWORD: edu_password
+      SPRING_PROFILES_ACTIVE: prod
+
+      JWT_SECRET: "change-this-super-secret-key-of-32-chars-min"
+      SYSTEM_TOKEN: ${SYSTEM_TOKEN}
+
+      PYTHON_SERVICE_URL: "http://python-service:8000"
+
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_SECURE: false
+
+      ZOOM_ACCOUNT_ID: ${ZOOM_ACCOUNT_ID}
+      ZOOM_CLIENT_ID: ${ZOOM_CLIENT_ID}
+      ZOOM_CLIENT_SECRET: ${ZOOM_CLIENT_SECRET}
+
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET}
+      YOUTUBE_REDIRECT_URI: ${YOUTUBE_REDIRECT_URI}
+
+      SERVER_PORT: 8080
+      SERVER_SERVLET_CONTEXT_PATH: /api/v1
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      - shared_lesson_uploads:/app/uploads
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v1/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # 🐍 Python FastAPI Service (AI Engine)
+  python-service:
+    build:
+      context: ./python-service
+      dockerfile: Dockerfile
+    container_name: edu_python_service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://edu_admin:edu_password@postgres:5432/edu_db
+      ENVIRONMENT: production
+      PYTHONPATH: /app
+
+      JAVA_API_URL: http://java-service:8080/api/v1/lesson-topics
+      SYSTEM_TOKEN: ${SYSTEM_TOKEN}
+
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_SECURE: false
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./python-service:/app
+      - shared_lesson_uploads:/app/uploads
+      - video_uploads:/tmp/videos
+      - ./python-service/.cache:/app/.cache
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/docs || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # 🔄 Celery Worker
+  celery-worker:
+    build:
+      context: ./python-service
+      dockerfile: Dockerfile.worker
+    container_name: edu_celery_worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql+psycopg2://edu_admin:edu_password@postgres:5432/edu_db?options=-csearch_path%3Dcore,academic,ai,public"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      PYTHONPATH: /app
+      JAVA_API_URL: http://java-service:8080/api/v1
+      SYSTEM_TOKEN: ${SYSTEM_TOKEN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_SECURE: false
+      # ✅ SSL BYPASS VARIABLES
+      PYTHONHTTPSVERIFY: "0"
+      CURL_CA_BUNDLE: ""
+      REQUESTS_CA_BUNDLE: ""
+      SSL_CERT_FILE: "/etc/ssl/certs/ca-certificates.crt"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      python-service:
+        condition: service_started
+    volumes:
+      - ./python-service:/app
+      - video_uploads:/tmp/videos
+      - shared_lesson_uploads:/app/uploads
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+
+  # 🌸 Flower
+  flower:
+    image: mher/flower:2.0.1
+    container_name: edu_flower
+    restart: unless-stopped
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      - redis
+      - celery-worker
+    ports:
+      - "5555:5555"
+    command: ["celery", "--broker=redis://redis:6379/0", "flower", "--port=5555"]
+
+  # 🧩 pgAdmin
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: edu_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@edu.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    volumes:
+      - ./pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "8081:80"
+    depends_on:
+      - postgres
+
+volumes:
+  edu_data:
+  redis_data:
+  minio_data:
+  shared_lesson_uploads:
+  video_uploads:

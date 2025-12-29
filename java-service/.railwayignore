@@ -1,0 +1,13 @@
+﻿target/
+.mvn/
+*.log
+*.tmp
+.git/
+.idea/
+.vscode/
+*.iml
+node_modules/
+*.class
+*.jar
+*.war
+.DS_Store

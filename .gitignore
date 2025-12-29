@@ -1,0 +1,69 @@
+﻿# =====================
+# Java
+# =====================
+target/
+*.class
+*.log
+*.jar
+*.war
+.mvn/wrapper/maven-wrapper.jar
+
+# =====================
+# Python
+# =====================
+__pycache__/
+*.py[cod]
+.Python
+*.so
+.cache/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+venv/
+env/
+.venv/
+
+# =====================
+# Frontend
+# =====================
+node_modules/
+dist/
+.cache/
+
+# =====================
+# IDEs
+# =====================
+.idea/
+.vscode/
+*.iml
+*.swp
+.classpath
+.project
+.settings/
+.factorypath
+
+# =====================
+# OS
+# =====================
+.DS_Store
+Thumbs.db
+
+# =====================
+# Database
+# =====================
+pgadmin_data/
+*.sql
+
+# =====================
+# Environment (CRITICAL)
+# =====================
+.env
+.env.*
+!.env.example
+
+# =====================
+# Misc
+# =====================
+thread_dump.txt
+railway_schema.sql

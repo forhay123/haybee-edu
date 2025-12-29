@@ -1,0 +1,16 @@
+﻿id,name,code,level,department_id,compulsory
+1,Mathematics,MATH101,ALL,1,true
+2,English Language,ENG101,ALL,2,true
+3,Biology,BIO101,SS,1,false
+4,Chemistry,CHE101,SS,1,false
+5,Physics,PHY101,SS,1,false
+6,Literature in English,LIT101,SS,2,false
+7,Government,GOV101,SS,2,false
+8,Economics,ECO101,SS,3,false
+9,Accounting,ACC101,SS,3,false
+10,Basic Science,BSC101,JSS,1,true
+11,Basic Technology,BTC101,JSS,1,false
+12,Social Studies,SOC101,JSS,2,true
+13,Civic Education,CIV101,ALL,true,true
+14,Agricultural Science,AGR101,JSS,1,false
+15,Computer Studies,ICT101,ALL,1,true
