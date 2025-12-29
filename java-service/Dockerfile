@@ -5,6 +5,7 @@ WORKDIR /app
 # 1️⃣ Copy only Maven files to cache dependencies
 COPY pom.xml mvnw ./
 COPY .mvn .mvn
+RUN chmod +x mvnw
 RUN ./mvnw dependency:go-offline -B
 
 # 2️⃣ Copy the rest of the source code
