@@ -49,16 +49,15 @@ public class SecurityConfig {
             
             // ✅ Authorization rules
             .authorizeHttpRequests(auth -> auth
-                // ✅ Public OAuth endpoints - NO AUTHENTICATION REQUIRED
-                // These endpoints handle OAuth flow where JWT tokens aren't available
-                .requestMatchers(
-                    "/oauth/**"  // Allows ALL OAuth endpoints without auth
-                ).permitAll()
+                // ✅ WebSocket endpoints - MUST BE FIRST for SockJS to work
+                .requestMatchers("/ws-chat/**").permitAll()
                 
-                // ✅ MOVE PDF uploads FIRST and be VERY specific
+                // ✅ Public OAuth endpoints - NO AUTHENTICATION REQUIRED
+                .requestMatchers("/oauth/**").permitAll()
+                
+                // ✅ PDF uploads
                 .requestMatchers("/lesson-topics/uploads/**").permitAll()
                 .requestMatchers("/uploads/**").permitAll()
-                
                 
                 // Other public endpoints
                 .requestMatchers(
@@ -68,7 +67,6 @@ public class SecurityConfig {
                     "/swagger-ui/**",
                     "/internal/generate-system-token",
                     "/swagger-ui.html",
-                    "/ws-chat/**",
                     "/test/zoom/health"
                 ).permitAll()
                 
@@ -101,14 +99,20 @@ public class SecurityConfig {
             "https://selfless-compassion-production-3a32.up.railway.app"
         ));
         
-        // ✅ Allow all HTTP methods
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        // ✅ Allow all HTTP methods INCLUDING OPTIONS and HEAD
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"));
         
         // ✅ Allow all headers
         configuration.setAllowedHeaders(List.of("*"));
         
+        // ✅ Expose headers that SockJS needs
+        configuration.setExposedHeaders(List.of("Authorization", "X-Requested-With"));
+        
         // ✅ Allow credentials (required for Authorization header)
         configuration.setAllowCredentials(true);
+        
+        // ✅ Cache preflight for 1 hour
+        configuration.setMaxAge(3600L);
         
         // ✅ Apply to all paths
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
