@@ -42,6 +42,7 @@ jwt:
 # 🌐 Server Configuration
 server:
   port: 8080
+  address: 0.0.0.0  # Bind to all network interfaces for Railway
   servlet:
     context-path: /api/v1
 
