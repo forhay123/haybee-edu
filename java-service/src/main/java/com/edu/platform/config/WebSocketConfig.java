@@ -54,12 +54,17 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry
             .addEndpoint("/ws-chat")
-            // ✅ FIXED: Allow specific origins - MUST MATCH SecurityConfig
+            // ✅ FIXED: Allow specific origins for other machines on network
             .setAllowedOrigins(
                 "http://localhost:5173",
-                "http://172.20.10.3:5173",
-                "http://192.168.101.20:5173",
-                "https://selfless-compassion-production-3a32.up.railway.app"
+                "http://localhost:3000",
+                "http://172.20.10.3:5173",  // Your machine
+                "http://172.20.10.2:5173",  // Other machine 1
+                "http://172.20.10.4:5173",  // Other machine 2
+                "http://172.20.10.5:5173",  // Other machine 3
+                "http://172.20.10.6:5173",  // Other machine 4
+                "http://172.20.10.7:5173",  // Other machine 5
+                "http://172.20.10.8:5173"   // Other machine 6
             )
             .withSockJS(); // Enable SockJS fallback
         
