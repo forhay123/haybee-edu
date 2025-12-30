@@ -43,7 +43,7 @@ debug_*.py
 diagnose_*.py
 cleanup_*.py
 
-# Alembic migrations (Railway will run these separately)
+# Alembic migrations(Railway will run these separately)
 alembic/
 alembic.ini
 migrations/
