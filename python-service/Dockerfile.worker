@@ -21,10 +21,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir --upgrade yt-dlp
 
-# Pre-download model
+# Set model cache directory
 ENV TRANSFORMERS_CACHE=/app/.cache/huggingface
-RUN mkdir -p /app/.cache/huggingface && \
-    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" || true
+RUN mkdir -p /app/.cache/huggingface
 
 # Copy code
 COPY . .

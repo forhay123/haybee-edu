@@ -18,10 +18,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir opencv-python-headless==4.10.0.84 && \
     pip install --no-cache-dir -r requirements.txt
 
-# Pre-download model
+# Set model cache directory
 ENV TRANSFORMERS_CACHE=/app/.cache/huggingface
-RUN mkdir -p /app/.cache/huggingface && \
-    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+RUN mkdir -p /app/.cache/huggingface
 
 # Copy application code
 COPY . .
@@ -35,4 +34,5 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     ENVIRONMENT=production
 
+# Model will be downloaded on first use at runtime
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
