@@ -19,7 +19,7 @@ public class WebConfig {
                         "http://localhost:5173",
                         "http://172.20.10.3:5173",
                         "http://192.168.101.20:5173",
-                        "https://selfless-compassion-production-e2d4.up.railway.app"
+                        "https://selfless-compassion-production-3a32.up.railway.app"
                     )
                     .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                     .allowedHeaders("Authorization", "Content-Type", "Accept")
