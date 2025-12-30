@@ -1,5 +1,5 @@
 // src/utils/auth.ts
-import { RootState } from '@/store/store';
+// import { RootState } from '@/store/store';
 
 export const getUserFromLocalStorage = () => {
   const userStr = localStorage.getItem('user');
