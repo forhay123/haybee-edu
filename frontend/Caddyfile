@@ -10,8 +10,6 @@ handle /api/v1/* {
     reverse_proxy http://haybee-edu.railway.internal:8080 {
         header_up Host {upstream_hostport}
         header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
     }
 }
 
@@ -20,8 +18,6 @@ handle /ws-chat {
     reverse_proxy http://haybee-edu.railway.internal:8080 {
         header_up Host {upstream_hostport}
         header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
         header_up Connection {>Connection}
         header_up Upgrade {>Upgrade}
     }
