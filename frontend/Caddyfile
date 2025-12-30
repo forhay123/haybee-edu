@@ -5,10 +5,35 @@ log {
     level INFO
 }
 
-root * /app/dist
-encode gzip
-file_server
-try_files {path} /index.html
+# API proxy to backend service
+handle /api/v1/* {
+    reverse_proxy http://haybee-edu.railway.internal:8080 {
+        header_up Host {upstream_hostport}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# WebSocket proxy
+handle /ws-chat {
+    reverse_proxy http://haybee-edu.railway.internal:8080 {
+        header_up Host {upstream_hostport}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up Connection {>Connection}
+        header_up Upgrade {>Upgrade}
+    }
+}
+
+# Frontend static files
+handle {
+    root * /app/dist
+    encode gzip
+    try_files {path} /index.html
+    file_server
+}
 
 header {
     -Server
