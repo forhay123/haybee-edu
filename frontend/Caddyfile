@@ -1,0 +1,15 @@
+:{$PORT:2015}
+
+log {
+    output stdout
+    level INFO
+}
+
+root * /app/dist
+encode gzip
+file_server
+try_files {path} /index.html
+
+header {
+    -Server
+}
