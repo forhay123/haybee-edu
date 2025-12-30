@@ -97,7 +97,8 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(List.of(
             "http://localhost:5173",
             "http://172.20.10.3:5173",
-            "http://192.168.101.20:5173"
+            "http://192.168.101.20:5173",
+            "https://selfless-compassion-production-e2d4.up.railway.app"
         ));
         
         // ✅ Allow all HTTP methods
