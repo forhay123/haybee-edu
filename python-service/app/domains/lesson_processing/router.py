@@ -50,17 +50,17 @@ def process_lesson_in_background(db: Session, lesson_id: int, local_file_path: s
     """
     service = LessonAIService(db)
     try:
-        # Process the lesson
+        # Process the lesson - returns LessonAIResult SQLAlchemy object
         result = service.process_lesson(lesson_id=lesson_id, local_file_path=local_file_path)
         
-        # ✅ AUTOMATED: Trigger Java assessment creation after successful processing
-        if result and result.get("status") == "done":
+        # ✅ FIX: Access SQLAlchemy model attributes directly
+        if result and result.status == "done":
             try:
-                lesson_topic_id = result.get("lesson_topic_id")
+                lesson_topic_id = result.lesson_topic_id
                 
                 # ✅ Use settings from config
                 java_backend_url = settings.JAVA_SERVICE_URL or "http://java-backend:8080"
-                java_webhook_url = f"{java_backend_url}/api/v1/admin/assessments/create-for-lesson/{lesson_topic_id}"
+                java_webhook_url = f"{java_backend_url}/api/v1/integration/assessments/create/{lesson_topic_id}"
                 
                 logger.info(f"🎯 Triggering assessment creation for lesson {lesson_topic_id}")
                 logger.info(f"   Calling: {java_webhook_url}")
@@ -77,11 +77,10 @@ def process_lesson_in_background(db: Session, lesson_id: int, local_file_path: s
                 else:
                     logger.warning("   No SYSTEM_TOKEN configured - request may fail")
                 
-                # Call Java to create assessment
+                # Call Java to create assessment (using POST, not sending body since it's in path)
                 webhook_response = requests.post(
                     java_webhook_url,
                     headers=headers,
-                    json={"lessonTopicId": lesson_topic_id},
                     timeout=30
                 )
                 
@@ -115,12 +114,14 @@ def process_lesson_in_background(db: Session, lesson_id: int, local_file_path: s
                 logger.warning("   Tip: Check JAVA_SERVICE_URL in your .env file")
             except Exception as webhook_error:
                 logger.warning(f"⚠️ Failed to trigger assessment creation: {webhook_error}")
+                logger.exception("Full webhook error:")  # Add full traceback for debugging
                 # Don't fail the entire process if webhook fails
         
         logger.info(f"✅ Lesson processing completed for lesson {lesson_id}")
         
     except Exception as e:
         logger.error(f"[BackgroundTaskError] Failed to process lesson {lesson_id}: {e}")
+        logger.exception("Full error traceback:")  # Add full traceback
         print(f"[BackgroundTaskError] Failed to process lesson {lesson_id}: {e}")
 
 # ==========================================================
