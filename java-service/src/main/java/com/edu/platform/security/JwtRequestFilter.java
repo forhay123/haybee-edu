@@ -22,29 +22,38 @@ import java.io.IOException;
  */
 @RequiredArgsConstructor
 public class JwtRequestFilter extends OncePerRequestFilter {
-
+    
     private static final Logger log = LoggerFactory.getLogger(JwtRequestFilter.class);
-
+    
     private final JwtTokenUtil jwtTokenUtil;
     private final CustomUserDetailsService userDetailsService;
-
+    
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain)
             throws ServletException, IOException {
-
+        
+        // ✅ Skip JWT validation for Python AI service endpoints
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+        
+        if (path.matches(".*/lesson-topics/\\d+/ai-status") && "POST".equals(method)) {
+            log.debug("⚠️ Bypassing JWT auth for Python AI endpoint: {} {}", method, path);
+            chain.doFilter(request, response);
+            return;
+        }
+        
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         String token = (StringUtils.hasText(header) && header.startsWith("Bearer "))
                 ? header.substring(7)
                 : null;
-
+        
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 if (jwtTokenUtil.validateToken(token)) {
                     String email = jwtTokenUtil.parseClaims(token).get("email", String.class);
                     UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-
                     var authentication = new UsernamePasswordAuthenticationToken(
                             userDetails, null, userDetails.getAuthorities());
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
@@ -54,7 +63,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 log.warn("JWT authentication failed: {}", ex.getMessage());
             }
         }
-
+        
         chain.doFilter(request, response);
     }
 }
