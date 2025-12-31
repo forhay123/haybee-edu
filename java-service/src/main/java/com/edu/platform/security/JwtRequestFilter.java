@@ -22,34 +22,41 @@ import java.io.IOException;
  */
 @RequiredArgsConstructor
 public class JwtRequestFilter extends OncePerRequestFilter {
-    
+
     private static final Logger log = LoggerFactory.getLogger(JwtRequestFilter.class);
-    
+
     private final JwtTokenUtil jwtTokenUtil;
     private final CustomUserDetailsService userDetailsService;
-    
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain)
             throws ServletException, IOException {
-        
-        // ✅ FIXED: Include /api/v1 prefix in the pattern
+
         String path = request.getRequestURI();
         String method = request.getMethod();
-        
-        // Match pattern: /api/v1/lesson-topics/{id}/ai-status
-        if (path.matches(".*/api/v1/lesson-topics/\\d+/ai-status") && "POST".equals(method)) {
-            log.info("✅ Bypassing JWT auth for Python AI endpoint: {} {}", method, path);
+        String remoteAddr = request.getRemoteAddr();
+
+        // 🔍 DEBUG: Log every incoming request
+        log.info("🔍 Request: {} {} (from: {})", method, path, remoteAddr);
+
+        // ✅ Bypass JWT for Python AI endpoints
+        // Pattern 1: /api/v1/lesson-topics/{id}/ai-status
+        // Pattern 2: /api/v1/integration/assessments/create/{id}
+        if ("POST".equals(method) && 
+            (path.matches(".*/lesson-topics/\\d+/ai-status") || 
+             path.matches(".*/integration/assessments/create/\\d+"))) {
+            log.info("✅ BYPASSING JWT auth for Python AI endpoint: {} {}", method, path);
             chain.doFilter(request, response);
             return;
         }
-        
+
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         String token = (StringUtils.hasText(header) && header.startsWith("Bearer "))
                 ? header.substring(7)
                 : null;
-        
+
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 if (jwtTokenUtil.validateToken(token)) {
@@ -59,12 +66,13 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                             userDetails, null, userDetails.getAuthorities());
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
+                    log.debug("✅ JWT authenticated: {}", email);
                 }
             } catch (Exception ex) {
-                log.warn("JWT authentication failed: {}", ex.getMessage());
+                log.warn("⚠️ JWT authentication failed for {} {}: {}", method, path, ex.getMessage());
             }
         }
-        
+
         chain.doFilter(request, response);
     }
 }
