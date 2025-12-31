@@ -71,7 +71,7 @@ public class SecurityConfig {
                 ).permitAll()
                 
                 // ✅ Allow Python service to report AI status
-                .requestMatchers(HttpMethod.POST, "/lesson-topics/**/ai-status").permitAll()
+                .requestMatchers(HttpMethod.POST, "/lesson-topics/*/ai-status").permitAll()
                 .requestMatchers("/individual/callback/**").permitAll()
                 
                 // All others require authentication
