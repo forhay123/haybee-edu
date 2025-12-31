@@ -17,16 +17,22 @@ class RedisClient:
         """Initialize Redis client from environment variables"""
         self.host = os.getenv('REDIS_HOST', 'redis')
         self.port = int(os.getenv('REDIS_PORT', 6379))
+        self.password = os.getenv('REDIS_PASSWORD')  # ✅ ADD THIS
         self.db = 2  # Separate DB from Celery (0=broker, 1=results, 2=cache)
         
-        self.pool = redis.ConnectionPool(
-            host=self.host,
-            port=self.port,
-            db=self.db,
-            decode_responses=True,
-            max_connections=10
-        )
+        # ✅ FIX: Add password to connection pool
+        pool_kwargs = {
+            'host': self.host,
+            'port': self.port,
+            'db': self.db,
+            'decode_responses': True,
+            'max_connections': 10
+        }
         
+        if self.password:
+            pool_kwargs['password'] = self.password
+        
+        self.pool = redis.ConnectionPool(**pool_kwargs)
         self.client = redis.Redis(connection_pool=self.pool)
         
         try:
