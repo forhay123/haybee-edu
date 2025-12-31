@@ -19,3 +19,22 @@ Thumbs.db
 
 # Alembic
 migrations/versions/*.pyc
+
+# Data directories (large files)
+data/
+uploaded_lessons/
+uploads/
+.venv_backup/
+uploaded_lessons_backup/
+uploads_backup/
+
+# Cache
+.cache/
+
+# Large media files
+*.pdf
+*.mp4
+*.wav
+*.mkv
+*.webm
+*.mov

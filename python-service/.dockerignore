@@ -1,53 +1,22 @@
-cd C:\Users\User\Desktop\edu\python-service
-notepad .dockerignore
-```
-
-Replace with this more comprehensive version:
-```
+data/
+uploaded_lessons/
+uploads/
+.venv_backup/
+uploaded_lessons_backup/
+uploads_backup/
 __pycache__/
 *.pyc
-*.log
-.env
-.env.*
-venv/
-.venv/
-env/
-ENV/
-.idea/
-.vscode/
-uploads/
-uploaded_lessons/
-tmp/
-videos/
-data/
+.git/
 .cache/
-.huggingface/
+*.pdf
 *.mp4
 *.wav
 *.mkv
 *.webm
 *.mov
-.git/
-.gitignore
-*.egg-info/
-dist/
-build/
-.pytest_cache/
-htmlcov/
-.coverage
-
-# Test and debug files
+.venv/
+venv/
 test_*.py
-*_test.py
 debug_*.py
 diagnose_*.py
 cleanup_*.py
-
-# Alembic migrations(Railway will run these separately)
-alembic/
-alembic.ini
-migrations/
-
-# README and docs
-README.md
-*.md
