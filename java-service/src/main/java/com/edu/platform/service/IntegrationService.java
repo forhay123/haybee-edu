@@ -40,17 +40,36 @@ public class IntegrationService {
     private final UserRepository userRepository;
 
     // ==========================================================
-    // 🧠 Python AI Service URLs
+    // 🧠 Python AI Service Configuration
     // ==========================================================
-    private static final String PYTHON_SERVICE_URL = "http://python-service:8000";
-    private static final String AI_SYNC_URL        = PYTHON_SERVICE_URL + "/ai/lessons/sync";
-    private static final String AI_PROCESS_URL     = PYTHON_SERVICE_URL + "/ai/process-lesson";
-    private static final String AI_RESULT_URL      = PYTHON_SERVICE_URL + "/api/ai-results/";
-    private static final String AI_STATUS_URL      = PYTHON_SERVICE_URL + "/ai/lessons/";
-    private static final String AI_REGENERATE_URL  = PYTHON_SERVICE_URL + "/ai/regenerate/";
+    @Value("${python.service.url:http://python-service:8000}")
+    private String pythonServiceUrl;
 
     @Value("${system.token:replace_with_system_jwt}")
     private String systemToken;
+
+    // ==========================================================
+    // Helper methods to build URLs dynamically
+    // ==========================================================
+    private String getAiSyncUrl() {
+        return pythonServiceUrl + "/ai/lessons/sync";
+    }
+
+    private String getAiProcessUrl() {
+        return pythonServiceUrl + "/ai/process-lesson";
+    }
+
+    private String getAiResultUrl(Long lessonTopicId) {
+        return pythonServiceUrl + "/api/ai-results/" + lessonTopicId;
+    }
+
+    private String getAiStatusUrl(Long lessonId) {
+        return pythonServiceUrl + "/ai/lessons/" + lessonId + "/status";
+    }
+
+    private String getAiRegenerateUrl(Long lessonTopicId) {
+        return pythonServiceUrl + "/ai/regenerate/" + lessonTopicId;
+    }
 
     // ==========================================================
     // 1️⃣ Sync Lesson Metadata with Python
@@ -68,7 +87,7 @@ public class IntegrationService {
             headers.setBearerAuth(systemToken);
 
             HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
-            ResponseEntity<Map> response = restTemplate.postForEntity(AI_SYNC_URL, request, Map.class);
+            ResponseEntity<Map> response = restTemplate.postForEntity(getAiSyncUrl(), request, Map.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 String status = (String) response.getBody().get("status");
@@ -116,7 +135,7 @@ public class IntegrationService {
             headers.setBearerAuth(systemToken);
 
             HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
-            ResponseEntity<String> response = restTemplate.postForEntity(AI_PROCESS_URL, request, String.class);
+            ResponseEntity<String> response = restTemplate.postForEntity(getAiProcessUrl(), request, String.class);
 
             log.info("✅ Sent lesson file to Python AI (lessonTopicId={}): Status {}",
                     lessonTopicId, response.getStatusCode());
@@ -135,7 +154,7 @@ public class IntegrationService {
 
     public LessonAIResult getLessonAIResultByTopic(Long lessonTopicId) {
         try {
-            String url = AI_RESULT_URL + lessonTopicId;
+            String url = getAiResultUrl(lessonTopicId);
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(systemToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
@@ -170,7 +189,7 @@ public class IntegrationService {
 
     public LessonAiStatusDto getLessonAiStatus(Long lessonId) {
         try {
-            String url = AI_STATUS_URL + lessonId + "/status";
+            String url = getAiStatusUrl(lessonId);
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(systemToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
@@ -196,7 +215,7 @@ public class IntegrationService {
     @Async
     public void regenerateAIForLesson(Long lessonTopicId) {
         try {
-            String url = AI_REGENERATE_URL + lessonTopicId;
+            String url = getAiRegenerateUrl(lessonTopicId);
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(systemToken);
             headers.setContentType(MediaType.APPLICATION_JSON);
