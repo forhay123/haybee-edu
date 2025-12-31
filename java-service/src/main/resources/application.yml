@@ -48,7 +48,7 @@ server:
 
 # 📱 Application Configuration
 app:
-  backend-base-url: http://172.20.10.3:8080/api/v1
+  backend-base-url: ${APP_BACKEND_BASE_URL:http://localhost:8080/api/v1}
 
 # 🎥 Zoom Configuration
 zoom:
