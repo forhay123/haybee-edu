@@ -163,8 +163,16 @@ def report_ai_progress(lesson_topic_id: int, status: str, progress: int, questio
 
         logger.info(f"📡 Reporting to Java: lesson_topic_id={lesson_topic_id}, status={status}, progress={progress}, count={question_count}")
 
+        # ✅ FIX: Ensure the URL includes "lesson-topics"
+        base_url = JAVA_API_URL
+        if not base_url.endswith("/lesson-topics"):
+            base_url = base_url.rstrip("/") + "/lesson-topics"
+        
+        url = f"{base_url}/{lesson_topic_id}/ai-status"
+        logger.info(f"📍 Full URL: {url}")  # Debug log
+        
         resp = requests.post(
-            f"{JAVA_API_URL}/{lesson_topic_id}/ai-status",
+            url,
             json=payload,
             headers={"Authorization": f"Bearer {SYSTEM_TOKEN}", "Content-Type": "application/json"},
             timeout=10
