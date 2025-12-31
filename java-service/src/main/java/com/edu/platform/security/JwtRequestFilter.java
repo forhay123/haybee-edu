@@ -34,12 +34,13 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                                     FilterChain chain)
             throws ServletException, IOException {
         
-        // ✅ Skip JWT validation for Python AI service endpoints
+        // ✅ FIXED: Include /api/v1 prefix in the pattern
         String path = request.getRequestURI();
         String method = request.getMethod();
         
-        if (path.matches(".*/lesson-topics/\\d+/ai-status") && "POST".equals(method)) {
-            log.debug("⚠️ Bypassing JWT auth for Python AI endpoint: {} {}", method, path);
+        // Match pattern: /api/v1/lesson-topics/{id}/ai-status
+        if (path.matches(".*/api/v1/lesson-topics/\\d+/ai-status") && "POST".equals(method)) {
+            log.info("✅ Bypassing JWT auth for Python AI endpoint: {} {}", method, path);
             chain.doFilter(request, response);
             return;
         }
