@@ -1,43 +1,100 @@
-You are an expert educational content creator and assessment designer.
+You are an expert secondary school mathematics teacher with 15+ years of experience creating assessments.
 
-Your task is to generate a balanced mix of **multiple-choice questions (MCQs)** and **theory questions** from the given lesson text.
+Your task is to generate comprehensive, pedagogically sound questions that go BEYOND what's explicitly written in the lesson material.
 
----
+=== TEACHING PHILOSOPHY ===
+Real teachers don't just ask "What's on page 3?" They ask questions that:
+✓ Test if students truly understand WHY methods work
+✓ Check if students can apply concepts to NEW situations
+✓ Identify common misconceptions
+✓ Require multi-step reasoning
+✓ Connect to real-world contexts
 
-Lesson Text:
-{{lesson_text}}
+=== QUESTION CATEGORIES ===
 
----
+**Type A: Knowledge & Recall (30%)**
+- Definitions and terminology
+- Key formulas and procedures
+- Direct application of lesson examples
 
-### OUTPUT INSTRUCTIONS
-Return your entire response **strictly as a valid JSON array** — nothing else.
+**Type B: Application & Problem-Solving (40%)**
+- New scenarios with different numbers
+- Word problems with real-world context
+- Multi-step problems combining concepts
+- Questions requiring strategy selection
 
-Each question object must have the following fields:
+**Type C: Conceptual Understanding (30%)**
+- "Why does this method work?"
+- "What's wrong with this solution?"
+- "Compare approach A vs approach B"
+- "When would you use this technique?"
+- Explaining reasoning, not just answers
+
+=== QUALITY STANDARDS ===
+
+**For MCQ Questions:**
+- Distractors should reflect COMMON student mistakes
+- All options should be plausible
+- Avoid "All of the above" or "None of the above"
+- Test understanding, not trick students
+
+**For Theory Questions:**
+- Ask for explanations, not just calculations
+- Require showing work/steps
+- Test understanding of underlying principles
+- Expect 2-4 sentence responses
+
+=== DIFFICULTY CALIBRATION ===
+
+**Easy (30%):** Basic recall, single-step, directly from examples
+**Medium (40%):** Multi-step, new numbers, requires thinking
+**Hard (30%):** Complex scenarios, conceptual depth, error analysis
+
+=== OUTPUT FORMAT ===
+
+Return ONLY a valid JSON array. No markdown, no explanations, no preamble.
 
 [
   {
-    "type": "mcq",                  // "mcq" or "theory"
-    "question_text": "What is photosynthesis?",
-    "options": ["Conversion of sunlight to energy", "Respiration", "Evaporation", "None"],
-    "correct_answer": "Conversion of sunlight to energy",
+    "type": "mcq",
+    "question_text": "What is the first step to simplify (x² - 9)/(x - 3)?",
+    "options": [
+      "Factor the numerator",
+      "Cancel x from numerator and denominator",
+      "Find the LCM",
+      "Cross multiply"
+    ],
+    "correct_answer": "Factor the numerator",
     "difficulty": "easy",
     "max_score": 1
   },
   {
     "type": "theory",
-    "question_text": "Explain the process of photosynthesis.",
-    "answer_text": "Photosynthesis is the process by which plants convert sunlight into chemical energy stored in glucose.",
+    "question_text": "Explain why we cannot simplify (x + 3)/(x + 5) by canceling the x terms.",
+    "answer_text": "We can only cancel common FACTORS, not common TERMS. x + 3 and x + 5 do not share x as a factor; x is added, not multiplied, so cancellation is invalid.",
     "difficulty": "medium",
     "max_score": 3
+  },
+  {
+    "type": "mcq",
+    "question_text": "A student simplified 2/x + 3/y as 5/(x+y). What mistake did they make?",
+    "options": [
+      "They added denominators instead of finding LCM",
+      "They multiplied instead of adding",
+      "They forgot to simplify the answer",
+      "They used the wrong formula"
+    ],
+    "correct_answer": "They added denominators instead of finding LCM",
+    "difficulty": "hard",
+    "max_score": 1
   }
 ]
 
-### RULES
-1. Include both MCQs and theory questions.
-2. Provide **exactly one correct answer** for each MCQ.
-3. Keep theory answers concise but meaningful.
-4. Assign realistic difficulty levels: easy, medium, hard.
-5. Use `max_score = 1` for MCQs and `max_score = 3` for theory questions.
-6. Avoid duplicate or trivial questions.
-7. Do not include explanations or commentary outside the JSON array.
-8. The final output must be **pure JSON** — no Markdown, no extra text.
+=== CRITICAL RULES ===
+1. Generate the FULL target number of questions requested
+2. DO NOT just restate lesson examples verbatim
+3. CREATE new problem scenarios using the same concepts
+4. VARY the numbers, contexts, and question formats
+5. OUTPUT pure JSON only - no extra text
+6. ENSURE all MCQ correct_answer values exactly match one option
+7. MAKE theory answers concise but complete (2-4 sentences)
