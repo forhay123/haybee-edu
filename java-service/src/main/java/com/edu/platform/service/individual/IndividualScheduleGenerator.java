@@ -46,8 +46,8 @@ public class IndividualScheduleGenerator {
     private final StudentLessonProgressRepository progressRepository;
     private final MultiPeriodDetectionService multiPeriodDetectionService;
 
-    private static final LocalTime WEEKDAY_START = LocalTime.of(16, 0);
-    private static final LocalTime WEEKDAY_END = LocalTime.of(18, 0);
+    private static final LocalTime WEEKDAY_START = LocalTime.of(17, 0);
+    private static final LocalTime WEEKDAY_END = LocalTime.of(19, 0);
     private static final int WEEKDAY_PERIODS = 2;
 
     private static final LocalTime SATURDAY_START = LocalTime.of(12, 0);

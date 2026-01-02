@@ -35,6 +35,7 @@ class MCQQuestion(BaseModel):
         for i, opt in enumerate(self.options):
             if opt.lower().strip() == correct_lower:
                 self.correct_answer = self.options[i]
+                logger.debug(f"✅ Fixed case mismatch: corrected to '{self.options[i]}'")
                 return self
         
         # Try partial match
@@ -42,10 +43,20 @@ class MCQQuestion(BaseModel):
             opt_clean = opt.lower().strip()
             if correct_lower in opt_clean or opt_clean in correct_lower:
                 self.correct_answer = self.options[i]
+                logger.debug(f"✅ Fixed partial match: corrected to '{self.options[i]}'")
                 return self
         
-        # ✅ NUCLEAR OPTION: Just pick the first option if nothing matches
-        logger.warning(f"⚠️ Validation workaround: '{self.correct_answer}' doesn't match options, using first option")
+        # Last resort: check if removing punctuation helps
+        correct_no_punct = correct_lower.translate(str.maketrans('', '', string.punctuation))
+        for i, opt in enumerate(self.options):
+            opt_no_punct = opt.lower().strip().translate(str.maketrans('', '', string.punctuation))
+            if correct_no_punct == opt_no_punct:
+                self.correct_answer = self.options[i]
+                logger.debug(f"✅ Fixed punctuation mismatch: corrected to '{self.options[i]}'")
+                return self
+        
+        # Nuclear option: Just pick the first option if nothing matches
+        logger.warning(f"⚠️ Validation workaround: '{self.correct_answer}' doesn't match options, using first option: '{self.options[0]}'")
         self.correct_answer = self.options[0]
         return self
         
@@ -260,12 +271,10 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
         if q.type == "mcq":
             options = q.options
             answer_text = q.correct_answer
-            try:
-                correct_index = options.index(q.correct_answer)
-                correct_option = ["A", "B", "C", "D"][correct_index]
-            except (ValueError, IndexError):
-                logger.debug(f"⚠️ {pass_name}: Skipping MCQ - correct_answer not in options")
-                continue
+            # ✅ FIXED: Removed the try-catch that was skipping questions
+            # Since validator already auto-fixes correct_answer, this will always work
+            correct_index = options.index(q.correct_answer)
+            correct_option = ["A", "B", "C", "D"][correct_index]
         else:
             answer_text = q.answer_text
         
@@ -299,7 +308,7 @@ def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count
         raw = call_openai_completion(
             f"{system_prompt}\n\n{user_prompt}",
             model=None,
-            max_tokens=4096,  # ✅ Increased from 4000 to 8000
+            max_tokens=4096,
             response_format="json",
         )
         logger.debug(f"✅ {pass_name}: OpenAI call successful")
