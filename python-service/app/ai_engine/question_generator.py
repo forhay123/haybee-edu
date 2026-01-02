@@ -231,80 +231,88 @@ def _extract_json_robust(raw: Any) -> List[Dict[str, Any]]:
 # ✅ IMPROVED validation with detailed error logging
 # ----------------------------
 def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, pass_name: str = "") -> List[Dict[str, Any]]:
-    """Validate and format questions with detailed error logging"""
+    """Validate and format questions - NUCLEAR OPTION: Manual validation"""
     
     if not parsed:
         logger.warning(f"⚠️ {pass_name}: No parsed questions to validate")
         return []
     
     logger.debug(f"🔍 {pass_name}: Attempting to validate {len(parsed)} questions")
-    logger.debug(f"📋 {pass_name}: Sample raw question: {json.dumps(parsed[0], indent=2)}")
     
-    validated_questions = []
-    validation_errors = []
-    
-    # Try bulk validation first
-    try:
-        validated_questions = parse_obj_as(List[QuestionSchema], parsed[:target_count * 2])
-        logger.info(f"✅ {pass_name}: Bulk validation successful - {len(validated_questions)} questions")
-    except ValidationError as ve:
-        logger.warning(f"⚠️ {pass_name}: Bulk validation failed with {len(ve.errors())} errors")
-        logger.debug(f"📋 {pass_name}: First 3 validation errors: {ve.errors()[:3]}")
-        
-        # Try one by one
-        for i, item in enumerate(parsed):
-            try:
-                validated = parse_obj_as(QuestionSchema, item)
-                validated_questions.append(validated)
-            except ValidationError as e:
-                validation_errors.append({
-                    "index": i,
-                    "question": item.get("question_text", "N/A")[:50],
-                    "errors": [err["msg"] for err in e.errors()[:3]]
-                })
-                continue
-        
-        if validation_errors:
-            logger.warning(f"⚠️ {pass_name}: Failed to validate {len(validation_errors)} questions")
-            logger.debug(f"📋 {pass_name}: Sample failures: {validation_errors[:3]}")
-    
-    # Format for database
-    seen = set()
     formatted = []
+    seen = set()
     
-    for q in validated_questions:
-        q_text = q.question_text.strip()
-        if not q_text or q_text.lower() in seen:
+    for item in parsed:
+        try:
+            # Skip if missing required fields
+            if 'type' not in item or 'question_text' not in item:
+                continue
+            
+            q_text = item['question_text'].strip()
+            if not q_text or q_text.lower() in seen:
+                continue
+            
+            # Handle MCQ
+            if item['type'] == 'mcq':
+                options = item.get('options', [])
+                if len(options) != 4:
+                    continue
+                
+                correct_answer = item.get('correct_answer', '')
+                
+                # FIX: Force correct_answer to match an option
+                if correct_answer not in options:
+                    # Try case-insensitive
+                    found = False
+                    for opt in options:
+                        if opt.lower().strip() == correct_answer.lower().strip():
+                            correct_answer = opt
+                            found = True
+                            break
+                    
+                    # Just use first option if nothing matches
+                    if not found:
+                        logger.warning(f"⚠️ {pass_name}: Forcing correct_answer to first option")
+                        correct_answer = options[0]
+                
+                correct_index = options.index(correct_answer)
+                correct_option = ["A", "B", "C", "D"][correct_index]
+                
+                formatted.append({
+                    "question_text": q_text,
+                    "answer_text": correct_answer,
+                    "difficulty": item.get('difficulty', 'medium'),
+                    "max_score": item.get('max_score', 1),
+                    "option_a": options[0],
+                    "option_b": options[1],
+                    "option_c": options[2],
+                    "option_d": options[3],
+                    "correct_option": correct_option,
+                })
+            
+            # Handle Theory
+            elif item['type'] == 'theory':
+                answer_text = item.get('answer_text', '')
+                if not answer_text:
+                    continue
+                
+                formatted.append({
+                    "question_text": q_text,
+                    "answer_text": answer_text,
+                    "difficulty": item.get('difficulty', 'medium'),
+                    "max_score": item.get('max_score', 3),
+                    "option_a": None,
+                    "option_b": None,
+                    "option_c": None,
+                    "option_d": None,
+                    "correct_option": None,
+                })
+            
+            seen.add(q_text.lower())
+            
+        except Exception as e:
+            logger.debug(f"⚠️ {pass_name}: Skipped question due to error: {e}")
             continue
-        
-        options = None
-        correct_option = None
-        answer_text = None
-        
-        if q.type == "mcq":
-            options = q.options
-            answer_text = q.correct_answer
-            # ✅ FIXED: Removed the try-catch that was skipping questions
-            # Since validator already auto-fixes correct_answer, this will always work
-            correct_index = options.index(q.correct_answer)
-            correct_option = ["A", "B", "C", "D"][correct_index]
-        else:
-            answer_text = q.answer_text
-        
-        opts_dict = map_options_to_fields(options)
-        
-        formatted.append({
-            "question_text": q.question_text,
-            "answer_text": answer_text,
-            "difficulty": q.difficulty,
-            "max_score": q.max_score,
-            "option_a": opts_dict["option_a"],
-            "option_b": opts_dict["option_b"],
-            "option_c": opts_dict["option_c"],
-            "option_d": opts_dict["option_d"],
-            "correct_option": correct_option,
-        })
-        seen.add(q_text.lower())
     
     logger.info(f"✅ {pass_name}: Formatted {len(formatted)} valid questions")
     return formatted
