@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional, Union, Literal
 import json
 import re
+import string
 import torch
 from pydantic import BaseModel, Field, ValidationError, model_validator, parse_obj_as
 from sentence_transformers import SentenceTransformer, util
@@ -34,19 +35,29 @@ class MCQQuestion(BaseModel):
         for i, opt in enumerate(self.options):
             if opt.lower().strip() == correct_lower:
                 self.correct_answer = self.options[i]  # Use exact option text
-                logger.debug(f"✅ Fixed case mismatch: '{self.correct_answer}' → '{self.options[i]}'")
+                logger.debug(f"✅ Fixed case mismatch: corrected to '{self.options[i]}'")
                 return self
         
         # Try partial match (correct_answer is substring of option or vice versa)
         for i, opt in enumerate(self.options):
-            if correct_lower in opt.lower() or opt.lower() in correct_lower:
+            opt_clean = opt.lower().strip()
+            if correct_lower in opt_clean or opt_clean in correct_lower:
                 self.correct_answer = self.options[i]
-                logger.debug(f"✅ Fixed partial match: '{self.correct_answer}' → '{self.options[i]}'")
+                logger.debug(f"✅ Fixed partial match: corrected to '{self.options[i]}'")
                 return self
         
-        # No match found
-        raise ValueError(f"correct_answer '{self.correct_answer}' must match one of the options: {self.options}")
-        return self
+        # Last resort: check if removing punctuation helps
+        correct_no_punct = correct_lower.translate(str.maketrans('', '', string.punctuation))
+        for i, opt in enumerate(self.options):
+            opt_no_punct = opt.lower().strip().translate(str.maketrans('', '', string.punctuation))
+            if correct_no_punct == opt_no_punct:
+                self.correct_answer = self.options[i]
+                logger.debug(f"✅ Fixed punctuation mismatch: corrected to '{self.options[i]}'")
+                return self
+        
+        # No match found - this question is invalid
+        logger.warning(f"❌ Validation failed: '{self.correct_answer}' not in {self.options}")
+        raise ValueError(f"correct_answer '{self.correct_answer}' must match one of the options")
 
 class TheoryQuestion(BaseModel):
     type: Literal["theory"]
@@ -224,23 +235,14 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
         logger.info(f"✅ {pass_name}: Bulk validation successful - {len(validated_questions)} questions")
     except ValidationError as ve:
         logger.warning(f"⚠️ {pass_name}: Bulk validation failed with {len(ve.errors())} errors")
+        logger.debug(f"📋 {pass_name}: First 3 validation errors: {ve.errors()[:3]}")
         
-        # Log first few detailed errors
-        for i, err in enumerate(ve.errors()[:3]):
-            logger.debug(f"📋 {pass_name}: Error {i+1}: {err['msg']} at {err.get('loc', 'unknown')}")
-        
-        # Try one by one with detailed logging
+        # Try one by one
         for i, item in enumerate(parsed):
             try:
                 validated = parse_obj_as(QuestionSchema, item)
                 validated_questions.append(validated)
             except ValidationError as e:
-                # Log detailed error for first few failures
-                if len(validation_errors) < 3:
-                    logger.debug(f"❌ {pass_name}: Question {i+1} failed: {json.dumps(item, indent=2)[:200]}")
-                    for err in e.errors()[:2]:
-                        logger.debug(f"   → {err['msg']} at {err.get('loc', 'unknown')}")
-                
                 validation_errors.append({
                     "index": i,
                     "question": item.get("question_text", "N/A")[:50],
@@ -328,113 +330,119 @@ def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count
     
     return validated
 
+# ----------------------------
+# 🧠 Pass 1: Content-based questions
+# ----------------------------
 def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
     """Generate questions directly from lesson content"""
     
-    system_prompt = """You are an expert mathematics teacher.
+    system_prompt = """You are an expert mathematics teacher creating assessment questions.
 
-Create assessment questions in JSON array format. NO markdown, NO extra text.
+CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
+If asked for 15 questions, generate ALL 15. If asked for 7 questions, generate ALL 7.
 
-[{"type":"mcq","question_text":"...","options":["A","B","C","D"],"correct_answer":"A","difficulty":"easy","max_score":1}]"""
+Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
 
-    user_prompt = f"""Create {target_count} assessment questions from this lesson.
+Example format:
+[
+  {
+    "type": "mcq",
+    "question_text": "What is 2 + 2?",
+    "options": ["3", "4", "5", "6"],
+    "correct_answer": "4",
+    "difficulty": "easy",
+    "max_score": 1
+  }
+]
 
-LESSON:
+FOCUS ON:
+- Definitions and terminology
+- Key concepts and procedures
+- Direct application of formulas
+
+Generate a mix of easy, medium, and hard questions."""
+
+    user_prompt = f"""Create EXACTLY {target_count} assessment questions from this lesson.
+
+CRITICAL: You must generate ALL {target_count} questions. Do not stop early. Count your questions before submitting.
+
 {lesson_text}
 
-Mix of 60% MCQ and 40% theory questions.
-For MCQ: 4 options, correct_answer must match one option exactly.
+Include:
+- 60% MCQ questions (4 options each, correct_answer MUST exactly match one option)
+- 40% Theory questions (with concise answers)
 
-Output JSON array with {target_count} questions."""
+Output ONLY the JSON array with ALL {target_count} questions. No other text."""
 
-    return _call_and_parse_questions(system_prompt, user_prompt, target_count * 2, "Pass 1 (Content)")
+    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 1 (Content)")
 
 # ----------------------------
-# 🔧 Pass 2: Application questions (BATCHED)
+# 🔧 Pass 2: Application questions
 # ----------------------------
 def _generate_application_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate application questions in batches"""
+    """Generate questions that apply concepts to new scenarios"""
     
-    all_questions = []
-    batch_size = 4  # Smaller batches for complex questions
-    batches_needed = (target_count + batch_size - 1) // batch_size
-    
-    for batch_num in range(batches_needed):
-        batch_target = min(batch_size, target_count - len(all_questions))
-        
-        system_prompt = """You are an expert mathematics teacher. Create EXACTLY the number of APPLICATION questions requested.
+    system_prompt = """You are an expert mathematics teacher creating application questions.
 
-OUTPUT: ONLY a JSON array, NO markdown, NO explanations."""
+CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
+If asked for 8 questions, generate ALL 8. Count your questions before submitting.
 
-        user_prompt = f"""Generate EXACTLY {batch_target} application questions from this lesson:
+Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+
+FOCUS ON:
+- Real-world problem scenarios
+- Multi-step word problems
+- Different numbers/contexts than examples
+
+Output ONLY the JSON array."""
+
+    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} APPLICATION questions.
+
+CRITICAL: Generate ALL {target_count} questions. Do not stop at 1 or 2. Count before submitting.
 
 {lesson_text}
 
-Requirements:
-- Real-world scenarios
-- Different numbers than examples
-- Mix MCQ/Theory
-- correct_answer must EXACTLY match one option for MCQ
+Mix of:
+- 50% MCQ (correct_answer MUST exactly match one option)
+- 50% Theory (requiring worked solutions)
 
-Output ONLY JSON array with {batch_target} questions."""
+Output ONLY the JSON array with ALL {target_count} questions. No other text."""
 
-        batch_questions = _call_and_parse_questions(
-            system_prompt,
-            user_prompt,
-            batch_target,
-            f"Pass 2 Batch {batch_num+1}/{batches_needed}"
-        )
-        all_questions.extend(batch_questions)
-        
-        if len(all_questions) >= target_count:
-            break
-    
-    logger.info(f"🔧 Pass 2 (Application): Generated {len(all_questions)}/{target_count} questions")
-    return all_questions[:target_count]
+    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 2 (Application)")
 
 # ----------------------------
-# 💡 Pass 3: Conceptual questions (BATCHED)
+# 💡 Pass 3: Conceptual understanding questions
 # ----------------------------
 def _generate_conceptual_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate conceptual questions in batches"""
+    """Generate questions testing deeper understanding"""
     
-    all_questions = []
-    batch_size = 4
-    batches_needed = (target_count + batch_size - 1) // batch_size
-    
-    for batch_num in range(batches_needed):
-        batch_target = min(batch_size, target_count - len(all_questions))
-        
-        system_prompt = """You are an expert mathematics teacher. Create EXACTLY the number of CONCEPTUAL questions requested.
+    system_prompt = """You are an expert mathematics teacher creating conceptual questions.
 
-OUTPUT: ONLY a JSON array, NO markdown, NO explanations."""
+CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
+If asked for 7 questions, generate ALL 7. Count your questions before submitting.
 
-        user_prompt = f"""Generate EXACTLY {batch_target} conceptual questions from this lesson:
+Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
 
-{lesson_text}
-
-Focus on:
+FOCUS ON:
 - Why methods work
 - Common misconceptions
 - Comparing approaches
 
-Mix MCQ/Theory. For MCQ: correct_answer must EXACTLY match one option.
+Output ONLY the JSON array."""
 
-Output ONLY JSON array with {batch_target} questions."""
+    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} CONCEPTUAL questions.
 
-        batch_questions = _call_and_parse_questions(
-            system_prompt,
-            user_prompt,
-            batch_target,
-            f"Pass 3 Batch {batch_num+1}/{batches_needed}"
-        )
-        all_questions.extend(batch_questions)
-        
-        if len(all_questions) >= target_count:
-            break
-    
-    logger.info(f"💡 Pass 3 (Conceptual): Generated {len(all_questions)}/{target_count} questions")
-    return all_questions[:target_count]
+CRITICAL: Generate ALL {target_count} questions. Do not stop at 1 or 2. Count before submitting.
+
+{lesson_text}
+
+Mix of:
+- 40% MCQ (correct_answer MUST exactly match one option)
+- 60% Theory (requiring explanations)
+
+Output ONLY the JSON array with ALL {target_count} questions. No other text."""
+
+    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 3 (Conceptual)")
 
 # ----------------------------
 # ⚖️ Balance questions by difficulty
@@ -472,22 +480,36 @@ def generate_questions_multi_pass(
     max_questions: int = 30,
     enable_semantic_filter: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Generate questions - simplified to just Pass 1 for now"""
+    """Generate questions using multiple passes"""
     
     all_questions = []
     
-    # Only use Pass 1 which was working (generating 15 questions)
+    # Pass 1: Content (50% of target = 15 questions)
     try:
-        content_questions = _generate_content_questions(lesson_text, max_questions)
+        content_questions = _generate_content_questions(lesson_text, max_questions // 2)  # ← 15, not 30!
         all_questions.extend(content_questions)
         logger.info(f"📚 Pass 1 (Content): Generated {len(content_questions)} questions")
     except Exception as e:
         logger.error(f"❌ Pass 1 (Content) failed: {e}")
         content_questions = []
     
-    # Skip Pass 2 and 3 for now since they're not working
-    logger.info(f"⏭️  Skipping Pass 2 & 3 (validation issues)")
+    # Pass 2: Application (25% of target = 7-8 questions)
+    try:
+        application_questions = _generate_application_questions(lesson_text, max_questions // 4)
+        all_questions.extend(application_questions)
+        logger.info(f"🔧 Pass 2 (Application): Generated {len(application_questions)} questions")
+    except Exception as e:
+        logger.error(f"❌ Pass 2 (Application) failed: {e}")
+        application_questions = []
     
+    # Pass 3: Conceptual (25% of target = 7-8 questions)
+    try:
+        conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
+        all_questions.extend(conceptual_questions)
+        logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
+    except Exception as e:
+        logger.error(f"❌ Pass 3 (Conceptual) failed: {e}")
+        conceptual_questions = []    
     # Apply semantic filtering
     if enable_semantic_filter and all_questions:
         all_questions = semantic_filter_and_dedupe(lesson_text, all_questions)
