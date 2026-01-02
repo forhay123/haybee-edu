@@ -24,41 +24,54 @@ class MCQQuestion(BaseModel):
     difficulty: str = Field(default="medium", description="easy | medium | hard")
     max_score: int = Field(default=1, description="Max score for MCQ (usually 1)")
 
-    @model_validator(mode='after')
-    def check_correct_answer_in_options(self):
+    @model_validator(mode='before')  # ← Changed from 'after' to 'before'
+    def check_correct_answer_in_options(cls, values):
+        # Handle dict input (before Pydantic processes it)
+        if not isinstance(values, dict):
+            return values
+        
+        if 'type' not in values or values['type'] != 'mcq':
+            return values
+        
+        options = values.get('options', [])
+        correct_answer = values.get('correct_answer', '')
+        
+        if not options or not correct_answer:
+            return values
+        
         # Try exact match first
-        if self.correct_answer in self.options:
-            return self
+        if correct_answer in options:
+            return values
         
         # Try case-insensitive match
-        correct_lower = self.correct_answer.lower().strip()
-        for i, opt in enumerate(self.options):
+        correct_lower = correct_answer.lower().strip()
+        for opt in options:
             if opt.lower().strip() == correct_lower:
-                self.correct_answer = self.options[i]
-                logger.debug(f"✅ Fixed case mismatch: corrected to '{self.options[i]}'")
-                return self
+                values['correct_answer'] = opt
+                logger.debug(f"✅ Fixed case mismatch: corrected to '{opt}'")
+                return values
         
         # Try partial match
-        for i, opt in enumerate(self.options):
+        for opt in options:
             opt_clean = opt.lower().strip()
             if correct_lower in opt_clean or opt_clean in correct_lower:
-                self.correct_answer = self.options[i]
-                logger.debug(f"✅ Fixed partial match: corrected to '{self.options[i]}'")
-                return self
+                values['correct_answer'] = opt
+                logger.debug(f"✅ Fixed partial match: corrected to '{opt}'")
+                return values
         
-        # Last resort: check if removing punctuation helps
+        # Remove punctuation and try again
         correct_no_punct = correct_lower.translate(str.maketrans('', '', string.punctuation))
-        for i, opt in enumerate(self.options):
+        for opt in options:
             opt_no_punct = opt.lower().strip().translate(str.maketrans('', '', string.punctuation))
             if correct_no_punct == opt_no_punct:
-                self.correct_answer = self.options[i]
-                logger.debug(f"✅ Fixed punctuation mismatch: corrected to '{self.options[i]}'")
-                return self
+                values['correct_answer'] = opt
+                logger.debug(f"✅ Fixed punctuation mismatch: corrected to '{opt}'")
+                return values
         
-        # Nuclear option: Just pick the first option if nothing matches
-        logger.warning(f"⚠️ Validation workaround: '{self.correct_answer}' doesn't match options, using first option: '{self.options[0]}'")
-        self.correct_answer = self.options[0]
-        return self
+        # Nuclear option: use first option
+        logger.warning(f"⚠️ Validation workaround: '{correct_answer}' doesn't match options, using first option: '{options[0]}'")
+        values['correct_answer'] = options[0]
+        return values
         
 class TheoryQuestion(BaseModel):
     type: Literal["theory"]
