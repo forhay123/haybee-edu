@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional, Union, Literal
 import json
 import re
+import string
 import torch
 from pydantic import BaseModel, Field, ValidationError, model_validator, parse_obj_as
 from sentence_transformers import SentenceTransformer, util
@@ -25,9 +26,38 @@ class MCQQuestion(BaseModel):
 
     @model_validator(mode='after')
     def check_correct_answer_in_options(self):
-        if self.correct_answer not in self.options:
-            raise ValueError(f"correct_answer '{self.correct_answer}' must be exactly one of the options")
-        return self
+        # Try exact match first
+        if self.correct_answer in self.options:
+            return self
+        
+        # Try case-insensitive match
+        correct_lower = self.correct_answer.lower().strip()
+        for i, opt in enumerate(self.options):
+            if opt.lower().strip() == correct_lower:
+                self.correct_answer = self.options[i]  # Use exact option text
+                logger.debug(f"✅ Fixed case mismatch: corrected to '{self.options[i]}'")
+                return self
+        
+        # Try partial match (correct_answer is substring of option or vice versa)
+        for i, opt in enumerate(self.options):
+            opt_clean = opt.lower().strip()
+            if correct_lower in opt_clean or opt_clean in correct_lower:
+                self.correct_answer = self.options[i]
+                logger.debug(f"✅ Fixed partial match: corrected to '{self.options[i]}'")
+                return self
+        
+        # Last resort: check if removing punctuation helps
+        correct_no_punct = correct_lower.translate(str.maketrans('', '', string.punctuation))
+        for i, opt in enumerate(self.options):
+            opt_no_punct = opt.lower().strip().translate(str.maketrans('', '', string.punctuation))
+            if correct_no_punct == opt_no_punct:
+                self.correct_answer = self.options[i]
+                logger.debug(f"✅ Fixed punctuation mismatch: corrected to '{self.options[i]}'")
+                return self
+        
+        # No match found - this question is invalid
+        logger.warning(f"❌ Validation failed: '{self.correct_answer}' not in {self.options}")
+        raise ValueError(f"correct_answer '{self.correct_answer}' must match one of the options")
 
 class TheoryQuestion(BaseModel):
     type: Literal["theory"]
@@ -307,9 +337,11 @@ def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dic
     """Generate questions directly from lesson content"""
     
     system_prompt = """You are an expert mathematics teacher creating assessment questions.
-Generate questions that test knowledge and understanding of the lesson content.
 
-CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
+If asked for 15 questions, generate ALL 15. If asked for 7 questions, generate ALL 7.
+
+Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
 
 Example format:
 [
@@ -330,15 +362,17 @@ FOCUS ON:
 
 Generate a mix of easy, medium, and hard questions."""
 
-    user_prompt = f"""Create {target_count} assessment questions from this lesson:
+    user_prompt = f"""Create EXACTLY {target_count} assessment questions from this lesson.
+
+CRITICAL: You must generate ALL {target_count} questions. Do not stop early. Count your questions before submitting.
 
 {lesson_text}
 
 Include:
-- 60% MCQ questions (4 options each, one correct answer)
+- 60% MCQ questions (4 options each, correct_answer MUST exactly match one option)
 - 40% Theory questions (with concise answers)
 
-Output ONLY the JSON array. No other text."""
+Output ONLY the JSON array with ALL {target_count} questions. No other text."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 1 (Content)")
 
@@ -350,7 +384,10 @@ def _generate_application_questions(lesson_text: str, target_count: int) -> List
     
     system_prompt = """You are an expert mathematics teacher creating application questions.
 
-CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
+If asked for 8 questions, generate ALL 8. Count your questions before submitting.
+
+Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
 
 FOCUS ON:
 - Real-world problem scenarios
@@ -359,15 +396,17 @@ FOCUS ON:
 
 Output ONLY the JSON array."""
 
-    user_prompt = f"""Based on this lesson, create {target_count} APPLICATION questions:
+    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} APPLICATION questions.
+
+CRITICAL: Generate ALL {target_count} questions. Do not stop at 1 or 2. Count before submitting.
 
 {lesson_text}
 
 Mix of:
-- 50% MCQ (with plausible distractors)
+- 50% MCQ (correct_answer MUST exactly match one option)
 - 50% Theory (requiring worked solutions)
 
-Output ONLY the JSON array. No other text."""
+Output ONLY the JSON array with ALL {target_count} questions. No other text."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 2 (Application)")
 
@@ -379,7 +418,10 @@ def _generate_conceptual_questions(lesson_text: str, target_count: int) -> List[
     
     system_prompt = """You are an expert mathematics teacher creating conceptual questions.
 
-CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
+If asked for 7 questions, generate ALL 7. Count your questions before submitting.
+
+Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
 
 FOCUS ON:
 - Why methods work
@@ -388,15 +430,17 @@ FOCUS ON:
 
 Output ONLY the JSON array."""
 
-    user_prompt = f"""Based on this lesson, create {target_count} CONCEPTUAL questions:
+    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} CONCEPTUAL questions.
+
+CRITICAL: Generate ALL {target_count} questions. Do not stop at 1 or 2. Count before submitting.
 
 {lesson_text}
 
 Mix of:
-- 40% MCQ (testing conceptual understanding)
+- 40% MCQ (correct_answer MUST exactly match one option)
 - 60% Theory (requiring explanations)
 
-Output ONLY the JSON array. No other text."""
+Output ONLY the JSON array with ALL {target_count} questions. No other text."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 3 (Conceptual)")
 
