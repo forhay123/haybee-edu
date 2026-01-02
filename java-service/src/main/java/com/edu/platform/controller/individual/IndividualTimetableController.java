@@ -26,6 +26,13 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import org.springframework.http.HttpHeaders;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping("/individual/timetable")
@@ -40,6 +47,10 @@ public class IndividualTimetableController {
     private final IndividualTimetableRepository timetableRepository;
     private final DailyScheduleRepository scheduleRepository;
     private final StudentLessonProgressRepository progressRepository;
+    
+    
+    @Value("${file.upload.base-path:/app}")
+    private String uploadBasePath;
     
     // ============================================================
     // STUDENT & ADMIN: UPLOAD
@@ -380,5 +391,31 @@ public class IndividualTimetableController {
 	            .build();
 	    
 	    return ResponseEntity.ok(impact);
+	}
+	
+	
+	@GetMapping("/files/{filename:.+}")
+	public ResponseEntity<Resource> serveTimetableFile(@PathVariable String filename) {
+	    try {
+	        Path filePath = Paths.get(uploadBasePath, "uploads/individual/timetables", filename);
+	        
+	        if (!Files.exists(filePath) || !Files.isReadable(filePath)) {
+	            log.warn("File not found or not readable: {}", filename);
+	            return ResponseEntity.notFound().build();
+	        }
+	        
+	        Resource resource = new UrlResource(filePath.toUri());
+	        String contentType = Files.probeContentType(filePath);
+	        if (contentType == null) contentType = "application/pdf";
+	        
+	        return ResponseEntity.ok()
+	                .contentType(MediaType.parseMediaType(contentType))
+	                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+	                .body(resource);
+	                
+	    } catch (Exception e) {
+	        log.error("Error serving file '{}': {}", filename, e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+	    }
 	}
 }
