@@ -155,7 +155,8 @@ public class IndividualTimetableService {
         String relativePath = saveFile(file);
         Path absolutePath = Paths.get(uploadBasePath, relativePath);
         String pythonFilePath = absolutePath.toString();
-        String fileUrl = serverBaseUrl + "/" + relativePath.replace("\\", "/");
+        String filename = Paths.get(relativePath).getFileName().toString();
+        String fileUrl = serverBaseUrl + "/api/v1/individual/timetable/files/" + filename;
         
         log.info("📁 File paths:");
         log.info("   Relative: {}", relativePath);
