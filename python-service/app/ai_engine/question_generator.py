@@ -309,7 +309,7 @@ def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count
         raw = call_openai_completion(
             f"{system_prompt}\n\n{user_prompt}",
             model=None,
-            max_tokens=8000,  # ✅ Increased from 4000 to 8000
+            max_tokens=4096,  # ✅ Increased from 4000 to 8000
             response_format="json",
         )
         logger.debug(f"✅ {pass_name}: OpenAI call successful")
