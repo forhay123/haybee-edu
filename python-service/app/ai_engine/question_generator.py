@@ -309,7 +309,7 @@ def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count
         raw = call_openai_completion(
             f"{system_prompt}\n\n{user_prompt}",
             model=None,
-            max_tokens=4000,
+            max_tokens=8000,  # ✅ Increased from 4000 to 8000
             response_format="json",
         )
         logger.debug(f"✅ {pass_name}: OpenAI call successful")
@@ -339,38 +339,33 @@ def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dic
     system_prompt = """You are an expert mathematics teacher creating assessment questions.
 
 CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
-If asked for 15 questions, generate ALL 15. If asked for 7 questions, generate ALL 7.
 
-Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+CRITICAL MCQ RULE: For EVERY MCQ question, the "correct_answer" field MUST be a PERFECT CHARACTER-FOR-CHARACTER copy of ONE of the four options. Do NOT paraphrase or rewrite.
 
-Example format:
-[
-  {
-    "type": "mcq",
-    "question_text": "What is 2 + 2?",
-    "options": ["3", "4", "5", "6"],
-    "correct_answer": "4",
-    "difficulty": "easy",
-    "max_score": 1
-  }
-]
+Example - CORRECT:
+{
+  "options": ["Factor the numerator", "Cancel x terms", "Find LCM", "Cross multiply"],
+  "correct_answer": "Factor the numerator"  ← EXACT match
+}
 
-FOCUS ON:
-- Definitions and terminology
-- Key concepts and procedures
-- Direct application of formulas
+Example - WRONG:
+{
+  "options": ["Factor the numerator", "Cancel x terms", "Find LCM", "Cross multiply"],
+  "correct_answer": "Factorize"  ← WRONG! Not exact match
+}
 
-Generate a mix of easy, medium, and hard questions."""
+Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble."""
 
     user_prompt = f"""Create EXACTLY {target_count} assessment questions from this lesson.
 
-CRITICAL: You must generate ALL {target_count} questions. Do not stop early. Count your questions before submitting.
+CRITICAL: You must generate ALL {target_count} questions. Count your questions before submitting.
 
 {lesson_text}
 
 Include:
-- 60% MCQ questions (4 options each, correct_answer MUST exactly match one option)
+- 60% MCQ questions (4 options each, correct_answer = EXACT copy of one option)
 - 40% Theory questions (with concise answers)
+- Mix of easy, medium, and hard difficulties
 
 Output ONLY the JSON array with ALL {target_count} questions. No other text."""
 
@@ -384,27 +379,38 @@ def _generate_application_questions(lesson_text: str, target_count: int) -> List
     
     system_prompt = """You are an expert mathematics teacher creating application questions.
 
-CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
-If asked for 8 questions, generate ALL 8. Count your questions before submitting.
+CRITICAL REQUIREMENT: Generate EXACTLY the target number requested. Count before submitting.
 
-Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+CRITICAL MCQ RULE: For EVERY MCQ question:
+1. The "correct_answer" field MUST be a PERFECT CHARACTER-FOR-CHARACTER copy of ONE of the four options
+2. Do NOT paraphrase or rewrite the correct answer
+3. Copy-paste the exact option text
 
-FOCUS ON:
-- Real-world problem scenarios
-- Multi-step word problems
-- Different numbers/contexts than examples
+Example - CORRECT:
+{
+  "options": ["Factor the numerator", "Cancel x", "Find LCM", "Multiply"],
+  "correct_answer": "Factor the numerator"  ← EXACT match with options[0]
+}
 
-Output ONLY the JSON array."""
+Example - WRONG:
+{
+  "options": ["Factor the numerator", "Cancel x", "Find LCM", "Multiply"],
+  "correct_answer": "Factorize the top"  ← WRONG! Must be exact copy
+}
+
+Output ONLY a valid JSON array."""
 
     user_prompt = f"""Based on this lesson, create EXACTLY {target_count} APPLICATION questions.
 
-CRITICAL: Generate ALL {target_count} questions. Do not stop at 1 or 2. Count before submitting.
+CRITICAL: Generate ALL {target_count} questions. Count before submitting.
 
 {lesson_text}
 
-Mix of:
-- 50% MCQ (correct_answer MUST exactly match one option)
+Requirements:
+- 50% MCQ (correct_answer = EXACT copy of one option)
 - 50% Theory (requiring worked solutions)
+- Apply concepts to NEW scenarios with different numbers
+- Mix of difficulties
 
 Output ONLY the JSON array with ALL {target_count} questions. No other text."""
 
@@ -418,27 +424,38 @@ def _generate_conceptual_questions(lesson_text: str, target_count: int) -> List[
     
     system_prompt = """You are an expert mathematics teacher creating conceptual questions.
 
-CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
-If asked for 7 questions, generate ALL 7. Count your questions before submitting.
+CRITICAL REQUIREMENT: Generate EXACTLY the target number requested. Count before submitting.
 
-Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+CRITICAL MCQ RULE: For EVERY MCQ question:
+1. The "correct_answer" field MUST be a PERFECT CHARACTER-FOR-CHARACTER copy of ONE of the four options
+2. Do NOT paraphrase, shorten, or modify the correct answer
+3. Copy the EXACT text from one of the options
 
-FOCUS ON:
-- Why methods work
-- Common misconceptions
-- Comparing approaches
+Example - CORRECT:
+{
+  "options": ["They added denominators instead of finding LCM", "Multiplied", "Divided", "Subtracted"],
+  "correct_answer": "They added denominators instead of finding LCM"  ← EXACT match
+}
 
-Output ONLY the JSON array."""
+Example - WRONG:
+{
+  "options": ["They added denominators instead of finding LCM", "Multiplied", "Divided", "Subtracted"],
+  "correct_answer": "Added denominators"  ← WRONG! Not complete match
+}
+
+Output ONLY a valid JSON array."""
 
     user_prompt = f"""Based on this lesson, create EXACTLY {target_count} CONCEPTUAL questions.
 
-CRITICAL: Generate ALL {target_count} questions. Do not stop at 1 or 2. Count before submitting.
+CRITICAL: Generate ALL {target_count} questions. Count before submitting.
 
 {lesson_text}
 
-Mix of:
-- 40% MCQ (correct_answer MUST exactly match one option)
+Requirements:
+- 40% MCQ (correct_answer = EXACT copy of one option)
 - 60% Theory (requiring explanations)
+- Focus on WHY methods work, common errors, misconceptions
+- Mix of difficulties
 
 Output ONLY the JSON array with ALL {target_count} questions. No other text."""
 
@@ -485,19 +502,19 @@ def generate_questions_multi_pass(
     all_questions = []
     
     # Pass 1: Content (50% of target)
-    content_questions = _generate_content_questions(lesson_text, max_questions)
+    content_questions = _generate_content_questions(lesson_text, max_questions // 2)
     all_questions.extend(content_questions)
     logger.info(f"📚 Pass 1 (Content): Generated {len(content_questions)} questions")
     
     # Pass 2: Application (25% of target)
-    # application_questions = _generate_application_questions(lesson_text, max_questions // 4)
-    #all_questions.extend(application_questions)
-    #logger.info(f"🔧 Pass 2 (Application): Generated {len(application_questions)} questions")
+    application_questions = _generate_application_questions(lesson_text, max_questions // 4)
+    all_questions.extend(application_questions)
+    logger.info(f"🔧 Pass 2 (Application): Generated {len(application_questions)} questions")
     
     # Pass 3: Conceptual (25% of target)
-    #conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
-    #all_questions.extend(conceptual_questions)
-    #logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
+    conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
+    all_questions.extend(conceptual_questions)
+    logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
     
     # Apply semantic filtering
     if enable_semantic_filter and all_questions:
