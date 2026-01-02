@@ -328,53 +328,26 @@ def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count
     
     return validated
 
-# ----------------------------
-# 🧠 Pass 1: Content-based questions (BATCHED)
-# ----------------------------
 def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate questions directly from lesson content in batches"""
+    """Generate questions directly from lesson content"""
     
-    all_questions = []
-    batch_size = 5  # Generate 5 at a time
-    batches_needed = (target_count + batch_size - 1) // batch_size  # Round up
-    
-    for batch_num in range(batches_needed):
-        batch_target = min(batch_size, target_count - len(all_questions))
-        
-        system_prompt = """You are an expert mathematics teacher. Create EXACTLY the number of questions requested.
+    system_prompt = """You are an expert mathematics teacher.
 
-OUTPUT REQUIREMENTS:
-- ONLY a JSON array
-- NO markdown code blocks
-- NO explanations
-- NO preamble
+Create assessment questions in JSON array format. NO markdown, NO extra text.
 
-Format: [{"type":"mcq","question_text":"...","options":["A","B","C","D"],"correct_answer":"A","difficulty":"easy","max_score":1}]"""
+[{"type":"mcq","question_text":"...","options":["A","B","C","D"],"correct_answer":"A","difficulty":"easy","max_score":1}]"""
 
-        user_prompt = f"""Generate EXACTLY {batch_target} questions from this lesson:
+    user_prompt = f"""Create {target_count} assessment questions from this lesson.
 
+LESSON:
 {lesson_text}
 
-Requirements:
-- Mix of MCQ (60%) and Theory (40%)
-- MCQ must have 4 options, correct_answer must EXACTLY match one option
-- Difficulty: mix of easy/medium/hard
+Mix of 60% MCQ and 40% theory questions.
+For MCQ: 4 options, correct_answer must match one option exactly.
 
-Output ONLY the JSON array with {batch_target} questions."""
+Output JSON array with {target_count} questions."""
 
-        batch_questions = _call_and_parse_questions(
-            system_prompt, 
-            user_prompt, 
-            batch_target, 
-            f"Pass 1 Batch {batch_num+1}/{batches_needed}"
-        )
-        all_questions.extend(batch_questions)
-        
-        if len(all_questions) >= target_count:
-            break
-    
-    logger.info(f"📚 Pass 1 (Content): Generated {len(all_questions)}/{target_count} questions across {batches_needed} batches")
-    return all_questions[:target_count]
+    return _call_and_parse_questions(system_prompt, user_prompt, target_count * 2, "Pass 1 (Content)")
 
 # ----------------------------
 # 🔧 Pass 2: Application questions (BATCHED)
@@ -499,36 +472,21 @@ def generate_questions_multi_pass(
     max_questions: int = 30,
     enable_semantic_filter: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Generate questions using multiple passes"""
+    """Generate questions - simplified to just Pass 1 for now"""
     
     all_questions = []
     
-    # Pass 1: Content (50% of target)
+    # Only use Pass 1 which was working (generating 15 questions)
     try:
-        content_questions = _generate_content_questions(lesson_text, max_questions // 2)
+        content_questions = _generate_content_questions(lesson_text, max_questions)
         all_questions.extend(content_questions)
         logger.info(f"📚 Pass 1 (Content): Generated {len(content_questions)} questions")
     except Exception as e:
         logger.error(f"❌ Pass 1 (Content) failed: {e}")
         content_questions = []
     
-    # Pass 2: Application (25% of target)
-    try:
-        application_questions = _generate_application_questions(lesson_text, max_questions // 4)
-        all_questions.extend(application_questions)
-        logger.info(f"🔧 Pass 2 (Application): Generated {len(application_questions)} questions")
-    except Exception as e:
-        logger.error(f"❌ Pass 2 (Application) failed: {e}")
-        application_questions = []
-    
-    # Pass 3: Conceptual (25% of target)
-    try:
-        conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
-        all_questions.extend(conceptual_questions)
-        logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
-    except Exception as e:
-        logger.error(f"❌ Pass 3 (Conceptual) failed: {e}")
-        conceptual_questions = []
+    # Skip Pass 2 and 3 for now since they're not working
+    logger.info(f"⏭️  Skipping Pass 2 & 3 (validation issues)")
     
     # Apply semantic filtering
     if enable_semantic_filter and all_questions:
