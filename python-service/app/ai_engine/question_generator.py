@@ -1,7 +1,6 @@
 from typing import List, Dict, Any, Optional, Union, Literal
 import json
 import re
-import string
 import torch
 from pydantic import BaseModel, Field, ValidationError, model_validator, parse_obj_as
 from sentence_transformers import SentenceTransformer, util
@@ -35,29 +34,19 @@ class MCQQuestion(BaseModel):
         for i, opt in enumerate(self.options):
             if opt.lower().strip() == correct_lower:
                 self.correct_answer = self.options[i]  # Use exact option text
-                logger.debug(f"✅ Fixed case mismatch: corrected to '{self.options[i]}'")
+                logger.debug(f"✅ Fixed case mismatch: '{self.correct_answer}' → '{self.options[i]}'")
                 return self
         
         # Try partial match (correct_answer is substring of option or vice versa)
         for i, opt in enumerate(self.options):
-            opt_clean = opt.lower().strip()
-            if correct_lower in opt_clean or opt_clean in correct_lower:
+            if correct_lower in opt.lower() or opt.lower() in correct_lower:
                 self.correct_answer = self.options[i]
-                logger.debug(f"✅ Fixed partial match: corrected to '{self.options[i]}'")
+                logger.debug(f"✅ Fixed partial match: '{self.correct_answer}' → '{self.options[i]}'")
                 return self
         
-        # Last resort: check if removing punctuation helps
-        correct_no_punct = correct_lower.translate(str.maketrans('', '', string.punctuation))
-        for i, opt in enumerate(self.options):
-            opt_no_punct = opt.lower().strip().translate(str.maketrans('', '', string.punctuation))
-            if correct_no_punct == opt_no_punct:
-                self.correct_answer = self.options[i]
-                logger.debug(f"✅ Fixed punctuation mismatch: corrected to '{self.options[i]}'")
-                return self
-        
-        # No match found - this question is invalid
-        logger.warning(f"❌ Validation failed: '{self.correct_answer}' not in {self.options}")
-        raise ValueError(f"correct_answer '{self.correct_answer}' must match one of the options")
+        # No match found
+        raise ValueError(f"correct_answer '{self.correct_answer}' must match one of the options: {self.options}")
+        return self
 
 class TheoryQuestion(BaseModel):
     type: Literal["theory"]
@@ -235,14 +224,23 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
         logger.info(f"✅ {pass_name}: Bulk validation successful - {len(validated_questions)} questions")
     except ValidationError as ve:
         logger.warning(f"⚠️ {pass_name}: Bulk validation failed with {len(ve.errors())} errors")
-        logger.debug(f"📋 {pass_name}: First 3 validation errors: {ve.errors()[:3]}")
         
-        # Try one by one
+        # Log first few detailed errors
+        for i, err in enumerate(ve.errors()[:3]):
+            logger.debug(f"📋 {pass_name}: Error {i+1}: {err['msg']} at {err.get('loc', 'unknown')}")
+        
+        # Try one by one with detailed logging
         for i, item in enumerate(parsed):
             try:
                 validated = parse_obj_as(QuestionSchema, item)
                 validated_questions.append(validated)
             except ValidationError as e:
+                # Log detailed error for first few failures
+                if len(validation_errors) < 3:
+                    logger.debug(f"❌ {pass_name}: Question {i+1} failed: {json.dumps(item, indent=2)[:200]}")
+                    for err in e.errors()[:2]:
+                        logger.debug(f"   → {err['msg']} at {err.get('loc', 'unknown')}")
+                
                 validation_errors.append({
                     "index": i,
                     "question": item.get("question_text", "N/A")[:50],
@@ -337,11 +335,9 @@ def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dic
     """Generate questions directly from lesson content"""
     
     system_prompt = """You are an expert mathematics teacher creating assessment questions.
+Generate questions that test knowledge and understanding of the lesson content.
 
-CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
-If asked for 15 questions, generate ALL 15. If asked for 7 questions, generate ALL 7.
-
-Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
 
 Example format:
 [
@@ -362,17 +358,15 @@ FOCUS ON:
 
 Generate a mix of easy, medium, and hard questions."""
 
-    user_prompt = f"""Create EXACTLY {target_count} assessment questions from this lesson.
-
-CRITICAL: You must generate ALL {target_count} questions. Do not stop early. Count your questions before submitting.
+    user_prompt = f"""Create {target_count} assessment questions from this lesson:
 
 {lesson_text}
 
 Include:
-- 60% MCQ questions (4 options each, correct_answer MUST exactly match one option)
+- 60% MCQ questions (4 options each, one correct answer)
 - 40% Theory questions (with concise answers)
 
-Output ONLY the JSON array with ALL {target_count} questions. No other text."""
+Output ONLY the JSON array. No other text."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 1 (Content)")
 
@@ -384,10 +378,19 @@ def _generate_application_questions(lesson_text: str, target_count: int) -> List
     
     system_prompt = """You are an expert mathematics teacher creating application questions.
 
-CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
-If asked for 8 questions, generate ALL 8. Count your questions before submitting.
+CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
 
-Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+CRITICAL MCQ RULE: The "correct_answer" field MUST be EXACTLY one of the four options, character-for-character identical. Copy-paste the exact option text.
+
+Example:
+{
+  "type": "mcq",
+  "question_text": "What is 2 + 2?",
+  "options": ["Three", "Four", "Five", "Six"],
+  "correct_answer": "Four",  <-- EXACTLY matches options[1]
+  "difficulty": "easy",
+  "max_score": 1
+}
 
 FOCUS ON:
 - Real-world problem scenarios
@@ -396,17 +399,15 @@ FOCUS ON:
 
 Output ONLY the JSON array."""
 
-    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} APPLICATION questions.
-
-CRITICAL: Generate ALL {target_count} questions. Do not stop at 1 or 2. Count before submitting.
+    user_prompt = f"""Based on this lesson, create {target_count} APPLICATION questions:
 
 {lesson_text}
 
 Mix of:
-- 50% MCQ (correct_answer MUST exactly match one option)
+- 50% MCQ (ensure correct_answer EXACTLY matches one option)
 - 50% Theory (requiring worked solutions)
 
-Output ONLY the JSON array with ALL {target_count} questions. No other text."""
+Output ONLY the JSON array. No other text."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 2 (Application)")
 
@@ -418,10 +419,9 @@ def _generate_conceptual_questions(lesson_text: str, target_count: int) -> List[
     
     system_prompt = """You are an expert mathematics teacher creating conceptual questions.
 
-CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
-If asked for 7 questions, generate ALL 7. Count your questions before submitting.
+CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
 
-Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+CRITICAL MCQ RULE: The "correct_answer" field MUST be EXACTLY one of the four options, character-for-character identical.
 
 FOCUS ON:
 - Why methods work
@@ -430,17 +430,15 @@ FOCUS ON:
 
 Output ONLY the JSON array."""
 
-    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} CONCEPTUAL questions.
-
-CRITICAL: Generate ALL {target_count} questions. Do not stop at 1 or 2. Count before submitting.
+    user_prompt = f"""Based on this lesson, create {target_count} CONCEPTUAL questions:
 
 {lesson_text}
 
 Mix of:
-- 40% MCQ (correct_answer MUST exactly match one option)
+- 40% MCQ (ensure correct_answer EXACTLY matches one option)
 - 60% Theory (requiring explanations)
 
-Output ONLY the JSON array with ALL {target_count} questions. No other text."""
+Output ONLY the JSON array. No other text."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 3 (Conceptual)")
 
@@ -484,16 +482,16 @@ def generate_questions_multi_pass(
     
     all_questions = []
     
-    # Pass 1: Content (50% of target = 15 questions)
+    # Pass 1: Content (50% of target)
     try:
-        content_questions = _generate_content_questions(lesson_text, max_questions // 2)  # ← 15, not 30!
+        content_questions = _generate_content_questions(lesson_text, max_questions // 2)
         all_questions.extend(content_questions)
         logger.info(f"📚 Pass 1 (Content): Generated {len(content_questions)} questions")
     except Exception as e:
         logger.error(f"❌ Pass 1 (Content) failed: {e}")
         content_questions = []
     
-    # Pass 2: Application (25% of target = 7-8 questions)
+    # Pass 2: Application (25% of target)
     try:
         application_questions = _generate_application_questions(lesson_text, max_questions // 4)
         all_questions.extend(application_questions)
@@ -502,7 +500,7 @@ def generate_questions_multi_pass(
         logger.error(f"❌ Pass 2 (Application) failed: {e}")
         application_questions = []
     
-    # Pass 3: Conceptual (25% of target = 7-8 questions)
+    # Pass 3: Conceptual (25% of target)
     try:
         conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
         all_questions.extend(conceptual_questions)
