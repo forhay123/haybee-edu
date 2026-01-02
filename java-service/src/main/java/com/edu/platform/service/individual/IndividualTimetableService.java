@@ -182,21 +182,21 @@ public class IndividualTimetableService {
         log.info("✅ Timetable uploaded successfully. ID: {}", timetable.getId());
         
         Long finalTimetableId = timetable.getId();
-        String finalPythonPath = pythonFilePath;
+        String finalFileUrl = fileUrl;
         Long finalClassId = request.getClassId(); // ✅ Capture for async call
         
         // ✅ Trigger Python processing with class ID
         new Thread(() -> {
             try {
                 log.info("🚀 Triggering Python AI processing for timetable ID: {}", finalTimetableId);
-                log.info("   File path: {}", finalPythonPath);
+                log.info("   File path: {}", finalFileUrl);
                 log.info("   Class ID: {}", finalClassId); // ✅ Log class ID
                 
                 // ✅ Pass class ID to Python
                 Map<String, Object> result = pythonClient.processTimetableWithClass(
                     finalTimetableId, 
                     student.getId(), 
-                    finalPythonPath,
+                    finalFileUrl,
                     finalClassId // ✅ NEW: Pass class ID to Python
                 );
                 log.info("✅ Python AI processing triggered: {}", result);
