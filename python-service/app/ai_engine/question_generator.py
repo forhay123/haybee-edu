@@ -329,118 +329,139 @@ def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count
     return validated
 
 # ----------------------------
-# 🧠 Pass 1: Content-based questions
+# 🧠 Pass 1: Content-based questions (BATCHED)
 # ----------------------------
 def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate questions directly from lesson content"""
+    """Generate questions directly from lesson content in batches"""
     
-    system_prompt = """You are an expert mathematics teacher creating assessment questions.
-Generate questions that test knowledge and understanding of the lesson content.
+    all_questions = []
+    batch_size = 5  # Generate 5 at a time
+    batches_needed = (target_count + batch_size - 1) // batch_size  # Round up
+    
+    for batch_num in range(batches_needed):
+        batch_target = min(batch_size, target_count - len(all_questions))
+        
+        system_prompt = """You are an expert mathematics teacher. Create EXACTLY the number of questions requested.
 
-CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+OUTPUT REQUIREMENTS:
+- ONLY a JSON array
+- NO markdown code blocks
+- NO explanations
+- NO preamble
 
-Example format:
-[
-  {
-    "type": "mcq",
-    "question_text": "What is 2 + 2?",
-    "options": ["3", "4", "5", "6"],
-    "correct_answer": "4",
-    "difficulty": "easy",
-    "max_score": 1
-  }
-]
+Format: [{"type":"mcq","question_text":"...","options":["A","B","C","D"],"correct_answer":"A","difficulty":"easy","max_score":1}]"""
 
-FOCUS ON:
-- Definitions and terminology
-- Key concepts and procedures
-- Direct application of formulas
-
-Generate a mix of easy, medium, and hard questions."""
-
-    user_prompt = f"""Create {target_count} assessment questions from this lesson:
+        user_prompt = f"""Generate EXACTLY {batch_target} questions from this lesson:
 
 {lesson_text}
 
-Include:
-- 60% MCQ questions (4 options each, one correct answer)
-- 40% Theory questions (with concise answers)
+Requirements:
+- Mix of MCQ (60%) and Theory (40%)
+- MCQ must have 4 options, correct_answer must EXACTLY match one option
+- Difficulty: mix of easy/medium/hard
 
-Output ONLY the JSON array. No other text."""
+Output ONLY the JSON array with {batch_target} questions."""
 
-    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 1 (Content)")
+        batch_questions = _call_and_parse_questions(
+            system_prompt, 
+            user_prompt, 
+            batch_target, 
+            f"Pass 1 Batch {batch_num+1}/{batches_needed}"
+        )
+        all_questions.extend(batch_questions)
+        
+        if len(all_questions) >= target_count:
+            break
+    
+    logger.info(f"📚 Pass 1 (Content): Generated {len(all_questions)}/{target_count} questions across {batches_needed} batches")
+    return all_questions[:target_count]
 
 # ----------------------------
-# 🔧 Pass 2: Application questions
+# 🔧 Pass 2: Application questions (BATCHED)
 # ----------------------------
 def _generate_application_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate questions that apply concepts to new scenarios"""
+    """Generate application questions in batches"""
     
-    system_prompt = """You are an expert mathematics teacher creating application questions.
+    all_questions = []
+    batch_size = 4  # Smaller batches for complex questions
+    batches_needed = (target_count + batch_size - 1) // batch_size
+    
+    for batch_num in range(batches_needed):
+        batch_target = min(batch_size, target_count - len(all_questions))
+        
+        system_prompt = """You are an expert mathematics teacher. Create EXACTLY the number of APPLICATION questions requested.
 
-CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+OUTPUT: ONLY a JSON array, NO markdown, NO explanations."""
 
-CRITICAL MCQ RULE: The "correct_answer" field MUST be EXACTLY one of the four options, character-for-character identical. Copy-paste the exact option text.
-
-Example:
-{
-  "type": "mcq",
-  "question_text": "What is 2 + 2?",
-  "options": ["Three", "Four", "Five", "Six"],
-  "correct_answer": "Four",  <-- EXACTLY matches options[1]
-  "difficulty": "easy",
-  "max_score": 1
-}
-
-FOCUS ON:
-- Real-world problem scenarios
-- Multi-step word problems
-- Different numbers/contexts than examples
-
-Output ONLY the JSON array."""
-
-    user_prompt = f"""Based on this lesson, create {target_count} APPLICATION questions:
+        user_prompt = f"""Generate EXACTLY {batch_target} application questions from this lesson:
 
 {lesson_text}
 
-Mix of:
-- 50% MCQ (ensure correct_answer EXACTLY matches one option)
-- 50% Theory (requiring worked solutions)
+Requirements:
+- Real-world scenarios
+- Different numbers than examples
+- Mix MCQ/Theory
+- correct_answer must EXACTLY match one option for MCQ
 
-Output ONLY the JSON array. No other text."""
+Output ONLY JSON array with {batch_target} questions."""
 
-    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 2 (Application)")
+        batch_questions = _call_and_parse_questions(
+            system_prompt,
+            user_prompt,
+            batch_target,
+            f"Pass 2 Batch {batch_num+1}/{batches_needed}"
+        )
+        all_questions.extend(batch_questions)
+        
+        if len(all_questions) >= target_count:
+            break
+    
+    logger.info(f"🔧 Pass 2 (Application): Generated {len(all_questions)}/{target_count} questions")
+    return all_questions[:target_count]
 
 # ----------------------------
-# 💡 Pass 3: Conceptual understanding questions
+# 💡 Pass 3: Conceptual questions (BATCHED)
 # ----------------------------
 def _generate_conceptual_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate questions testing deeper understanding"""
+    """Generate conceptual questions in batches"""
     
-    system_prompt = """You are an expert mathematics teacher creating conceptual questions.
+    all_questions = []
+    batch_size = 4
+    batches_needed = (target_count + batch_size - 1) // batch_size
+    
+    for batch_num in range(batches_needed):
+        batch_target = min(batch_size, target_count - len(all_questions))
+        
+        system_prompt = """You are an expert mathematics teacher. Create EXACTLY the number of CONCEPTUAL questions requested.
 
-CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+OUTPUT: ONLY a JSON array, NO markdown, NO explanations."""
 
-CRITICAL MCQ RULE: The "correct_answer" field MUST be EXACTLY one of the four options, character-for-character identical.
+        user_prompt = f"""Generate EXACTLY {batch_target} conceptual questions from this lesson:
 
-FOCUS ON:
+{lesson_text}
+
+Focus on:
 - Why methods work
 - Common misconceptions
 - Comparing approaches
 
-Output ONLY the JSON array."""
+Mix MCQ/Theory. For MCQ: correct_answer must EXACTLY match one option.
 
-    user_prompt = f"""Based on this lesson, create {target_count} CONCEPTUAL questions:
+Output ONLY JSON array with {batch_target} questions."""
 
-{lesson_text}
-
-Mix of:
-- 40% MCQ (ensure correct_answer EXACTLY matches one option)
-- 60% Theory (requiring explanations)
-
-Output ONLY the JSON array. No other text."""
-
-    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 3 (Conceptual)")
+        batch_questions = _call_and_parse_questions(
+            system_prompt,
+            user_prompt,
+            batch_target,
+            f"Pass 3 Batch {batch_num+1}/{batches_needed}"
+        )
+        all_questions.extend(batch_questions)
+        
+        if len(all_questions) >= target_count:
+            break
+    
+    logger.info(f"💡 Pass 3 (Conceptual): Generated {len(all_questions)}/{target_count} questions")
+    return all_questions[:target_count]
 
 # ----------------------------
 # ⚖️ Balance questions by difficulty
