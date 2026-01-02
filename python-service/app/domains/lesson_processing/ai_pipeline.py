@@ -84,7 +84,7 @@ def get_embeddings_cached(texts: List[str]) -> List[List[float]]:
 # ----------------------------
 # Semantic dedupe
 # ----------------------------
-def semantic_dedupe(questions: List[Dict[str, Any]], threshold: float = 0.85) -> List[Dict[str, Any]]:  # ✅ Stricter (was 0.80)
+def semantic_dedupe(questions: List[Dict[str, Any]], threshold: float = 0.85) -> List[Dict[str, Any]]:
     if not questions:
         return []
     texts = [q.get("question_text", "") for q in questions]
@@ -163,13 +163,12 @@ def report_ai_progress(lesson_topic_id: int, status: str, progress: int, questio
 
         logger.info(f"📡 Reporting to Java: lesson_topic_id={lesson_topic_id}, status={status}, progress={progress}, count={question_count}")
 
-        # ✅ FIX: Ensure the URL includes "lesson-topics"
         base_url = JAVA_API_URL
         if not base_url.endswith("/lesson-topics"):
             base_url = base_url.rstrip("/") + "/lesson-topics"
         
         url = f"{base_url}/{lesson_topic_id}/ai-status"
-        logger.info(f"📍 Full URL: {url}")  # Debug log
+        logger.info(f"📍 Full URL: {url}")
         
         resp = requests.post(
             url,
@@ -199,7 +198,7 @@ def save_generated_questions_json(lesson_topic_id: int, questions: List[Dict[str
         logger.warning(f"⚠️ Failed to save generated questions JSON: {e}")
 
 # ----------------------------
-# Main AI pipeline (OPTIMIZED)
+# Main AI pipeline (FIXED TARGET: 30 QUESTIONS)
 # ----------------------------
 def generate_questions_from_lesson(
     lesson_text: Optional[str] = None,
@@ -207,11 +206,11 @@ def generate_questions_from_lesson(
     lesson_topic_id: int = None,
     db: Session = None,
     file_path: Optional[str] = None,
-    chunk_size: int = 2500,  # ✅ Increased from 1000 to 2500
-    max_questions_per_chunk: int = 40,  # ✅ Increased from 15 to 40
-    total_max_questions: int = 150,  # ✅ Increased from 100 to 150
+    chunk_size: int = 2500,
+    max_questions_per_chunk: int = 15,  # ✅ Back to reasonable 15 per chunk
+    total_max_questions: int = 30,  # ✅ FIXED: Changed from 150 to 30
     difficulty_ratios: Dict[str, float] = None,
-    semantic_threshold: float = 0.85  # ✅ Stricter (was 0.80)
+    semantic_threshold: float = 0.85
 ) -> List[LessonQuestion]:
     """
     Generate and persist AI-generated questions for a lesson.
@@ -219,6 +218,7 @@ def generate_questions_from_lesson(
     Args:
         lesson_ai_result_id: ai.lesson_ai_results.id (for saving questions)
         lesson_topic_id: academic.lesson_topics.id (for reporting to Java)
+        total_max_questions: Target number of questions (default: 30)
     """
 
     # --- Validate input ---
@@ -232,6 +232,7 @@ def generate_questions_from_lesson(
         raise ValueError("lesson_topic_id is required for reporting progress")
 
     logger.info(f"🚀 Starting AI pipeline: ai_result_id={lesson_ai_result_id}, lesson_topic_id={lesson_topic_id}")
+    logger.info(f"🎯 Target: {total_max_questions} questions")
 
     # --- Choose input source ---
     if lesson_text:
