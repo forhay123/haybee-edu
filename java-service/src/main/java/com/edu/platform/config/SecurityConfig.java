@@ -55,9 +55,10 @@ public class SecurityConfig {
                 // ✅ Public OAuth endpoints - NO AUTHENTICATION REQUIRED
                 .requestMatchers("/oauth/**").permitAll()
                 
-                // ✅ PDF uploads
+                // ✅ PDF uploads and timetable files
                 .requestMatchers("/lesson-topics/uploads/**").permitAll()
                 .requestMatchers("/uploads/**").permitAll()
+                .requestMatchers("/individual/timetable/files/**").permitAll()
                 
                 // Other public endpoints
                 .requestMatchers(
