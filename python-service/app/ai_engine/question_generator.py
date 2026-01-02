@@ -497,7 +497,7 @@ def generate_questions_multi_pass(
     # Pass 3: Conceptual (25% of target)
     #conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
     #all_questions.extend(conceptual_questions)
-    logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
+    #logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
     
     # Apply semantic filtering
     if enable_semantic_filter and all_questions:
