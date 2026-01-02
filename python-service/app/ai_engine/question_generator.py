@@ -485,19 +485,19 @@ def generate_questions_multi_pass(
     all_questions = []
     
     # Pass 1: Content (50% of target)
-    content_questions = _generate_content_questions(lesson_text, max_questions // 2)
+    content_questions = _generate_content_questions(lesson_text, max_questions)
     all_questions.extend(content_questions)
     logger.info(f"📚 Pass 1 (Content): Generated {len(content_questions)} questions")
     
     # Pass 2: Application (25% of target)
-    application_questions = _generate_application_questions(lesson_text, max_questions // 4)
-    all_questions.extend(application_questions)
-    logger.info(f"🔧 Pass 2 (Application): Generated {len(application_questions)} questions")
+    # application_questions = _generate_application_questions(lesson_text, max_questions // 4)
+    #all_questions.extend(application_questions)
+    #logger.info(f"🔧 Pass 2 (Application): Generated {len(application_questions)} questions")
     
     # Pass 3: Conceptual (25% of target)
-    conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
-    all_questions.extend(conceptual_questions)
-    logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
+    #conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
+    #all_questions.extend(conceptual_questions)
+    #logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
     
     # Apply semantic filtering
     if enable_semantic_filter and all_questions:
