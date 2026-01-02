@@ -99,7 +99,7 @@ def semantic_filter_and_dedupe(lesson_text: str, questions: List[Dict[str, Any]]
 # ----------------------------
 def generate_questions_multi_pass(
     lesson_text: str,
-    max_questions: int = 50,
+    max_questions: int = 30,
     enable_semantic_filter: bool = True,
 ) -> List[Dict[str, Any]]:
     """
@@ -117,12 +117,12 @@ def generate_questions_multi_pass(
     logger.info(f"📚 Pass 1 (Content): Generated {len(content_questions)} questions")
     
     # Pass 2: Application questions (30% of target)
-    application_questions = _generate_application_questions(lesson_text, max_questions // 3)
+    application_questions = _generate_application_questions(lesson_text, max_questions // 4)
     all_questions.extend(application_questions)
     logger.info(f"🔧 Pass 2 (Application): Generated {len(application_questions)} questions")
     
     # Pass 3: Conceptual questions (30% of target)
-    conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 3)
+    conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
     all_questions.extend(conceptual_questions)
     logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
     
@@ -245,7 +245,7 @@ def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count
         raw = call_openai_completion(
             f"{system_prompt}\n\n{user_prompt}",
             model=None,
-            max_tokens=5000,
+            max_tokens=4000,
             response_format="json",
         )
     except Exception as e:
