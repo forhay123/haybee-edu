@@ -46,15 +46,15 @@ public class IndividualScheduleGenerator {
     private final StudentLessonProgressRepository progressRepository;
     private final MultiPeriodDetectionService multiPeriodDetectionService;
 
-    private static final LocalTime WEEKDAY_START = LocalTime.of(8, 0);
-    private static final LocalTime WEEKDAY_END = LocalTime.of(22, 0);
+    private static final LocalTime WEEKDAY_START = LocalTime.of(16, 0);
+    private static final LocalTime WEEKDAY_END = LocalTime.of(18, 0);
     private static final int WEEKDAY_PERIODS = 2;
 
     private static final LocalTime SATURDAY_START = LocalTime.of(12, 0);
     private static final LocalTime SATURDAY_END = LocalTime.of(15, 0);
     private static final int SATURDAY_PERIODS = 3;
 
-    private static final int PERIOD_DURATION_MINUTES = 420;
+    private static final int PERIOD_DURATION_MINUTES = 60;
 
     /**
      * Get standardized time slots based on learning window

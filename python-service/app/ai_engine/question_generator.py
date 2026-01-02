@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional, Union, Literal
 import json
+import re
 import torch
 from pydantic import BaseModel, Field, ValidationError, model_validator, parse_obj_as
 from sentence_transformers import SentenceTransformer, util
@@ -17,16 +18,16 @@ logger = get_logger("QuestionGenerator")
 class MCQQuestion(BaseModel):
     type: Literal["mcq"]
     question_text: str = Field(..., description="The text of the question")
-    options: List[str] = Field(..., min_items=4, max_items=4, description="List of 4 MCQ options")
+    options: List[str] = Field(..., min_length=4, max_length=4, description="List of 4 MCQ options")
     correct_answer: str = Field(..., description="The correct answer (must be one of options)")
     difficulty: str = Field(default="medium", description="easy | medium | hard")
     max_score: int = Field(default=1, description="Max score for MCQ (usually 1)")
 
     @model_validator(mode='after')
-    def check_correct_answer_in_options(cls, model):
-        if model.correct_answer not in model.options:
-            raise ValueError("correct_answer must be exactly one of the options")
-        return model
+    def check_correct_answer_in_options(self):
+        if self.correct_answer not in self.options:
+            raise ValueError(f"correct_answer '{self.correct_answer}' must be exactly one of the options")
+        return self
 
 class TheoryQuestion(BaseModel):
     type: Literal["theory"]
@@ -95,231 +96,133 @@ def semantic_filter_and_dedupe(lesson_text: str, questions: List[Dict[str, Any]]
     return kept
 
 # ----------------------------
-# 🎯 NEW: Multi-pass generation strategy
+# 📦 IMPROVED JSON extraction with multiple strategies
 # ----------------------------
-def generate_questions_multi_pass(
-    lesson_text: str,
-    max_questions: int = 30,
-    enable_semantic_filter: bool = True,
-) -> List[Dict[str, Any]]:
-    """
-    Generate questions using multiple passes with different focuses:
-    1. Content-based questions (from the lesson)
-    2. Application questions (real-world scenarios)
-    3. Conceptual questions (understanding & connections)
-    """
+def _extract_json_robust(raw: Any) -> List[Dict[str, Any]]:
+    """Extract JSON from various response formats with aggressive cleaning"""
     
-    all_questions = []
+    logger.debug(f"🔍 Raw response type: {type(raw)}")
     
-    # Pass 1: Content-based questions (40% of target)
-    content_questions = _generate_content_questions(lesson_text, max_questions // 2)
-    all_questions.extend(content_questions)
-    logger.info(f"📚 Pass 1 (Content): Generated {len(content_questions)} questions")
-    
-    # Pass 2: Application questions (30% of target)
-    application_questions = _generate_application_questions(lesson_text, max_questions // 4)
-    all_questions.extend(application_questions)
-    logger.info(f"🔧 Pass 2 (Application): Generated {len(application_questions)} questions")
-    
-    # Pass 3: Conceptual questions (30% of target)
-    conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
-    all_questions.extend(conceptual_questions)
-    logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
-    
-    # Apply semantic filtering and deduplication
-    if enable_semantic_filter:
-        all_questions = semantic_filter_and_dedupe(lesson_text, all_questions)
-    
-    # Balance by difficulty
-    all_questions = _balance_difficulty(all_questions, max_questions)
-    
-    logger.info(f"✅ Total generated: {len(all_questions)} questions")
-    return all_questions
-
-# ----------------------------
-# 🧠 Pass 1: Content-based questions
-# ----------------------------
-def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate questions directly from lesson content"""
-    
-    system_prompt = """You are an expert mathematics teacher creating assessment questions.
-Generate questions that test knowledge and understanding of the lesson content.
-
-FOCUS ON:
-- Definitions and terminology
-- Key concepts and procedures
-- Step-by-step processes
-- Direct application of formulas
-
-Generate a mix of easy, medium, and hard questions.
-Output ONLY valid JSON array with no markdown or extra text."""
-
-    user_prompt = f"""Create {target_count} assessment questions from this lesson:
-
-{lesson_text}
-
-Include:
-- 60% MCQ questions (test recognition and understanding)
-- 40% Theory questions (test explanation ability)
-
-Each MCQ must have 4 options with exactly one correct answer.
-Theory questions should ask students to explain, describe, or show steps."""
-
-    return _call_and_parse_questions(system_prompt, user_prompt, target_count)
-
-# ----------------------------
-# 🔧 Pass 2: Application questions
-# ----------------------------
-def _generate_application_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate questions that apply concepts to new scenarios"""
-    
-    system_prompt = """You are an expert mathematics teacher creating challenging application questions.
-Create questions that require students to APPLY concepts to NEW situations not in the lesson.
-
-FOCUS ON:
-- Real-world problem scenarios
-- Multi-step word problems
-- Questions requiring multiple concepts
-- Variations on lesson examples with different numbers/contexts
-
-Output ONLY valid JSON array with no markdown or extra text."""
-
-    user_prompt = f"""Based on this lesson, create {target_count} APPLICATION questions:
-
-{lesson_text}
-
-Generate questions that:
-1. Use different numbers and scenarios than the examples
-2. Combine multiple concepts from the lesson
-3. Present real-world contexts (money, measurements, practical scenarios)
-4. Require students to choose the correct approach/formula
-
-Mix of:
-- 50% MCQ (with plausible distractors showing common mistakes)
-- 50% Theory (requiring worked solutions)"""
-
-    return _call_and_parse_questions(system_prompt, user_prompt, target_count)
-
-# ----------------------------
-# 💡 Pass 3: Conceptual understanding questions
-# ----------------------------
-def _generate_conceptual_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate questions testing deeper understanding"""
-    
-    system_prompt = """You are an expert mathematics teacher creating conceptual questions.
-Create questions that test WHY and HOW, not just WHAT.
-
-FOCUS ON:
-- Why certain methods work
-- Connections between concepts
-- Common misconceptions
-- Comparing different approaches
-- Identifying errors in given work
-
-Output ONLY valid JSON array with no markdown or extra text."""
-
-    user_prompt = f"""Based on this lesson, create {target_count} CONCEPTUAL questions:
-
-{lesson_text}
-
-Generate questions that:
-1. Ask "Why does this method work?"
-2. Compare two approaches
-3. Identify mistakes in sample work
-4. Ask students to explain their reasoning
-5. Test understanding of underlying principles
-
-Mix of:
-- 40% MCQ (testing conceptual understanding)
-- 60% Theory (requiring explanations and justifications)"""
-
-    return _call_and_parse_questions(system_prompt, user_prompt, target_count)
-
-# ----------------------------
-# 🔄 Helper: Call OpenAI and parse response
-# ----------------------------
-def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count: int) -> List[Dict[str, Any]]:
-    """Call OpenAI API and parse questions"""
-    
-    try:
-        raw = call_openai_completion(
-            f"{system_prompt}\n\n{user_prompt}",
-            model=None,
-            max_tokens=4000,
-            response_format="json",
-        )
-    except Exception as e:
-        logger.error(f"❌ OpenAI call failed: {e}")
-        return []
-
-    # Parse JSON with fallback strategies
-    parsed = _extract_json(raw)
-    
-    # Validate with Pydantic
-    validated = _validate_questions(parsed, target_count)
-    
-    return validated
-
-# ----------------------------
-# 📦 JSON extraction with multiple strategies
-# ----------------------------
-def _extract_json(raw: Any) -> List[Dict[str, Any]]:
-    """Extract JSON from various response formats"""
-    
+    # Already parsed
     if isinstance(raw, list):
+        logger.debug(f"✅ Already a list with {len(raw)} items")
         return raw
     if isinstance(raw, dict):
-        return raw.get("questions", [raw])
+        if "questions" in raw:
+            logger.debug(f"✅ Dict with 'questions' key: {len(raw['questions'])} items")
+            return raw["questions"]
+        logger.debug("✅ Single dict, wrapping in list")
+        return [raw]
     
-    # Try direct parse
+    # Convert to string for processing
+    raw_str = str(raw).strip()
+    logger.debug(f"📝 Processing string of length {len(raw_str)}")
+    
+    # Remove markdown code blocks
+    raw_str = re.sub(r'```json\s*', '', raw_str)
+    raw_str = re.sub(r'```\s*', '', raw_str)
+    
+    # Try direct parse first
     try:
-        parsed = json.loads(raw)
+        parsed = json.loads(raw_str)
+        if isinstance(parsed, list):
+            logger.debug(f"✅ Direct parse: list with {len(parsed)} items")
+            return parsed
         if isinstance(parsed, dict):
-            return parsed.get("questions", [parsed])
-        return parsed if isinstance(parsed, list) else []
-    except json.JSONDecodeError:
-        pass
+            if "questions" in parsed:
+                logger.debug(f"✅ Direct parse: dict with questions ({len(parsed['questions'])} items)")
+                return parsed["questions"]
+            logger.debug("✅ Direct parse: single dict")
+            return [parsed]
+    except json.JSONDecodeError as e:
+        logger.debug(f"❌ Direct parse failed: {e}")
     
-    # Extract from markdown or mixed text
-    import re
+    # Try to find JSON array
+    array_pattern = r'\[\s*\{.*?\}\s*(?:,\s*\{.*?\}\s*)*\]'
+    array_matches = re.findall(array_pattern, raw_str, re.DOTALL)
     
-    # Try array pattern
-    array_match = re.search(r'\[\s*\{.*\}\s*\]', str(raw), re.DOTALL)
-    if array_match:
+    for match in array_matches:
         try:
-            return json.loads(array_match.group())
+            parsed = json.loads(match)
+            if isinstance(parsed, list) and len(parsed) > 0:
+                logger.debug(f"✅ Extracted array: {len(parsed)} items")
+                return parsed
         except json.JSONDecodeError:
-            pass
+            continue
     
-    # Try object with questions key
-    obj_match = re.search(r'\{.*"questions"\s*:\s*\[.*\].*\}', str(raw), re.DOTALL)
-    if obj_match:
+    # Try to find object with questions key
+    obj_pattern = r'\{[^{}]*"questions"\s*:\s*\[.*?\][^{}]*\}'
+    obj_matches = re.findall(obj_pattern, raw_str, re.DOTALL)
+    
+    for match in obj_matches:
         try:
-            parsed = json.loads(obj_match.group())
-            return parsed.get("questions", [])
+            parsed = json.loads(match)
+            if "questions" in parsed:
+                logger.debug(f"✅ Extracted questions object: {len(parsed['questions'])} items")
+                return parsed["questions"]
         except json.JSONDecodeError:
-            pass
+            continue
     
+    # Last resort: try to find individual question objects
+    single_obj_pattern = r'\{[^{}]*"type"\s*:\s*"(?:mcq|theory)"[^{}]*\}'
+    single_matches = re.findall(single_obj_pattern, raw_str, re.DOTALL)
+    
+    if single_matches:
+        parsed_objects = []
+        for match in single_matches:
+            try:
+                obj = json.loads(match)
+                parsed_objects.append(obj)
+            except json.JSONDecodeError:
+                continue
+        
+        if parsed_objects:
+            logger.debug(f"✅ Extracted individual objects: {len(parsed_objects)} items")
+            return parsed_objects
+    
+    logger.warning(f"❌ Could not extract JSON. First 500 chars: {raw_str[:500]}")
     return []
 
 # ----------------------------
-# ✅ Validate questions with Pydantic
+# ✅ IMPROVED validation with detailed error logging
 # ----------------------------
-def _validate_questions(parsed: List[Dict[str, Any]], target_count: int) -> List[Dict[str, Any]]:
-    """Validate and format questions"""
+def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, pass_name: str = "") -> List[Dict[str, Any]]:
+    """Validate and format questions with detailed error logging"""
+    
+    if not parsed:
+        logger.warning(f"⚠️ {pass_name}: No parsed questions to validate")
+        return []
+    
+    logger.debug(f"🔍 {pass_name}: Attempting to validate {len(parsed)} questions")
+    logger.debug(f"📋 {pass_name}: Sample raw question: {json.dumps(parsed[0], indent=2)}")
     
     validated_questions = []
+    validation_errors = []
     
+    # Try bulk validation first
     try:
         validated_questions = parse_obj_as(List[QuestionSchema], parsed[:target_count * 2])
+        logger.info(f"✅ {pass_name}: Bulk validation successful - {len(validated_questions)} questions")
     except ValidationError as ve:
-        logger.warning(f"⚠️ Validation errors: {len(ve.errors())} errors")
-        # Try validating one by one
-        for item in parsed:
+        logger.warning(f"⚠️ {pass_name}: Bulk validation failed with {len(ve.errors())} errors")
+        logger.debug(f"📋 {pass_name}: First 3 validation errors: {ve.errors()[:3]}")
+        
+        # Try one by one
+        for i, item in enumerate(parsed):
             try:
-                validated_questions.append(parse_obj_as(QuestionSchema, item))
-            except ValidationError:
+                validated = parse_obj_as(QuestionSchema, item)
+                validated_questions.append(validated)
+            except ValidationError as e:
+                validation_errors.append({
+                    "index": i,
+                    "question": item.get("question_text", "N/A")[:50],
+                    "errors": [err["msg"] for err in e.errors()[:3]]
+                })
                 continue
+        
+        if validation_errors:
+            logger.warning(f"⚠️ {pass_name}: Failed to validate {len(validation_errors)} questions")
+            logger.debug(f"📋 {pass_name}: Sample failures: {validation_errors[:3]}")
     
     # Format for database
     seen = set()
@@ -341,6 +244,7 @@ def _validate_questions(parsed: List[Dict[str, Any]], target_count: int) -> List
                 correct_index = options.index(q.correct_answer)
                 correct_option = ["A", "B", "C", "D"][correct_index]
             except (ValueError, IndexError):
+                logger.debug(f"⚠️ {pass_name}: Skipping MCQ - correct_answer not in options")
                 continue
         else:
             answer_text = q.answer_text
@@ -360,7 +264,141 @@ def _validate_questions(parsed: List[Dict[str, Any]], target_count: int) -> List
         })
         seen.add(q_text.lower())
     
+    logger.info(f"✅ {pass_name}: Formatted {len(formatted)} valid questions")
     return formatted
+
+# ----------------------------
+# 🔄 Helper: Call OpenAI and parse response
+# ----------------------------
+def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count: int, pass_name: str = "") -> List[Dict[str, Any]]:
+    """Call OpenAI API and parse questions with robust error handling"""
+    
+    logger.debug(f"🚀 {pass_name}: Calling OpenAI (target: {target_count})")
+    
+    try:
+        raw = call_openai_completion(
+            f"{system_prompt}\n\n{user_prompt}",
+            model=None,
+            max_tokens=4000,
+            response_format="json",
+        )
+        logger.debug(f"✅ {pass_name}: OpenAI call successful")
+    except Exception as e:
+        logger.error(f"❌ {pass_name}: OpenAI call failed: {e}")
+        return []
+
+    # Extract JSON
+    parsed = _extract_json_robust(raw)
+    
+    if not parsed:
+        logger.error(f"❌ {pass_name}: Could not extract any JSON from response")
+        logger.debug(f"📋 {pass_name}: Raw response (first 1000 chars): {str(raw)[:1000]}")
+        return []
+    
+    # Validate
+    validated = _validate_questions_robust(parsed, target_count, pass_name)
+    
+    return validated
+
+# ----------------------------
+# 🧠 Pass 1: Content-based questions
+# ----------------------------
+def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
+    """Generate questions directly from lesson content"""
+    
+    system_prompt = """You are an expert mathematics teacher creating assessment questions.
+Generate questions that test knowledge and understanding of the lesson content.
+
+CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+
+Example format:
+[
+  {
+    "type": "mcq",
+    "question_text": "What is 2 + 2?",
+    "options": ["3", "4", "5", "6"],
+    "correct_answer": "4",
+    "difficulty": "easy",
+    "max_score": 1
+  }
+]
+
+FOCUS ON:
+- Definitions and terminology
+- Key concepts and procedures
+- Direct application of formulas
+
+Generate a mix of easy, medium, and hard questions."""
+
+    user_prompt = f"""Create {target_count} assessment questions from this lesson:
+
+{lesson_text}
+
+Include:
+- 60% MCQ questions (4 options each, one correct answer)
+- 40% Theory questions (with concise answers)
+
+Output ONLY the JSON array. No other text."""
+
+    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 1 (Content)")
+
+# ----------------------------
+# 🔧 Pass 2: Application questions
+# ----------------------------
+def _generate_application_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
+    """Generate questions that apply concepts to new scenarios"""
+    
+    system_prompt = """You are an expert mathematics teacher creating application questions.
+
+CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+
+FOCUS ON:
+- Real-world problem scenarios
+- Multi-step word problems
+- Different numbers/contexts than examples
+
+Output ONLY the JSON array."""
+
+    user_prompt = f"""Based on this lesson, create {target_count} APPLICATION questions:
+
+{lesson_text}
+
+Mix of:
+- 50% MCQ (with plausible distractors)
+- 50% Theory (requiring worked solutions)
+
+Output ONLY the JSON array. No other text."""
+
+    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 2 (Application)")
+
+# ----------------------------
+# 💡 Pass 3: Conceptual understanding questions
+# ----------------------------
+def _generate_conceptual_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
+    """Generate questions testing deeper understanding"""
+    
+    system_prompt = """You are an expert mathematics teacher creating conceptual questions.
+
+CRITICAL: Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble.
+
+FOCUS ON:
+- Why methods work
+- Common misconceptions
+- Comparing approaches
+
+Output ONLY the JSON array."""
+
+    user_prompt = f"""Based on this lesson, create {target_count} CONCEPTUAL questions:
+
+{lesson_text}
+
+Mix of:
+- 40% MCQ (testing conceptual understanding)
+- 60% Theory (requiring explanations)
+
+Output ONLY the JSON array. No other text."""
+
+    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 3 (Conceptual)")
 
 # ----------------------------
 # ⚖️ Balance questions by difficulty
@@ -391,17 +429,53 @@ def _balance_difficulty(questions: List[Dict[str, Any]], max_count: int) -> List
     return balanced[:max_count]
 
 # ----------------------------
-# 🔧 Main entry point (updated)
+# 🎯 Multi-pass generation strategy
+# ----------------------------
+def generate_questions_multi_pass(
+    lesson_text: str,
+    max_questions: int = 30,
+    enable_semantic_filter: bool = True,
+) -> List[Dict[str, Any]]:
+    """Generate questions using multiple passes"""
+    
+    all_questions = []
+    
+    # Pass 1: Content (50% of target)
+    content_questions = _generate_content_questions(lesson_text, max_questions // 2)
+    all_questions.extend(content_questions)
+    logger.info(f"📚 Pass 1 (Content): Generated {len(content_questions)} questions")
+    
+    # Pass 2: Application (25% of target)
+    application_questions = _generate_application_questions(lesson_text, max_questions // 4)
+    all_questions.extend(application_questions)
+    logger.info(f"🔧 Pass 2 (Application): Generated {len(application_questions)} questions")
+    
+    # Pass 3: Conceptual (25% of target)
+    conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
+    all_questions.extend(conceptual_questions)
+    logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
+    
+    # Apply semantic filtering
+    if enable_semantic_filter and all_questions:
+        all_questions = semantic_filter_and_dedupe(lesson_text, all_questions)
+    
+    # Balance by difficulty
+    if all_questions:
+        all_questions = _balance_difficulty(all_questions, max_questions)
+    
+    logger.info(f"✅ Total generated: {len(all_questions)} questions")
+    return all_questions
+
+# ----------------------------
+# 🔧 Main entry point
 # ----------------------------
 def generate_questions_with_ai(
     lesson_text: str,
-    max_questions: int = 50,
+    max_questions: int = 30,
     min_expected: Optional[int] = None,
     enable_semantic_filter: bool = True,
 ) -> List[Dict[str, Any]]:
-    """
-    Enhanced question generation using multi-pass strategy
-    """
+    """Enhanced question generation using multi-pass strategy"""
     
     logger.info(f"🧠 Starting enhanced question generation (target: {max_questions})")
     

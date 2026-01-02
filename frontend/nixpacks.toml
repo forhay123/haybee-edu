@@ -1,2 +1,0 @@
-[start]
-cmd = "caddy file-server --root dist --listen :80"
