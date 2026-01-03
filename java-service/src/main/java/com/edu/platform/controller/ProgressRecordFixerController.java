@@ -2488,7 +2488,7 @@ public class ProgressRecordFixerController {
 	    try {
 	        // ✅ NEW: Check if student has a completed timetable
 	        String timetableSql = """
-	            SELECT COUNT(*) FROM individual.individual_timetables
+	            SELECT COUNT(*) FROM academic.individual_student_timetables
 	            WHERE student_profile_id = ?
 	              AND processing_status = 'COMPLETED'
 	            """;
