@@ -2486,7 +2486,7 @@ public class ProgressRecordFixerController {
 	    health.put("studentId", studentId);
 
 	    try {
-	        // ✅ NEW: Check if student has a completed timetable
+	        // ✅ Check if student has a completed timetable
 	        String timetableSql = """
 	            SELECT COUNT(*) FROM academic.individual_student_timetables
 	            WHERE student_profile_id = ?
@@ -2494,14 +2494,14 @@ public class ProgressRecordFixerController {
 	            """;
 	        Integer hasTimetable = jdbcTemplate.queryForObject(timetableSql, Integer.class, studentId);
 	        
-	        // ✅ NEW: Check if student has any schedules
+	        // ✅ Check if student has any schedules
 	        String scheduleCountSql = """
 	            SELECT COUNT(*) FROM academic.daily_schedules
 	            WHERE student_id = ?
 	            """;
 	        Integer scheduleCount = jdbcTemplate.queryForObject(scheduleCountSql, Integer.class, studentId);
 	        
-	        // ✅ NEW: If timetable exists but no schedules, that's an issue!
+	        // ✅ If timetable exists but no schedules, that's an issue!
 	        boolean schedulesNeedGeneration = (hasTimetable != null && hasTimetable > 0) && 
 	                                          (scheduleCount == null || scheduleCount == 0);
 	        
@@ -2519,7 +2519,7 @@ public class ProgressRecordFixerController {
 	        Integer orphaned = jdbcTemplate.queryForObject(orphanedSql, Integer.class, studentId);
 	        health.put("orphanedProgress", orphaned != null ? orphaned : 0);
 
-	        // Check for schedules without progress
+	        // Check for schedules without progress (but WITH lesson topics)
 	        String noProgressSql = """
 	            SELECT COUNT(*) FROM academic.daily_schedules ds
 	            WHERE ds.student_id = ?
@@ -2531,6 +2531,15 @@ public class ProgressRecordFixerController {
 	            """;
 	        Integer noProgress = jdbcTemplate.queryForObject(noProgressSql, Integer.class, studentId);
 	        health.put("schedulesWithoutProgress", noProgress != null ? noProgress : 0);
+
+	        // ✅ NEW: Check for schedules WITHOUT lesson topics
+	        String noLessonTopicsSql = """
+	            SELECT COUNT(*) FROM academic.daily_schedules ds
+	            WHERE ds.student_id = ?
+	              AND ds.lesson_topic_id IS NULL
+	            """;
+	        Integer noLessonTopics = jdbcTemplate.queryForObject(noLessonTopicsSql, Integer.class, studentId);
+	        health.put("schedulesWithoutLessonTopics", noLessonTopics != null ? noLessonTopics : 0);
 
 	        // Check for progress without assessments (where they should exist)
 	        String noAssessmentSql = """
@@ -2558,22 +2567,24 @@ public class ProgressRecordFixerController {
 	        Integer noWindows = jdbcTemplate.queryForObject(noWindowsSql, Integer.class, studentId);
 	        health.put("missingWindows", noWindows != null ? noWindows : 0);
 
-	        // ✅ UPDATED: Calculate if needs repair (including schedule generation check)
+	        // ✅ UPDATED: Calculate if needs repair (including lesson topics check)
 	        boolean needsRepair =
-	            schedulesNeedGeneration || // ✅ NEW
+	            schedulesNeedGeneration ||
 	            (orphaned != null && orphaned > 0) ||
 	            (noProgress != null && noProgress > 0) ||
+	            (noLessonTopics != null && noLessonTopics > 0) || // ✅ NEW
 	            (noAssessment != null && noAssessment > 0) ||
 	            (noWindows != null && noWindows > 0);
 
 	        health.put("needsRepair", needsRepair);
 	        health.put("isHealthy", !needsRepair);
 
-	        // ✅ UPDATED: Calculate total issues (including schedule generation)
+	        // ✅ UPDATED: Calculate total issues (including lesson topics)
 	        int totalIssues =
-	            (schedulesNeedGeneration ? 1 : 0) + // ✅ NEW (count as 1 major issue)
+	            (schedulesNeedGeneration ? 1 : 0) +
 	            (orphaned != null ? orphaned : 0) +
 	            (noProgress != null ? noProgress : 0) +
+	            (noLessonTopics != null ? noLessonTopics : 0) + // ✅ NEW
 	            (noAssessment != null ? noAssessment : 0) +
 	            (noWindows != null ? noWindows : 0);
 
@@ -2589,5 +2600,4 @@ public class ProgressRecordFixerController {
 	        return ResponseEntity.status(500).body(health);
 	    }
 	}
-
 }
