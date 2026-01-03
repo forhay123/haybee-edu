@@ -8,6 +8,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import com.edu.platform.repository.individual.IndividualTimetableRepository;
+import com.edu.platform.service.individual.IndividualScheduleService;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -30,7 +33,7 @@ import java.util.Map;
 public class ProgressRecordFixerController {
 
     private final JdbcTemplate jdbcTemplate;
-    
+    private final IndividualScheduleService individualScheduleService;
     
     
 
@@ -1871,6 +1874,38 @@ public class ProgressRecordFixerController {
 	        result.put("error", e.getMessage());
 	        result.put("endTime", LocalDateTime.now().toString());
 	        return ResponseEntity.status(500).body(result);
+	    }
+	}
+	
+	
+	/**
+	 * ✅ Regenerate schedules for a single student for a specific week
+	 */
+	@PostMapping("/regenerate/student/{studentId}/week/{weekNumber}")
+	@Transactional
+	public ResponseEntity<Map<String, Object>> regenerateStudentWeek(
+	        @PathVariable Long studentId,
+	        @PathVariable Integer weekNumber) {
+	    
+	    log.info("========================================");
+	    log.info("🔄 API: Regenerating week {} for student {}", weekNumber, studentId);
+	    log.info("========================================");
+	    
+	    try {
+	        Map<String, Object> result = individualScheduleService.regenerateStudentWeek(studentId, weekNumber);
+	        
+	        if (Boolean.TRUE.equals(result.get("success"))) {
+	            return ResponseEntity.ok(result);
+	        } else {
+	            return ResponseEntity.status(500).body(result);
+	        }
+	        
+	    } catch (Exception e) {
+	        log.error("❌ Regeneration API failed: {}", e.getMessage(), e);
+	        return ResponseEntity.status(500).body(Map.of(
+	            "success", false,
+	            "error", e.getMessage()
+	        ));
 	    }
 	}
 	

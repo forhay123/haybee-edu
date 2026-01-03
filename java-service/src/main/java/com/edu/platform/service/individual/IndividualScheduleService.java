@@ -4,9 +4,12 @@ import com.edu.platform.dto.individual.IndividualDailyScheduleDto;
 import com.edu.platform.mapper.DailyScheduleMapper;
 import com.edu.platform.model.DailySchedule;
 import com.edu.platform.model.StudentProfile;
+import com.edu.platform.model.Term;
 import com.edu.platform.model.progress.StudentLessonProgress;
 import com.edu.platform.repository.DailyScheduleRepository;
 import com.edu.platform.repository.StudentProfileRepository;
+import com.edu.platform.repository.SubjectRepository;
+import com.edu.platform.repository.individual.IndividualTimetableRepository;
 import com.edu.platform.repository.progress.StudentLessonProgressRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -16,8 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -33,6 +38,13 @@ public class IndividualScheduleService {
     private final DailyScheduleMapper scheduleMapper;
     private final IndividualScheduleGenerator scheduleGenerator;
     private final StudentLessonProgressRepository progressRepository;
+    
+    
+    private final TermWeekCalculator termWeekCalculator;
+    private final PublicHolidayService publicHolidayService;
+    
+    
+    
     
     /**
      * Get schedule for a specific date
@@ -444,6 +456,129 @@ public class IndividualScheduleService {
         log.info("✅ Progress {} marked as MISSED with zero-score submission", progressId);
     }
     
+    
+    /**
+     * ✅ Regenerate schedules for a single student for a specific week
+     * Works exactly like weekly generation but for one student only
+     */
+    @Transactional
+    public Map<String, Object> regenerateStudentWeek(Long studentProfileId, Integer weekNumber) {
+        log.info("========================================");
+        log.info("🔄 REGENERATING week {} for student {}", weekNumber, studentProfileId);
+        log.info("========================================");
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("studentId", studentProfileId);
+        result.put("weekNumber", weekNumber);
+        result.put("startTime", LocalDateTime.now().toString());
+        
+        try {
+            StudentProfile student = studentProfileRepository.findById(studentProfileId)
+                .orElseThrow(() -> new RuntimeException("Student not found: " + studentProfileId));
+            
+            // Get week date range
+            LocalDate[] weekRange = termWeekCalculator.getWeekDateRange(weekNumber);
+            if (weekRange == null) {
+                throw new IllegalStateException("Invalid week number: " + weekNumber);
+            }
+            LocalDate weekStart = weekRange[0];
+            LocalDate weekEnd = weekRange[1];
+            
+            result.put("weekStart", weekStart.toString());
+            result.put("weekEnd", weekEnd.toString());
+            
+            // Delete old schedules and progress (preserve submissions)
+            int schedulesDeleted = deleteStudentSchedulesForWeek(student, weekStart, weekEnd);
+            result.put("schedulesDeleted", schedulesDeleted);
+            
+            // Get active term
+            Optional<Term> termOpt = termWeekCalculator.getActiveTerm();
+            if (termOpt.isEmpty()) {
+                throw new IllegalStateException("No active term found");
+            }
+            Term term = termOpt.get();
+            
+            // Check for Saturday holidays
+            PublicHolidayService.ReschedulingInfo reschedulingInfo = 
+                publicHolidayService.checkReschedulingNeeded(weekStart);
+            
+            // Generate schedules using the weekly generator
+            IndividualScheduleGenerator.StudentGenerationResult genResult = 
+                scheduleGenerator.processStudentInNewTransaction(
+                    student, weekNumber, weekStart, weekEnd, term, reschedulingInfo
+                );
+            
+            result.put("schedulesCreated", genResult.getSchedulesCreated());
+            result.put("missingTopics", genResult.getMissingTopics().size());
+            result.put("success", true);
+            result.put("endTime", LocalDateTime.now().toString());
+            
+            log.info("========================================");
+            log.info("✅ REGENERATION COMPLETE for student {}", studentProfileId);
+            log.info("========================================");
+            
+            return result;
+            
+        } catch (Exception e) {
+            log.error("❌ Regeneration failed: {}", e.getMessage(), e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            result.put("endTime", LocalDateTime.now().toString());
+            return result;
+        }
+    }
+
+    /**
+     * Delete schedules for a specific student and week
+     * Preserves progress records with submissions
+     */
+    @Transactional
+    private int deleteStudentSchedulesForWeek(StudentProfile student, LocalDate weekStart, LocalDate weekEnd) {
+        log.info("🗑️ Deleting schedules for student {} from {} to {}", student.getId(), weekStart, weekEnd);
+        
+        List<DailySchedule> schedulesToDelete = scheduleRepository
+            .findByStudentProfileAndScheduledDateBetweenAndScheduleSourceOrderByScheduledDateAscPeriodNumberAsc(
+                student, weekStart, weekEnd, "INDIVIDUAL");
+        
+        if (schedulesToDelete.isEmpty()) {
+            log.info("✅ No schedules to delete");
+            return 0;
+        }
+        
+        int schedulesDeleted = 0;
+        int progressPreserved = 0;
+        int progressDeleted = 0;
+        
+        for (DailySchedule schedule : schedulesToDelete) {
+            // Find progress records linked to this schedule
+            List<StudentLessonProgress> progressRecords = progressRepository
+                .findByStudentProfileAndScheduledDate(student, schedule.getScheduledDate())
+                .stream()
+                .filter(p -> p.getSchedule() != null && p.getSchedule().getId().equals(schedule.getId()))
+                .collect(Collectors.toList());
+            
+            for (StudentLessonProgress progress : progressRecords) {
+                if (progress.getAssessmentSubmission() != null) {
+                    // Preserve progress with submissions
+                    progress.setSchedule(null);
+                    progressRepository.save(progress);
+                    progressPreserved++;
+                } else {
+                    // Delete progress without submissions
+                    progressRepository.delete(progress);
+                    progressDeleted++;
+                }
+            }
+            
+            scheduleRepository.delete(schedule);
+            schedulesDeleted++;
+        }
+        
+        log.info("✅ Deleted {} schedules, preserved {} progress with submissions, deleted {} progress without submissions",
+                schedulesDeleted, progressPreserved, progressDeleted);
+        
+        return schedulesDeleted;
+    }
     
     /**
      * DTO for schedule statistics
