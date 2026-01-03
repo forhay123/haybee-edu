@@ -531,7 +531,7 @@ const AdminIndividualTimetablesPage: React.FC = () => {
             onDelete={handleDelete}
             onReprocess={handleReprocess}
             onRepair={handleRepair}
-            studentHealthMap={studentHealthMap} {/* ✅ NEW: Pass health data */}
+            studentHealthMap={studentHealthMap}
           />
         </div>
 
