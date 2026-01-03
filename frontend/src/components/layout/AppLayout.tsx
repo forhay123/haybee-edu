@@ -2,7 +2,7 @@
 
 import React from "react";
 import Navbar from "./Navbar";
-import ConditionalSidebar from "./ConditionalSidebar"; // ✅ Use ConditionalSidebar
+import ConditionalSidebar from "./ConditionalSidebar";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -21,9 +21,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           <Navbar />
         </div>
 
-        {/* 📄 Page Content */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 mt-16">
-          {/* 👆 mt-16 ensures content starts below the navbar height */}
+        {/* 📄 Page Content - ✅ REDUCED MOBILE PADDING */}
+        <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8 mt-16">
+          {/* 
+            ✅ Mobile (default): p-2 = 8px padding
+            ✅ Small screens: p-4 = 16px padding  
+            ✅ Medium screens: p-6 = 24px padding
+            ✅ Large screens: p-8 = 32px padding
+            👆 mt-16 ensures content starts below the navbar height 
+          */}
           {children}
         </main>
       </div>
