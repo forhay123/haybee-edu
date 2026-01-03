@@ -1894,8 +1894,13 @@ public class ProgressRecordFixerController {
 	    
 	    try {
 	        // Get student name for logging
-	    	String studentNameSql = "SELECT CONCAT(first_name, ' ', last_name) FROM core.users WHERE id = ?";
-	        String studentName = jdbcTemplate.queryForObject(studentNameSql, String.class, studentId);
+	    	String studentNameSql = """
+	    		    SELECT u.full_name 
+	    		    FROM academic.student_profiles sp
+	    		    JOIN core.users u ON sp.user_id = u.id
+	    		    WHERE sp.id = ?
+	    		    """;
+	    	String studentName = jdbcTemplate.queryForObject(studentNameSql, String.class, studentId);
 	        result.put("studentName", studentName);
 	        log.info("👤 Student: {}", studentName);
 	        
