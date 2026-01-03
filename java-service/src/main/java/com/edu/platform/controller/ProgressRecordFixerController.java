@@ -2479,13 +2479,36 @@ public class ProgressRecordFixerController {
 	@GetMapping("/student/{studentId}/health")
 	public ResponseEntity<Map<String, Object>> checkStudentHealth(
 	        @PathVariable Long studentId) {
-	    
+
 	    log.info("🔍 Checking schedule health for student {}", studentId);
-	    
+
 	    Map<String, Object> health = new HashMap<>();
 	    health.put("studentId", studentId);
-	    
+
 	    try {
+	        // ✅ NEW: Check if student has a completed timetable
+	        String timetableSql = """
+	            SELECT COUNT(*) FROM individual.individual_timetables
+	            WHERE student_profile_id = ?
+	              AND processing_status = 'COMPLETED'
+	            """;
+	        Integer hasTimetable = jdbcTemplate.queryForObject(timetableSql, Integer.class, studentId);
+	        
+	        // ✅ NEW: Check if student has any schedules
+	        String scheduleCountSql = """
+	            SELECT COUNT(*) FROM academic.daily_schedules
+	            WHERE student_id = ?
+	            """;
+	        Integer scheduleCount = jdbcTemplate.queryForObject(scheduleCountSql, Integer.class, studentId);
+	        
+	        // ✅ NEW: If timetable exists but no schedules, that's an issue!
+	        boolean schedulesNeedGeneration = (hasTimetable != null && hasTimetable > 0) && 
+	                                          (scheduleCount == null || scheduleCount == 0);
+	        
+	        health.put("hasTimetable", hasTimetable != null ? hasTimetable : 0);
+	        health.put("hasSchedules", scheduleCount != null ? scheduleCount : 0);
+	        health.put("schedulesNeedGeneration", schedulesNeedGeneration);
+	        
 	        // Check for orphaned progress
 	        String orphanedSql = """
 	            SELECT COUNT(*) FROM academic.student_lesson_progress
@@ -2495,7 +2518,7 @@ public class ProgressRecordFixerController {
 	            """;
 	        Integer orphaned = jdbcTemplate.queryForObject(orphanedSql, Integer.class, studentId);
 	        health.put("orphanedProgress", orphaned != null ? orphaned : 0);
-	        
+
 	        // Check for schedules without progress
 	        String noProgressSql = """
 	            SELECT COUNT(*) FROM academic.daily_schedules ds
@@ -2508,7 +2531,7 @@ public class ProgressRecordFixerController {
 	            """;
 	        Integer noProgress = jdbcTemplate.queryForObject(noProgressSql, Integer.class, studentId);
 	        health.put("schedulesWithoutProgress", noProgress != null ? noProgress : 0);
-	        
+
 	        // Check for progress without assessments (where they should exist)
 	        String noAssessmentSql = """
 	            SELECT COUNT(*) FROM academic.student_lesson_progress p
@@ -2523,7 +2546,7 @@ public class ProgressRecordFixerController {
 	            """;
 	        Integer noAssessment = jdbcTemplate.queryForObject(noAssessmentSql, Integer.class, studentId);
 	        health.put("missingAssessments", noAssessment != null ? noAssessment : 0);
-	        
+
 	        // Check for missing assessment windows
 	        String noWindowsSql = """
 	            SELECT COUNT(*) FROM academic.student_lesson_progress
@@ -2534,29 +2557,31 @@ public class ProgressRecordFixerController {
 	            """;
 	        Integer noWindows = jdbcTemplate.queryForObject(noWindowsSql, Integer.class, studentId);
 	        health.put("missingWindows", noWindows != null ? noWindows : 0);
-	        
-	        // Calculate if needs repair
-	        boolean needsRepair = 
+
+	        // ✅ UPDATED: Calculate if needs repair (including schedule generation check)
+	        boolean needsRepair =
+	            schedulesNeedGeneration || // ✅ NEW
 	            (orphaned != null && orphaned > 0) ||
 	            (noProgress != null && noProgress > 0) ||
 	            (noAssessment != null && noAssessment > 0) ||
 	            (noWindows != null && noWindows > 0);
-	        
+
 	        health.put("needsRepair", needsRepair);
 	        health.put("isHealthy", !needsRepair);
-	        
-	        // Calculate health score
-	        int totalIssues = 
+
+	        // ✅ UPDATED: Calculate total issues (including schedule generation)
+	        int totalIssues =
+	            (schedulesNeedGeneration ? 1 : 0) + // ✅ NEW (count as 1 major issue)
 	            (orphaned != null ? orphaned : 0) +
 	            (noProgress != null ? noProgress : 0) +
 	            (noAssessment != null ? noAssessment : 0) +
 	            (noWindows != null ? noWindows : 0);
-	        
+
 	        health.put("totalIssues", totalIssues);
 	        health.put("success", true);
-	        
+
 	        return ResponseEntity.ok(health);
-	        
+
 	    } catch (Exception e) {
 	        log.error("Failed to check student health: {}", e.getMessage(), e);
 	        health.put("success", false);
