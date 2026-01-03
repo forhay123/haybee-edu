@@ -16,6 +16,32 @@ import TimetableListTable from "../../components/admin/TimetableListTable";
 import BulkActionsToolbar from "../../components/admin/BulkActionsToolbar";
 import SystemStatsCards from "../../components/admin/SystemStatsCards";
 import { ProcessingStatus } from "../../types/individualTypes";
+import axiosInstance from "@/api/axios";
+
+// ✅ NEW: Interface for repair result
+interface StudentRepairResultData {
+  success: boolean;
+  message: string;
+  studentId: number;
+  studentName: string;
+  weeksProcessed: number;
+  step0_assessmentsCleared: number;
+  step1_orphanedLinked: number;
+  step2_progressLinked: number;
+  step3_progressCreated: number;
+  step4_submissionsLinked: number;
+  step5_windowsFixed: number;
+  step6_metadataSet: number;
+  validation: {
+    allGood: boolean;
+    remainingOrphaned: number;
+    remainingNoAssessment: number;
+    remainingNoWindows: number;
+    remainingNoMetadata: number;
+    remainingUnlinkedSubmissions: number;
+  };
+  fullyFixed: boolean;
+}
 
 /**
  * Admin page to view and manage ALL student timetables system-wide
@@ -59,13 +85,18 @@ const AdminIndividualTimetablesPage: React.FC = () => {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  // ✅ NEW: Repair state
+  const [repairResult, setRepairResult] = useState<StudentRepairResultData | null>(null);
+  const [repairingStudentId, setRepairingStudentId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   // ============================================================
   // DATA FETCHING
   // ============================================================
   const {
     timetables: allTimetables,
     isLoading,
-    error,
+    error: fetchError,
     processingCount,
     failedCount,
     completedCount,
@@ -162,6 +193,48 @@ const AdminIndividualTimetablesPage: React.FC = () => {
     }
   };
 
+  // ✅ NEW: Repair handler
+  const handleRepair = async (studentId: number, studentName: string) => {
+    const confirmed = window.confirm(
+      `Repair all schedules for ${studentName}?\n\n` +
+      `This will:\n` +
+      `- Fix all weeks where this student has schedules\n` +
+      `- Link orphaned progress records\n` +
+      `- Link assessments\n` +
+      `- Create missing progress records\n` +
+      `- Link submissions\n` +
+      `- Fix assessment windows\n` +
+      `- Set multi-period metadata\n\n` +
+      `This will NOT affect other students.`
+    );
+
+    if (!confirmed) return;
+
+    setRepairingStudentId(studentId);
+    setRepairResult(null);
+    setError(null);
+
+    try {
+      const response = await axiosInstance.post<StudentRepairResultData>(
+        `/admin/maintenance/progress/complete-fix/student/${studentId}`
+      );
+
+      if (response.data.success) {
+        setRepairResult(response.data);
+        toast.success(`Successfully repaired schedules for ${studentName}!`);
+      } else {
+        setError(`Repair failed: ${response.data.message || 'Unknown error'}`);
+        toast.error(`Failed to repair schedules for ${studentName}`);
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || err.message || 'Unknown error';
+      setError(`Failed to repair schedules: ${errorMsg}`);
+      toast.error(`Failed to repair schedules: ${errorMsg}`);
+    } finally {
+      setRepairingStudentId(null);
+    }
+  };
+
   const handleClearSelection = () => {
     setSelectedIds([]);
   };
@@ -194,7 +267,7 @@ const AdminIndividualTimetablesPage: React.FC = () => {
   // ============================================================
   // RENDER: ERROR STATE
   // ============================================================
-  if (error) {
+  if (fetchError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -203,7 +276,7 @@ const AdminIndividualTimetablesPage: React.FC = () => {
             Error Loading Data
           </h1>
           <p className="text-gray-600 mb-4">
-            {error instanceof Error ? error.message : "An error occurred"}
+            {fetchError instanceof Error ? fetchError.message : "An error occurred"}
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -243,6 +316,109 @@ const AdminIndividualTimetablesPage: React.FC = () => {
             totalCount={totalCount}
           />
         </div>
+
+        {/* ✅ NEW: Repair Result Display */}
+        {repairResult && (
+          <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Repair Complete for {repairResult.studentName}
+              </h3>
+              <button
+                onClick={() => setRepairResult(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className={`p-4 rounded-lg ${
+              repairResult.fullyFixed 
+                ? "bg-green-50 border border-green-200" 
+                : "bg-amber-50 border border-amber-200"
+            }`}>
+              <div className="flex items-center gap-2 mb-4">
+                {repairResult.fullyFixed ? (
+                  <>
+                    <span className="text-2xl">✅</span>
+                    <span className="font-semibold text-green-800">
+                      All issues resolved!
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-2xl">⚠️</span>
+                    <span className="font-semibold text-amber-800">
+                      Mostly fixed - some issues remain
+                    </span>
+                  </>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div className="bg-white p-3 rounded-lg">
+                  <div className="text-xs text-gray-600">Weeks Processed</div>
+                  <div className="text-xl font-bold text-blue-600">
+                    {repairResult.weeksProcessed}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg">
+                  <div className="text-xs text-gray-600">Orphaned Linked</div>
+                  <div className="text-xl font-bold text-green-600">
+                    {repairResult.step1_orphanedLinked}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg">
+                  <div className="text-xs text-gray-600">Progress Created</div>
+                  <div className="text-xl font-bold text-blue-600">
+                    {repairResult.step3_progressCreated}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg">
+                  <div className="text-xs text-gray-600">Submissions Linked</div>
+                  <div className="text-xl font-bold text-purple-600">
+                    {repairResult.step4_submissionsLinked}
+                  </div>
+                </div>
+              </div>
+
+              {!repairResult.fullyFixed && repairResult.validation && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="text-sm font-medium text-gray-700 mb-2">
+                    Remaining Issues:
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {repairResult.validation.remainingOrphaned > 0 && (
+                      <div className="text-red-600">
+                        • {repairResult.validation.remainingOrphaned} orphaned records
+                      </div>
+                    )}
+                    {repairResult.validation.remainingNoAssessment > 0 && (
+                      <div className="text-red-600">
+                        • {repairResult.validation.remainingNoAssessment} missing assessments
+                      </div>
+                    )}
+                    {repairResult.validation.remainingNoWindows > 0 && (
+                      <div className="text-red-600">
+                        • {repairResult.validation.remainingNoWindows} missing windows
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ✅ NEW: Error Display */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <span className="text-red-600 text-xl">❌</span>
+              <span className="text-red-800 font-semibold">{error}</span>
+            </div>
+          </div>
+        )}
 
         {/* Filters Section */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
@@ -345,6 +521,7 @@ const AdminIndividualTimetablesPage: React.FC = () => {
             onView={handleView}
             onDelete={handleDelete}
             onReprocess={handleReprocess}
+            onRepair={handleRepair} {/* ✅ NEW: Pass repair handler */}
           />
         </div>
 
@@ -370,6 +547,14 @@ const AdminIndividualTimetablesPage: React.FC = () => {
             <span className="text-sm">
               Auto-refreshing ({processingCount} processing)
             </span>
+          </div>
+        )}
+
+        {/* ✅ NEW: Loading indicator for repair */}
+        {repairingStudentId && (
+          <div className="fixed bottom-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+            <span className="text-sm">Repairing schedules...</span>
           </div>
         )}
       </div>

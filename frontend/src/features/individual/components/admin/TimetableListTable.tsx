@@ -11,6 +11,7 @@ import {
   XCircle,
   Clock,
   AlertCircle,
+  Wrench,
 } from "lucide-react";
 import { IndividualTimetableDto } from "../../types/individualTypes";
 import { getStatusColor, formatFileSize } from "../../types/individualTypes";
@@ -23,6 +24,7 @@ interface TimetableListTableProps {
   onDelete: (id: number) => void;
   onReprocess: (id: number) => void;
   onView: (id: number) => void;
+  onRepair?: (studentId: number, studentName: string) => void; // ✅ NEW
 }
 
 const TimetableListTable: React.FC<TimetableListTableProps> = ({
@@ -33,6 +35,7 @@ const TimetableListTable: React.FC<TimetableListTableProps> = ({
   onDelete,
   onReprocess,
   onView,
+  onRepair, // ✅ NEW
 }) => {
   const navigate = useNavigate();
   const [sortField, setSortField] = useState<keyof IndividualTimetableDto>("uploadedAt");
@@ -229,6 +232,20 @@ const TimetableListTable: React.FC<TimetableListTableProps> = ({
                   </td>
                   <td className="px-6 py-4 text-right text-sm font-medium">
                     <div className="flex items-center justify-end gap-2">
+                      {/* ✅ NEW: Repair Button - Only show if status is COMPLETED */}
+                      {onRepair && timetable.processingStatus === "COMPLETED" && (
+                        <button
+                          onClick={() => onRepair(
+                            timetable.studentProfileId,
+                            timetable.studentName
+                          )}
+                          className="text-purple-600 hover:text-purple-900 p-1 hover:bg-purple-50 rounded transition-colors"
+                          title="Repair schedules for this student"
+                        >
+                          <Wrench className="w-4 h-4" />
+                        </button>
+                      )}
+
                       <button
                         onClick={() => onView(timetable.id)}
                         className="text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-50 rounded transition-colors"

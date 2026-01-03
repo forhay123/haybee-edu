@@ -1873,5 +1873,602 @@ public class ProgressRecordFixerController {
 	        return ResponseEntity.status(500).body(result);
 	    }
 	}
+	
+	
+	/**
+	 * ✅ STUDENT-SPECIFIC FIX: Complete fix for ONE student across ALL their weeks
+	 * This repairs all schedule/progress issues for a specific student without affecting others
+	 */
+	@PostMapping("/complete-fix/student/{studentId}")
+	@Transactional
+	public ResponseEntity<Map<String, Object>> completeFixForStudent(
+	        @PathVariable Long studentId) {
+	    
+	    log.info("========================================");
+	    log.info("🔧 STUDENT FIX: Starting complete fix for Student ID {}", studentId);
+	    log.info("========================================");
+	    
+	    Map<String, Object> result = new HashMap<>();
+	    result.put("studentId", studentId);
+	    result.put("startTime", LocalDateTime.now().toString());
+	    
+	    try {
+	        // Get student name for logging
+	        String studentNameSql = "SELECT CONCAT(first_name, ' ', last_name) FROM users WHERE id = ?";
+	        String studentName = jdbcTemplate.queryForObject(studentNameSql, String.class, studentId);
+	        result.put("studentName", studentName);
+	        log.info("👤 Student: {}", studentName);
+	        
+	        // Find all weeks where this student has schedules
+	        String weeksSql = """
+	            SELECT DISTINCT 
+	                DATE_TRUNC('week', scheduled_date)::date as week_start,
+	                (DATE_TRUNC('week', scheduled_date) + INTERVAL '6 days')::date as week_end
+	            FROM academic.daily_schedules
+	            WHERE student_id = ?
+	            ORDER BY week_start
+	            """;
+	        
+	        List<Map<String, Object>> weeks = jdbcTemplate.queryForList(weeksSql, studentId);
+	        
+	        if (weeks.isEmpty()) {
+	            result.put("success", false);
+	            result.put("error", "No schedules found for this student");
+	            return ResponseEntity.badRequest().body(result);
+	        }
+	        
+	        log.info("📅 Found {} weeks with schedules for student {}", weeks.size(), studentId);
+	        result.put("weeksProcessed", weeks.size());
+	        
+	        // Initialize counters
+	        int totalOrphanedLinked = 0;
+	        int totalSchedulesLinked = 0;
+	        int totalProgressLinked = 0;
+	        int totalAccessibilitySet = 0;
+	        int totalProgressCreated = 0;
+	        int totalSubmissionsLinked = 0;
+	        int totalScoresCalculated = 0;
+	        int totalWindowsFixed = 0;
+	        int totalAccessibilityUpdated = 0;
+	        int totalMetadataSet = 0;
+	        int totalAssessmentsCleared = 0;
+	        
+	        // Process each week
+	        for (Map<String, Object> week : weeks) {
+	            LocalDate weekStart = convertToLocalDate(week.get("week_start"));
+	            LocalDate weekEnd = convertToLocalDate(week.get("week_end"));
+	            
+	            log.info("📝 Processing week: {} to {}", weekStart, weekEnd);
+	            
+	            // ============================================================
+	            // STEP 0: Clear Period 2+ Assessments (Student-Specific)
+	            // ============================================================
+	            int step0 = studentStep0_clearPeriod2Plus(studentId, weekStart, weekEnd);
+	            totalAssessmentsCleared += step0;
+	            log.info("  ✅ Step 0: Cleared {} Period 2+ assessments", step0);
+	            
+	            // ============================================================
+	            // STEP 1: Link Orphaned Progress (Student-Specific)
+	            // ============================================================
+	            int step1 = studentStep1_linkOrphanedProgress(studentId, weekStart, weekEnd);
+	            totalOrphanedLinked += step1;
+	            log.info("  ✅ Step 1: Linked {} orphaned progress", step1);
+	            
+	            // ============================================================
+	            // STEP 2: Link Assessments (Student-Specific)
+	            // ============================================================
+	            Map<String, Integer> step2 = studentStep2_linkAssessments(studentId, weekStart, weekEnd);
+	            totalSchedulesLinked += step2.get("schedulesLinked");
+	            totalProgressLinked += step2.get("progressLinked");
+	            totalAccessibilitySet += step2.get("accessibilitySet");
+	            log.info("  ✅ Step 2: Linked {} schedules, {} progress", 
+	                    step2.get("schedulesLinked"), step2.get("progressLinked"));
+	            
+	            // ============================================================
+	            // STEP 3: Create Missing Progress (Student-Specific)
+	            // ============================================================
+	            int step3 = studentStep3_createMissingProgress(studentId, weekStart, weekEnd);
+	            totalProgressCreated += step3;
+	            log.info("  ✅ Step 3: Created {} progress records", step3);
+	            
+	            // ============================================================
+	            // STEP 4: Link Submissions (Student-Specific)
+	            // ============================================================
+	            Map<String, Integer> step4 = studentStep4_linkSubmissions(studentId, weekStart, weekEnd);
+	            totalSubmissionsLinked += step4.get("submissionsLinked");
+	            totalScoresCalculated += step4.get("scoresCalculated");
+	            log.info("  ✅ Step 4: Linked {} submissions", step4.get("submissionsLinked"));
+	            
+	            // ============================================================
+	            // STEP 5: Fix Assessment Windows (Student-Specific)
+	            // ============================================================
+	            Map<String, Integer> step5 = studentStep5_fixAssessmentWindows(studentId, weekStart, weekEnd);
+	            totalWindowsFixed += step5.get("windowsFixed");
+	            totalAccessibilityUpdated += step5.get("accessibilityUpdated");
+	            log.info("  ✅ Step 5: Fixed {} windows", step5.get("windowsFixed"));
+	            
+	            // ============================================================
+	            // STEP 6: Set Multi-Period Metadata (Student-Specific)
+	            // ============================================================
+	            int step6 = studentStep6_setMultiPeriodMetadata(studentId, weekStart, weekEnd);
+	            totalMetadataSet += step6;
+	            log.info("  ✅ Step 6: Set {} metadata records", step6);
+	            
+	            jdbcTemplate.execute("COMMIT");
+	        }
+	        
+	        // ============================================================
+	        // STEP 7: Validate Final State (Student-Specific)
+	        // ============================================================
+	        Map<String, Object> validation = studentStep7_validateFinalState(studentId);
+	        boolean allGood = (boolean) validation.getOrDefault("allGood", false);
+	        
+	        // Build result
+	        result.put("success", true);
+	        result.put("fullyFixed", allGood);
+	        result.put("endTime", LocalDateTime.now().toString());
+	        
+	        result.put("step0_assessmentsCleared", totalAssessmentsCleared);
+	        result.put("step1_orphanedLinked", totalOrphanedLinked);
+	        result.put("step2_schedulesLinked", totalSchedulesLinked);
+	        result.put("step2_progressLinked", totalProgressLinked);
+	        result.put("step2_accessibilitySet", totalAccessibilitySet);
+	        result.put("step3_progressCreated", totalProgressCreated);
+	        result.put("step4_submissionsLinked", totalSubmissionsLinked);
+	        result.put("step4_scoresCalculated", totalScoresCalculated);
+	        result.put("step5_windowsFixed", totalWindowsFixed);
+	        result.put("step5_accessibilityUpdated", totalAccessibilityUpdated);
+	        result.put("step6_metadataSet", totalMetadataSet);
+	        result.put("validation", validation);
+	        
+	        String message = String.format(
+	            "Complete fix for %s: %d orphaned linked, %d assessments linked, " +
+	            "%d progress created, %d submissions linked, %d windows fixed, %d metadata set",
+	            studentName,
+	            totalOrphanedLinked,
+	            totalProgressLinked,
+	            totalProgressCreated,
+	            totalSubmissionsLinked,
+	            totalWindowsFixed,
+	            totalMetadataSet
+	        );
+	        
+	        result.put("message", message);
+	        
+	        log.info("========================================");
+	        log.info("✅ STUDENT FIX COMPLETE for {}", studentName);
+	        log.info("========================================");
+	        
+	        return ResponseEntity.ok(result);
+	        
+	    } catch (Exception e) {
+	        log.error("❌ Student fix failed: {}", e.getMessage(), e);
+	        result.put("success", false);
+	        result.put("error", e.getMessage());
+	        result.put("endTime", LocalDateTime.now().toString());
+	        return ResponseEntity.status(500).body(result);
+	    }
+	}
+
+	// ============================================================
+	// STUDENT-SPECIFIC STEP IMPLEMENTATIONS
+	// ============================================================
+
+	private int studentStep0_clearPeriod2Plus(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	    try {
+	        String sql = """
+	            UPDATE academic.student_lesson_progress
+	            SET 
+	                assessment_id = NULL,
+	                assessment_accessible = FALSE,
+	                requires_custom_assessment = TRUE
+	            WHERE student_profile_id = ?
+	              AND scheduled_date BETWEEN ? AND ?
+	              AND period_sequence >= 2
+	              AND requires_custom_assessment = true
+	              AND assessment_id IS NOT NULL
+	            """;
+	        
+	        return jdbcTemplate.update(sql, studentId, weekStart, weekEnd);
+	    } catch (Exception e) {
+	        log.error("Student Step 0 failed: {}", e.getMessage(), e);
+	        return 0;
+	    }
+	}
+
+	private int studentStep1_linkOrphanedProgress(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	    try {
+	        String sql = """
+	            UPDATE academic.student_lesson_progress slp
+	            SET daily_schedule_id = ds.id
+	            FROM academic.daily_schedules ds
+	            WHERE slp.student_profile_id = ?
+	              AND slp.daily_schedule_id IS NULL
+	              AND slp.scheduled_date BETWEEN ? AND ?
+	              AND slp.student_profile_id = ds.student_id
+	              AND slp.scheduled_date = ds.scheduled_date
+	              AND slp.period_number = ds.period_number
+	              AND slp.lesson_topic_id = ds.lesson_topic_id
+	              AND slp.lesson_topic_id IS NOT NULL
+	            """;
+	        
+	        return jdbcTemplate.update(sql, studentId, weekStart, weekEnd);
+	    } catch (Exception e) {
+	        log.error("Student Step 1 failed: {}", e.getMessage(), e);
+	        return 0;
+	    }
+	}
+
+	private Map<String, Integer> studentStep2_linkAssessments(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	    Map<String, Integer> result = new HashMap<>();
+	    
+	    try {
+	        // Link assessments to schedules
+	        String scheduleSql = """
+	            UPDATE academic.daily_schedules ds
+	            SET assessment_id = a.id
+	            FROM academic.assessments a
+	            WHERE ds.student_id = ?
+	              AND ds.lesson_topic_id = a.lesson_topic_id
+	              AND a.type = 'LESSON_TOPIC_ASSESSMENT'
+	              AND ds.scheduled_date BETWEEN ? AND ?
+	              AND ds.schedule_source = 'INDIVIDUAL'
+	              AND ds.lesson_topic_id IS NOT NULL
+	              AND ds.assessment_id IS NULL
+	            """;
+	        
+	        int schedulesLinked = jdbcTemplate.update(scheduleSql, studentId, weekStart, weekEnd);
+	        result.put("schedulesLinked", schedulesLinked);
+	        
+	        // Link assessments to progress
+	        String progressSql = """
+	            UPDATE academic.student_lesson_progress p
+	            SET assessment_id = ds.assessment_id
+	            FROM academic.daily_schedules ds
+	            WHERE p.student_profile_id = ?
+	              AND p.daily_schedule_id = ds.id
+	              AND p.scheduled_date BETWEEN ? AND ?
+	              AND p.assessment_id IS NULL
+	              AND ds.assessment_id IS NOT NULL
+	            """;
+	        
+	        int progressLinked = jdbcTemplate.update(progressSql, studentId, weekStart, weekEnd);
+	        result.put("progressLinked", progressLinked);
+	        
+	        // Set accessibility
+	        String accessSql = """
+	            UPDATE academic.student_lesson_progress p
+	            SET assessment_accessible = CASE 
+	                WHEN p.assessment_window_start IS NOT NULL 
+	                 AND p.assessment_window_end IS NOT NULL
+	                 AND CURRENT_TIMESTAMP BETWEEN p.assessment_window_start 
+	                     AND COALESCE(p.grace_period_end, p.assessment_window_end)
+	                THEN true
+	                ELSE false
+	            END
+	            WHERE p.student_profile_id = ?
+	              AND p.scheduled_date BETWEEN ? AND ?
+	              AND p.assessment_id IS NOT NULL
+	              AND p.completed = false
+	            """;
+	        
+	        int accessibilitySet = jdbcTemplate.update(accessSql, studentId, weekStart, weekEnd);
+	        result.put("accessibilitySet", accessibilitySet);
+	        
+	        return result;
+	        
+	    } catch (Exception e) {
+	        log.error("Student Step 2 failed: {}", e.getMessage(), e);
+	        result.put("schedulesLinked", 0);
+	        result.put("progressLinked", 0);
+	        result.put("accessibilitySet", 0);
+	        return result;
+	    }
+	}
+
+	private int studentStep3_createMissingProgress(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	    try {
+	        String sql = """
+	            INSERT INTO academic.student_lesson_progress (
+	                student_profile_id,
+	                scheduled_date,
+	                period_number,
+	                lesson_topic_id,
+	                subject_id,
+	                date,
+	                completed,
+	                daily_schedule_id,
+	                assessment_id,
+	                assessment_accessible,
+	                lesson_content_accessible,
+	                created_at,
+	                assessment_window_start,
+	                assessment_window_end,
+	                grace_period_end,
+	                priority,
+	                weight
+	            )
+	            SELECT 
+	                ds.student_id,
+	                ds.scheduled_date,
+	                ds.period_number,
+	                ds.lesson_topic_id,
+	                ds.subject_id,
+	                ds.scheduled_date,
+	                false,
+	                ds.id,
+	                ds.assessment_id,
+	                CASE 
+	                    WHEN ds.assessment_id IS NOT NULL
+	                     AND ds.assessment_window_start IS NOT NULL
+	                     AND ds.assessment_window_end IS NOT NULL
+	                     AND CURRENT_TIMESTAMP BETWEEN ds.assessment_window_start 
+	                         AND COALESCE(ds.grace_end_datetime, ds.assessment_window_end)
+	                    THEN true 
+	                    ELSE false 
+	                END,
+	                true,
+	                CURRENT_TIMESTAMP,
+	                ds.assessment_window_start,
+	                ds.assessment_window_end,
+	                ds.grace_end_datetime,
+	                COALESCE(ds.priority, 3),
+	                COALESCE(ds.weight, 1.0)
+	            FROM academic.daily_schedules ds
+	            WHERE ds.student_id = ?
+	              AND ds.scheduled_date BETWEEN ? AND ?
+	              AND ds.lesson_topic_id IS NOT NULL
+	              AND NOT EXISTS (
+	                  SELECT 1 
+	                  FROM academic.student_lesson_progress slp2
+	                  WHERE slp2.student_profile_id = ds.student_id
+	                    AND slp2.scheduled_date = ds.scheduled_date
+	                    AND slp2.period_number = ds.period_number
+	                    AND slp2.lesson_topic_id = ds.lesson_topic_id
+	              )
+	            ON CONFLICT (student_profile_id, lesson_topic_id, scheduled_date, period_number) 
+	            DO NOTHING
+	            """;
+	        
+	        return jdbcTemplate.update(sql, studentId, weekStart, weekEnd);
+	        
+	    } catch (Exception e) {
+	        log.error("Student Step 3 failed: {}", e.getMessage(), e);
+	        return 0;
+	    }
+	}
+
+	private Map<String, Integer> studentStep4_linkSubmissions(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	    Map<String, Integer> result = new HashMap<>();
+	    
+	    try {
+	        String sql = """
+	            UPDATE academic.student_lesson_progress slp
+	            SET 
+	                assessment_submission_id = sub.id,
+	                completed = true,
+	                completed_at = sub.submitted_at,
+	                assessment_score = CASE 
+	                    WHEN sub.total_marks > 0 
+	                    THEN (sub.score::numeric / sub.total_marks * 100)
+	                    ELSE NULL
+	                END
+	            FROM academic.assessment_submissions sub
+	            JOIN academic.assessments a ON sub.assessment_id = a.id
+	            WHERE slp.student_profile_id = ?
+	              AND slp.assessment_submission_id IS NULL
+	              AND slp.scheduled_date BETWEEN ? AND ?
+	              AND slp.student_profile_id = sub.student_id
+	              AND slp.lesson_topic_id = a.lesson_topic_id
+	              AND a.lesson_topic_id IS NOT NULL
+	              AND sub.nullified_at IS NULL
+	              AND (slp.period_sequence = 1 OR slp.period_sequence IS NULL)
+	            """;
+	        
+	        int linked = jdbcTemplate.update(sql, studentId, weekStart, weekEnd);
+	        result.put("submissionsLinked", linked);
+	        result.put("scoresCalculated", linked);
+	        
+	        return result;
+	        
+	    } catch (Exception e) {
+	        log.error("Student Step 4 failed: {}", e.getMessage(), e);
+	        result.put("submissionsLinked", 0);
+	        result.put("scoresCalculated", 0);
+	        return result;
+	    }
+	}
+
+	private Map<String, Integer> studentStep5_fixAssessmentWindows(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	    Map<String, Integer> result = new HashMap<>();
+	    
+	    try {
+	        String windowSql = """
+	            UPDATE academic.student_lesson_progress p
+	            SET 
+	                assessment_window_start = ds.scheduled_date + ds.start_time,
+	                assessment_window_end = ds.scheduled_date + ds.end_time,
+	                grace_period_end = ds.scheduled_date + ds.end_time + INTERVAL '15 minutes'
+	            FROM academic.daily_schedules ds
+	            WHERE p.student_profile_id = ?
+	              AND p.daily_schedule_id = ds.id
+	              AND p.scheduled_date BETWEEN ? AND ?
+	              AND p.assessment_id IS NOT NULL
+	              AND p.completed = false
+	              AND (
+	                  p.assessment_window_start IS NULL 
+	                  OR p.assessment_window_end IS NULL
+	                  OR p.assessment_window_start IS DISTINCT FROM (ds.scheduled_date + ds.start_time)
+	                  OR p.assessment_window_end IS DISTINCT FROM (ds.scheduled_date + ds.end_time)
+	              )
+	            """;
+	        
+	        int windowsFixed = jdbcTemplate.update(windowSql, studentId, weekStart, weekEnd);
+	        result.put("windowsFixed", windowsFixed);
+	        
+	        String accessSql = """
+	            UPDATE academic.student_lesson_progress p
+	            SET assessment_accessible = CASE 
+	                WHEN p.assessment_window_start IS NOT NULL 
+	                 AND p.assessment_window_end IS NOT NULL
+	                 AND CURRENT_TIMESTAMP BETWEEN p.assessment_window_start 
+	                     AND COALESCE(p.grace_period_end, p.assessment_window_end)
+	                THEN true
+	                ELSE false
+	            END
+	            WHERE p.student_profile_id = ?
+	              AND p.scheduled_date BETWEEN ? AND ?
+	              AND p.assessment_id IS NOT NULL
+	              AND p.completed = false
+	            """;
+	        
+	        int accessibilityUpdated = jdbcTemplate.update(accessSql, studentId, weekStart, weekEnd);
+	        result.put("accessibilityUpdated", accessibilityUpdated);
+	        
+	        return result;
+	        
+	    } catch (Exception e) {
+	        log.error("Student Step 5 failed: {}", e.getMessage(), e);
+	        result.put("windowsFixed", 0);
+	        result.put("accessibilityUpdated", 0);
+	        return result;
+	    }
+	}
+
+	private int studentStep6_setMultiPeriodMetadata(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	    try {
+	        String sql = """
+	            WITH progress_with_sequence AS (
+	                SELECT 
+	                    p.id,
+	                    ROW_NUMBER() OVER (
+	                        PARTITION BY p.student_profile_id, p.subject_id, p.lesson_topic_id 
+	                        ORDER BY p.scheduled_date, p.period_number, p.created_at
+	                    ) as sequence_num,
+	                    COUNT(*) OVER (
+	                        PARTITION BY p.student_profile_id, p.subject_id, p.lesson_topic_id
+	                    ) as total_in_sequence
+	                FROM academic.student_lesson_progress p
+	                WHERE p.student_profile_id = ?
+	                  AND p.scheduled_date BETWEEN ? AND ?
+	                  AND p.lesson_topic_id IS NOT NULL
+	            )
+	            UPDATE academic.student_lesson_progress slp
+	            SET 
+	                period_sequence = pws.sequence_num,
+	                total_periods_in_sequence = pws.total_in_sequence
+	            FROM progress_with_sequence pws
+	            WHERE slp.id = pws.id
+	              AND (
+	                slp.period_sequence IS DISTINCT FROM pws.sequence_num
+	                OR slp.total_periods_in_sequence IS DISTINCT FROM pws.total_in_sequence
+	              )
+	            """;
+	        
+	        return jdbcTemplate.update(sql, studentId, weekStart, weekEnd);
+	        
+	    } catch (Exception e) {
+	        log.error("Student Step 6 failed: {}", e.getMessage(), e);
+	        return 0;
+	    }
+	}
+
+	private Map<String, Object> studentStep7_validateFinalState(Long studentId) {
+	    Map<String, Object> validation = new HashMap<>();
+	    
+	    try {
+	        // Remaining orphaned
+	        String orphanedSql = """
+	            SELECT COUNT(*) FROM academic.student_lesson_progress
+	            WHERE student_profile_id = ?
+	              AND daily_schedule_id IS NULL
+	              AND lesson_topic_id IS NOT NULL
+	            """;
+	        Integer remainingOrphaned = jdbcTemplate.queryForObject(orphanedSql, Integer.class, studentId);
+	        validation.put("remainingOrphaned", remainingOrphaned != null ? remainingOrphaned : 0);
+	        
+	        // Remaining no assessment
+	        String noAssessmentSql = """
+	            SELECT COUNT(*) FROM academic.student_lesson_progress p
+	            WHERE p.student_profile_id = ?
+	              AND p.lesson_topic_id IS NOT NULL
+	              AND p.assessment_id IS NULL
+	              AND EXISTS (
+	                  SELECT 1 FROM academic.assessments a
+	                  WHERE a.lesson_topic_id = p.lesson_topic_id
+	                    AND a.type = 'LESSON_TOPIC_ASSESSMENT'
+	              )
+	            """;
+	        Integer remainingNoAssessment = jdbcTemplate.queryForObject(noAssessmentSql, Integer.class, studentId);
+	        validation.put("remainingNoAssessment", remainingNoAssessment != null ? remainingNoAssessment : 0);
+	        
+	        // Remaining no windows
+	        String noWindowsSql = """
+	            SELECT COUNT(*) FROM academic.student_lesson_progress
+	            WHERE student_profile_id = ?
+	              AND assessment_id IS NOT NULL
+	              AND completed = false
+	              AND (assessment_window_start IS NULL OR assessment_window_end IS NULL)
+	            """;
+	        Integer remainingNoWindows = jdbcTemplate.queryForObject(noWindowsSql, Integer.class, studentId);
+	        validation.put("remainingNoWindows", remainingNoWindows != null ? remainingNoWindows : 0);
+	        
+	        // Remaining no metadata
+	        String noMetadataSql = """
+	            SELECT COUNT(*) FROM academic.student_lesson_progress
+	            WHERE student_profile_id = ?
+	              AND lesson_topic_id IS NOT NULL
+	              AND (period_sequence IS NULL OR total_periods_in_sequence IS NULL)
+	            """;
+	        Integer remainingNoMetadata = jdbcTemplate.queryForObject(noMetadataSql, Integer.class, studentId);
+	        validation.put("remainingNoMetadata", remainingNoMetadata != null ? remainingNoMetadata : 0);
+	        
+	        // Unlinked submissions
+	        String unlinkedSubmissionsSql = """
+	            SELECT COUNT(*) 
+	            FROM academic.assessment_submissions sub
+	            JOIN academic.assessments a ON sub.assessment_id = a.id
+	            WHERE sub.student_id = ?
+	              AND sub.nullified_at IS NULL
+	              AND NOT EXISTS (
+	                  SELECT 1 FROM academic.student_lesson_progress p
+	                  WHERE p.assessment_submission_id = sub.id
+	              )
+	            """;
+	        Integer remainingUnlinkedSubmissions = jdbcTemplate.queryForObject(unlinkedSubmissionsSql, Integer.class, studentId);
+	        validation.put("remainingUnlinkedSubmissions", remainingUnlinkedSubmissions != null ? remainingUnlinkedSubmissions : 0);
+	        
+	        boolean allGood = 
+	            (remainingOrphaned == null || remainingOrphaned == 0) &&
+	            (remainingNoAssessment == null || remainingNoAssessment == 0) &&
+	            (remainingNoWindows == null || remainingNoWindows == 0) &&
+	            (remainingNoMetadata == null || remainingNoMetadata == 0) &&
+	            (remainingUnlinkedSubmissions == null || remainingUnlinkedSubmissions == 0);
+	        
+	        validation.put("allGood", allGood);
+	        
+	        return validation;
+	        
+	    } catch (Exception e) {
+	        log.error("Student Step 7 validation failed: {}", e.getMessage(), e);
+	        validation.put("error", e.getMessage());
+	        validation.put("allGood", false);
+	        return validation;
+	    }
+	}
+
+	/**
+	 * Helper to convert various date types to LocalDate
+	 */
+	private LocalDate convertToLocalDate(Object obj) {
+	    if (obj instanceof java.sql.Date) {
+	        return ((java.sql.Date) obj).toLocalDate();
+	    } else if (obj instanceof java.sql.Timestamp) {
+	        return ((java.sql.Timestamp) obj).toLocalDateTime().toLocalDate();
+	    } else if (obj instanceof LocalDate) {
+	        return (LocalDate) obj;
+	    }
+	    throw new IllegalArgumentException("Cannot convert " + obj.getClass() + " to LocalDate");
+	}
 
 }
