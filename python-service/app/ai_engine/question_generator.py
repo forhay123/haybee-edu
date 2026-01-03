@@ -204,11 +204,12 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
         if not q_text or q_text.lower() in seen:
             continue
         
-        # ✅ ADD THIS: Truncate long text to prevent database errors
+        # Truncate question text
         if len(q_text) > 250:
             q_text = q_text[:247] + "..."
             logger.warning(f"⚠️ Truncated long question: {q_text}")
         
+        # Truncate answer text
         answer = q.correct_answer if q.type == "mcq" else q.answer_text
         if len(answer) > 250:
             answer = answer[:247] + "..."
@@ -220,8 +221,8 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
             opts_dict = map_options_to_fields(q.options)
             
             formatted.append({
-                "question_text": q.question_text,
-                "answer_text": q.correct_answer,
+                "question_text": q_text,  # ✅ USE TRUNCATED VERSION
+                "answer_text": answer,    # ✅ USE TRUNCATED VERSION
                 "difficulty": q.difficulty,
                 "max_score": q.max_score,
                 "option_a": opts_dict["option_a"],
@@ -232,8 +233,8 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
             })
         else:
             formatted.append({
-                "question_text": q.question_text,
-                "answer_text": q.answer_text,
+                "question_text": q_text,  # ✅ USE TRUNCATED VERSION
+                "answer_text": answer,    # ✅ USE TRUNCATED VERSION
                 "difficulty": q.difficulty,
                 "max_score": q.max_score,
                 "option_a": None,
@@ -242,8 +243,8 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
                 "option_d": None,
                 "correct_option": None,
             })
-        
-        seen.add(q_text.lower())
+            
+            seen.add(q_text.lower())
     
     return formatted
 
