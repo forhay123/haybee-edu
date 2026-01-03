@@ -35,7 +35,6 @@ class MCQQuestion(BaseModel):
         for i, opt in enumerate(self.options):
             if opt.lower().strip() == correct_lower:
                 self.correct_answer = self.options[i]
-                logger.debug(f"✅ Fixed case mismatch: corrected to '{self.options[i]}'")
                 return self
         
         # Try partial match
@@ -43,20 +42,18 @@ class MCQQuestion(BaseModel):
             opt_clean = opt.lower().strip()
             if correct_lower in opt_clean or opt_clean in correct_lower:
                 self.correct_answer = self.options[i]
-                logger.debug(f"✅ Fixed partial match: corrected to '{self.options[i]}'")
                 return self
         
-        # Last resort: check if removing punctuation helps
+        # Remove punctuation and try again
         correct_no_punct = correct_lower.translate(str.maketrans('', '', string.punctuation))
         for i, opt in enumerate(self.options):
             opt_no_punct = opt.lower().strip().translate(str.maketrans('', '', string.punctuation))
             if correct_no_punct == opt_no_punct:
                 self.correct_answer = self.options[i]
-                logger.debug(f"✅ Fixed punctuation mismatch: corrected to '{self.options[i]}'")
                 return self
         
-        # ✅ NUCLEAR OPTION: Just pick the first option if nothing matches
-        logger.warning(f"⚠️ Validation workaround: '{self.correct_answer}' doesn't match options, using first option: '{self.options[0]}'")
+        # Nuclear option: pick first option
+        logger.warning(f"⚠️ Auto-fix: '{self.correct_answer}' → '{self.options[0]}'")
         self.correct_answer = self.options[0]
         return self
         
@@ -107,7 +104,6 @@ def semantic_filter_and_dedupe(lesson_text: str, questions: List[Dict[str, Any]]
         sim = util.cos_sim(lesson_vec, q_vec).item()
 
         if sim < similarity_threshold:
-            logger.debug(f"🗑️ Skipping off-topic question (sim={sim:.2f}): {q_text[:60]}...")
             continue
 
         is_duplicate = False
@@ -116,57 +112,47 @@ def semantic_filter_and_dedupe(lesson_text: str, questions: List[Dict[str, Any]]
             dup_sim = util.cos_sim(q_vec, u_vec).item()
             if dup_sim > dedupe_threshold:
                 is_duplicate = True
-                logger.debug(f"🧹 Removed near-duplicate (sim={dup_sim:.2f}) → {q_text[:50]}")
                 break
 
         if not is_duplicate:
             kept.append(q)
             unique_questions.append(q)
 
-    logger.info(f"🧠 Semantic filter: {len(kept)}/{len(questions)} questions kept after filtering")
+    logger.info(f"🧠 Semantic filter: {len(kept)}/{len(questions)} kept")
     return kept
 
 # ----------------------------
-# 📦 IMPROVED JSON extraction with multiple strategies
+# 📦 JSON extraction
 # ----------------------------
 def _extract_json_robust(raw: Any) -> List[Dict[str, Any]]:
-    """Extract JSON from various response formats with aggressive cleaning"""
-    
-    logger.debug(f"🔍 Raw response type: {type(raw)}")
+    """Extract JSON from various response formats"""
     
     # Already parsed
     if isinstance(raw, list):
-        logger.debug(f"✅ Already a list with {len(raw)} items")
         return raw
     if isinstance(raw, dict):
         if "questions" in raw:
-            logger.debug(f"✅ Dict with 'questions' key: {len(raw['questions'])} items")
             return raw["questions"]
-        logger.debug("✅ Single dict, wrapping in list")
         return [raw]
     
-    # Convert to string for processing
+    # Convert to string
     raw_str = str(raw).strip()
-    logger.debug(f"📝 Processing string of length {len(raw_str)}")
     
-    # Remove markdown code blocks
+    # Remove markdown
     raw_str = re.sub(r'```json\s*', '', raw_str)
     raw_str = re.sub(r'```\s*', '', raw_str)
     
-    # Try direct parse first
+    # Try direct parse
     try:
         parsed = json.loads(raw_str)
         if isinstance(parsed, list):
-            logger.debug(f"✅ Direct parse: list with {len(parsed)} items")
             return parsed
         if isinstance(parsed, dict):
             if "questions" in parsed:
-                logger.debug(f"✅ Direct parse: dict with questions ({len(parsed['questions'])} items)")
                 return parsed["questions"]
-            logger.debug("✅ Direct parse: single dict")
             return [parsed]
-    except json.JSONDecodeError as e:
-        logger.debug(f"❌ Direct parse failed: {e}")
+    except json.JSONDecodeError:
+        pass
     
     # Try to find JSON array
     array_pattern = r'\[\s*\{.*?\}\s*(?:,\s*\{.*?\}\s*)*\]'
@@ -176,88 +162,38 @@ def _extract_json_robust(raw: Any) -> List[Dict[str, Any]]:
         try:
             parsed = json.loads(match)
             if isinstance(parsed, list) and len(parsed) > 0:
-                logger.debug(f"✅ Extracted array: {len(parsed)} items")
                 return parsed
         except json.JSONDecodeError:
             continue
     
-    # Try to find object with questions key
-    obj_pattern = r'\{[^{}]*"questions"\s*:\s*\[.*?\][^{}]*\}'
-    obj_matches = re.findall(obj_pattern, raw_str, re.DOTALL)
-    
-    for match in obj_matches:
-        try:
-            parsed = json.loads(match)
-            if "questions" in parsed:
-                logger.debug(f"✅ Extracted questions object: {len(parsed['questions'])} items")
-                return parsed["questions"]
-        except json.JSONDecodeError:
-            continue
-    
-    # Last resort: try to find individual question objects
-    single_obj_pattern = r'\{[^{}]*"type"\s*:\s*"(?:mcq|theory)"[^{}]*\}'
-    single_matches = re.findall(single_obj_pattern, raw_str, re.DOTALL)
-    
-    if single_matches:
-        parsed_objects = []
-        for match in single_matches:
-            try:
-                obj = json.loads(match)
-                parsed_objects.append(obj)
-            except json.JSONDecodeError:
-                continue
-        
-        if parsed_objects:
-            logger.debug(f"✅ Extracted individual objects: {len(parsed_objects)} items")
-            return parsed_objects
-    
-    logger.warning(f"❌ Could not extract JSON. First 500 chars: {raw_str[:500]}")
+    logger.warning(f"❌ Could not extract JSON")
     return []
 
 # ----------------------------
-# ✅ IMPROVED validation with detailed error logging
+# ✅ Validation
 # ----------------------------
 def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, pass_name: str = "") -> List[Dict[str, Any]]:
-    """Validate and format questions with detailed error logging"""
+    """Validate and format questions"""
     
     if not parsed:
-        logger.warning(f"⚠️ {pass_name}: No parsed questions to validate")
         return []
     
-    logger.debug(f"🔍 {pass_name}: Attempting to validate {len(parsed)} questions")
-    logger.debug(f"📋 {pass_name}: Sample raw question: {json.dumps(parsed[0], indent=2)}")
-    
     validated_questions = []
-    validation_errors = []
     
-    # Try bulk validation first
+    # Try bulk validation
     try:
-        validated_questions = parse_obj_as(List[QuestionSchema], parsed[:target_count * 2])
-        logger.info(f"✅ {pass_name}: Bulk validation successful - {len(validated_questions)} questions")
-    except ValidationError as ve:
-        logger.warning(f"⚠️ {pass_name}: Bulk validation failed with {len(ve.errors())} errors")
-        logger.debug(f"📋 {pass_name}: First 3 validation errors: {ve.errors()[:3]}")
-        
+        validated_questions = parse_obj_as(List[QuestionSchema], parsed)
+        logger.info(f"✅ {pass_name}: Validated {len(validated_questions)} questions")
+    except ValidationError:
         # Try one by one
-        for i, item in enumerate(parsed):
+        for item in parsed:
             try:
                 validated = parse_obj_as(QuestionSchema, item)
                 validated_questions.append(validated)
-            except ValidationError as e:
-                validation_errors.append({
-                    "index": i,
-                    "question": item.get("question_text", item.get("question", "N/A"))[:50],
-                    "errors": [err["msg"] for err in e.errors()[:3]]
-                })
+            except ValidationError:
                 continue
         
-        if validation_errors:
-            logger.warning(f"⚠️ {pass_name}: Failed to validate {len(validation_errors)} questions")
-            # Log the actual failed questions
-            for err in validation_errors[:3]:
-                failed_q = parsed[err['index']]
-                logger.warning(f"   Failed Q{err['index']}: {json.dumps(failed_q, indent=2)}")
-            logger.debug(f"📋 {pass_name}: Sample failures: {validation_errors[:3]}")
+        logger.info(f"✅ {pass_name}: Validated {len(validated_questions)}/{len(parsed)} questions")
     
     # Format for database
     seen = set()
@@ -268,300 +204,41 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
         if not q_text or q_text.lower() in seen:
             continue
         
-        options = None
-        correct_option = None
-        answer_text = None
-        
         if q.type == "mcq":
-            options = q.options
-            answer_text = q.correct_answer
-            correct_index = options.index(q.correct_answer)
+            correct_index = q.options.index(q.correct_answer)
             correct_option = ["A", "B", "C", "D"][correct_index]
+            opts_dict = map_options_to_fields(q.options)
+            
+            formatted.append({
+                "question_text": q.question_text,
+                "answer_text": q.correct_answer,
+                "difficulty": q.difficulty,
+                "max_score": q.max_score,
+                "option_a": opts_dict["option_a"],
+                "option_b": opts_dict["option_b"],
+                "option_c": opts_dict["option_c"],
+                "option_d": opts_dict["option_d"],
+                "correct_option": correct_option,
+            })
         else:
-            answer_text = q.answer_text
+            formatted.append({
+                "question_text": q.question_text,
+                "answer_text": q.answer_text,
+                "difficulty": q.difficulty,
+                "max_score": q.max_score,
+                "option_a": None,
+                "option_b": None,
+                "option_c": None,
+                "option_d": None,
+                "correct_option": None,
+            })
         
-        opts_dict = map_options_to_fields(options)
-        
-        formatted.append({
-            "question_text": q.question_text,
-            "answer_text": answer_text,
-            "difficulty": q.difficulty,
-            "max_score": q.max_score,
-            "option_a": opts_dict["option_a"],
-            "option_b": opts_dict["option_b"],
-            "option_c": opts_dict["option_c"],
-            "option_d": opts_dict["option_d"],
-            "correct_option": correct_option,
-        })
         seen.add(q_text.lower())
     
-    logger.info(f"✅ {pass_name}: Formatted {len(formatted)} valid questions")
     return formatted
 
 # ----------------------------
-# 🔄 Helper: Call OpenAI and parse response
-# ----------------------------
-def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count: int, pass_name: str = "") -> List[Dict[str, Any]]:
-    """Call OpenAI API and parse questions with robust error handling"""
-    
-    logger.debug(f"🚀 {pass_name}: Calling OpenAI (target: {target_count})")
-    
-    try:
-        raw = call_openai_completion(
-            f"{system_prompt}\n\n{user_prompt}",
-            model=None,
-            max_tokens=4096,
-            response_format="json",
-        )
-        logger.debug(f"✅ {pass_name}: OpenAI call successful")
-    except Exception as e:
-        logger.error(f"❌ {pass_name}: OpenAI call failed: {e}")
-        return []
-
-    # Extract JSON
-    parsed = _extract_json_robust(raw)
-    
-    if not parsed:
-        logger.error(f"❌ {pass_name}: Could not extract any JSON from response")
-        logger.debug(f"📋 {pass_name}: Raw response (first 1000 chars): {str(raw)[:1000]}")
-        return []
-    
-    # Validate
-    validated = _validate_questions_robust(parsed, target_count, pass_name)
-    
-    return validated
-
-# ----------------------------
-# 🧠 Pass 1: Content-based questions
-# ----------------------------
-def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate questions directly from lesson content"""
-    
-    system_prompt = f"""You are an expert teacher. Your task is to create EXACTLY {target_count} assessment questions.
-
-⚠️ CRITICAL: YOU MUST GENERATE ALL {target_count} QUESTIONS. NOT 1, NOT 5, BUT EXACTLY {target_count} QUESTIONS.
-
-Return a JSON array with EXACTLY {target_count} objects. Each object must have these EXACT field names:
-
-MCQ format:
-{{
-  "type": "mcq",
-  "question_text": "Your question?",
-  "options": ["Option A", "Option B", "Option C", "Option D"],
-  "correct_answer": "Option A",
-  "difficulty": "easy",
-  "max_score": 1
-}}
-
-Theory format:
-{{
-  "type": "theory",
-  "question_text": "Your question?",
-  "answer_text": "Your answer.",
-  "difficulty": "medium",
-  "max_score": 3
-}}
-
-FIELD NAME RULES (CRITICAL):
-- Use "question_text" NOT "question"
-- Use "answer_text" NOT "answer" or "explanation"
-- Always include "type" ("mcq" or "theory")
-- For MCQ: "correct_answer" must be an EXACT copy-paste of one option
-
-Before submitting, COUNT your questions. You MUST have EXACTLY {target_count} questions in your array.
-
-Output format: [{{"type": "mcq", ...}}, {{"type": "theory", ...}}, ... ] with {target_count} total items."""
-
-    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} questions (60% MCQ, 40% Theory):
-
-{lesson_text}
-
-REMINDER: Generate ALL {target_count} questions. Count them before submitting.
-Required count: {target_count} questions
-Current count: ??? (You must verify this equals {target_count})
-
-Output ONLY the JSON array with {target_count} questions."""
-
-    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 1 (Content)")
-
-# ----------------------------
-# 🔧 Pass 2: Application questions
-# ----------------------------
-def _generate_application_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate questions that apply concepts to new scenarios"""
-    
-    system_prompt = f"""You are an expert teacher. Your task is to create EXACTLY {target_count} application questions.
-
-⚠️ CRITICAL: YOU MUST GENERATE ALL {target_count} QUESTIONS. NOT 1, NOT 3, BUT EXACTLY {target_count} QUESTIONS.
-
-Return a JSON array with EXACTLY {target_count} objects. Each object must have these EXACT field names:
-
-MCQ format:
-{{
-  "type": "mcq",
-  "question_text": "Your question?",
-  "options": ["Option A", "Option B", "Option C", "Option D"],
-  "correct_answer": "Option A",
-  "difficulty": "medium",
-  "max_score": 1
-}}
-
-Theory format:
-{{
-  "type": "theory",
-  "question_text": "Your question?",
-  "answer_text": "Your answer.",
-  "difficulty": "medium",
-  "max_score": 3
-}}
-
-FIELD NAME RULES (CRITICAL):
-- Use "question_text" NOT "question"
-- Use "answer_text" NOT "answer" or "explanation"
-- Always include "type" ("mcq" or "theory")
-- For MCQ: "correct_answer" must be an EXACT copy-paste of one option
-
-Before submitting, COUNT your questions. You MUST have EXACTLY {target_count} questions in your array.
-
-Output format: [{{"type": "mcq", ...}}, {{"type": "theory", ...}}, ... ] with {target_count} total items."""
-
-    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} application questions (50% MCQ, 50% Theory):
-
-{lesson_text}
-
-Apply concepts to NEW scenarios with different contexts/numbers.
-
-REMINDER: Generate ALL {target_count} questions. Count them before submitting.
-Required count: {target_count} questions
-Current count: ??? (You must verify this equals {target_count})
-
-Output ONLY the JSON array with {target_count} questions."""
-
-    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 2 (Application)")
-
-# ----------------------------
-# 💡 Pass 3: Conceptual understanding questions
-# ----------------------------
-def _generate_conceptual_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
-    """Generate questions testing deeper understanding"""
-    
-    system_prompt = f"""You are an expert teacher. Your task is to create EXACTLY {target_count} conceptual questions.
-
-⚠️ CRITICAL: YOU MUST GENERATE ALL {target_count} QUESTIONS. NOT 1, NOT 2, BUT EXACTLY {target_count} QUESTIONS.
-
-Return a JSON array with EXACTLY {target_count} objects. Each object must have these EXACT field names:
-
-MCQ format:
-{{
-  "type": "mcq",
-  "question_text": "Your question?",
-  "options": ["Option A", "Option B", "Option C", "Option D"],
-  "correct_answer": "Option A",
-  "difficulty": "hard",
-  "max_score": 1
-}}
-
-Theory format:
-{{
-  "type": "theory",
-  "question_text": "Your question?",
-  "answer_text": "Your answer.",
-  "difficulty": "hard",
-  "max_score": 3
-}}
-
-FIELD NAME RULES (CRITICAL):
-- Use "question_text" NOT "question"
-- Use "answer_text" NOT "answer" or "explanation"
-- Always include "type" ("mcq" or "theory")
-- For MCQ: "correct_answer" must be an EXACT copy-paste of one option
-
-Before submitting, COUNT your questions. You MUST have EXACTLY {target_count} questions in your array.
-
-Output format: [{{"type": "mcq", ...}}, {{"type": "theory", ...}}, ... ] with {target_count} total items."""
-
-    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} conceptual questions (40% MCQ, 60% Theory):
-
-{lesson_text}
-
-Focus on WHY methods work, common errors, and misconceptions.
-
-REMINDER: Generate ALL {target_count} questions. Count them before submitting.
-Required count: {target_count} questions
-Current count: ??? (You must verify this equals {target_count})
-
-Output ONLY the JSON array with {target_count} questions."""
-
-    return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 3 (Conceptual)")
-
-# ----------------------------
-# ⚖️ Balance questions by difficulty
-# ----------------------------
-def _balance_difficulty(questions: List[Dict[str, Any]], max_count: int) -> List[Dict[str, Any]]:
-    """Balance questions across difficulty levels"""
-    
-    easy = [q for q in questions if q["difficulty"] == "easy"]
-    medium = [q for q in questions if q["difficulty"] == "medium"]
-    hard = [q for q in questions if q["difficulty"] == "hard"]
-    
-    # Target distribution: 30% easy, 40% medium, 30% hard
-    target_easy = max_count * 3 // 10
-    target_medium = max_count * 4 // 10
-    target_hard = max_count * 3 // 10
-    
-    balanced = (
-        easy[:target_easy] +
-        medium[:target_medium] +
-        hard[:target_hard]
-    )
-    
-    # Fill remaining slots
-    if len(balanced) < max_count:
-        remaining = [q for q in questions if q not in balanced]
-        balanced.extend(remaining[:max_count - len(balanced)])
-    
-    return balanced[:max_count]
-
-# ----------------------------
-# 🎯 Multi-pass generation strategy
-# ----------------------------
-def generate_questions_multi_pass(
-    lesson_text: str,
-    max_questions: int = 30,
-    enable_semantic_filter: bool = True,
-) -> List[Dict[str, Any]]:
-    """Generate questions using multiple passes"""
-    
-    all_questions = []
-    
-    # Pass 1: Content (50% of target)
-    content_questions = _generate_content_questions(lesson_text, max_questions // 2)
-    all_questions.extend(content_questions)
-    logger.info(f"📚 Pass 1 (Content): Generated {len(content_questions)} questions")
-    
-    # Pass 2: Application (25% of target)
-    application_questions = _generate_application_questions(lesson_text, max_questions // 4)
-    all_questions.extend(application_questions)
-    logger.info(f"🔧 Pass 2 (Application): Generated {len(application_questions)} questions")
-    
-    # Pass 3: Conceptual (25% of target)
-    conceptual_questions = _generate_conceptual_questions(lesson_text, max_questions // 4)
-    all_questions.extend(conceptual_questions)
-    logger.info(f"💡 Pass 3 (Conceptual): Generated {len(conceptual_questions)} questions")
-    
-    # Apply semantic filtering
-    if enable_semantic_filter and all_questions:
-        all_questions = semantic_filter_and_dedupe(lesson_text, all_questions)
-    
-    # Balance by difficulty
-    if all_questions:
-        all_questions = _balance_difficulty(all_questions, max_questions)
-    
-    logger.info(f"✅ Total generated: {len(all_questions)} questions")
-    return all_questions
-
-# ----------------------------
-# 🔧 Main entry point
+# 🎯 SINGLE CALL STRATEGY (THE FIX)
 # ----------------------------
 def generate_questions_with_ai(
     lesson_text: str,
@@ -569,33 +246,107 @@ def generate_questions_with_ai(
     min_expected: Optional[int] = None,
     enable_semantic_filter: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Enhanced question generation using multi-pass strategy"""
+    """Generate questions in ONE API call - the ONLY approach that works"""
     
-    logger.info(f"🧠 Starting enhanced question generation (target: {max_questions})")
+    logger.info(f"🧠 Starting question generation (target: {max_questions})")
     
-    # Use multi-pass generation
-    questions = generate_questions_multi_pass(
-        lesson_text,
-        max_questions,
-        enable_semantic_filter
-    )
-    
-    # Fallback if no questions generated
-    if not questions:
-        logger.error("❌ No valid questions generated — using fallback")
-        questions = [{
-            "question_text": "Summarize the main concepts covered in this lesson.",
-            "answer_text": lesson_text[:200] + "..." if len(lesson_text) > 200 else lesson_text,
-            "difficulty": "medium",
-            "max_score": 3,
-            "option_a": None,
-            "option_b": None,
-            "option_c": None,
-            "option_d": None,
-            "correct_option": None,
-        }]
-    
-    logger.info(f"✅ Final output: {len(questions)} questions")
-    logger.debug(f"🧩 Sample questions:\n" + safe_json_dumps(questions[:3]))
-    
-    return questions
+    # Single comprehensive prompt
+    system_prompt = """You are an expert teacher creating assessment questions.
+
+Generate a JSON array of questions with this EXACT structure:
+
+[
+  {
+    "type": "mcq",
+    "question_text": "Your question here?",
+    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+    "correct_answer": "Option 1",
+    "difficulty": "easy",
+    "max_score": 1
+  },
+  {
+    "type": "theory",
+    "question_text": "Your question here?",
+    "answer_text": "Your answer here.",
+    "difficulty": "medium",
+    "max_score": 3
+  }
+]
+
+CRITICAL RULES:
+1. Field names: "question_text" (NOT "question"), "answer_text" (NOT "answer")
+2. For MCQ: "correct_answer" must EXACTLY match one of the options (copy-paste it)
+3. Always include "type", "difficulty", "max_score"
+4. Mix 60% MCQ / 40% Theory
+5. Mix difficulties: 30% easy, 40% medium, 30% hard
+
+Output ONLY the JSON array. No explanations."""
+
+    user_prompt = f"""Generate {max_questions} assessment questions from this lesson:
+
+{lesson_text}
+
+Create ALL {max_questions} questions now. Include a variety of:
+- Direct recall questions
+- Application questions (new scenarios)
+- Conceptual questions (why/how/explain)
+
+Output the JSON array with {max_questions} questions."""
+
+    try:
+        # Make the API call
+        raw = call_openai_completion(
+            f"{system_prompt}\n\n{user_prompt}",
+            model=None,
+            max_tokens=4096,
+            response_format="json",
+        )
+        
+        logger.debug(f"✅ OpenAI call successful")
+        
+        # Extract and validate
+        parsed = _extract_json_robust(raw)
+        
+        if not parsed:
+            logger.error("❌ No questions extracted")
+            return _create_fallback_question(lesson_text)
+        
+        logger.info(f"📦 Extracted {len(parsed)} raw questions")
+        
+        validated = _validate_questions_robust(parsed, max_questions, "Generation")
+        
+        if not validated:
+            logger.error("❌ No questions passed validation")
+            return _create_fallback_question(lesson_text)
+        
+        logger.info(f"✅ Validated {len(validated)} questions")
+        
+        # Apply semantic filtering if enabled
+        if enable_semantic_filter and len(validated) > max_questions:
+            validated = semantic_filter_and_dedupe(lesson_text, validated)
+            logger.info(f"🧹 After deduplication: {len(validated)} questions")
+        
+        # Truncate to max if needed
+        if len(validated) > max_questions:
+            validated = validated[:max_questions]
+        
+        logger.info(f"✅ Final output: {len(validated)} questions")
+        return validated
+        
+    except Exception as e:
+        logger.error(f"❌ Generation failed: {e}")
+        return _create_fallback_question(lesson_text)
+
+def _create_fallback_question(lesson_text: str) -> List[Dict[str, Any]]:
+    """Create a fallback question when generation fails"""
+    return [{
+        "question_text": "Summarize the main concepts covered in this lesson.",
+        "answer_text": lesson_text[:200] + "..." if len(lesson_text) > 200 else lesson_text,
+        "difficulty": "medium",
+        "max_score": 3,
+        "option_a": None,
+        "option_b": None,
+        "option_c": None,
+        "option_d": None,
+        "correct_option": None,
+    }]
