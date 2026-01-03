@@ -251,8 +251,13 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
                 })
                 continue
         
+        # In _validate_questions_robust function, around line 270
         if validation_errors:
             logger.warning(f"⚠️ {pass_name}: Failed to validate {len(validation_errors)} questions")
+            # ✅ ADD THIS: Log the actual failed questions
+            for err in validation_errors[:3]:
+                failed_q = parsed[err['index']]
+                logger.warning(f"   Failed Q{err['index']}: {json.dumps(failed_q, indent=2)}")
             logger.debug(f"📋 {pass_name}: Sample failures: {validation_errors[:3]}")
     
     # Format for database
