@@ -22,5 +22,5 @@ COPY --from=builder /app/target/*.jar app.jar
 
 EXPOSE 8080
 
-# ✅ UPDATED: Use JAVA_OPTS from environment variable
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Djava.security.egd=file:/dev/./urandom -Dserver.address=0.0.0.0 -jar app.jar"]
+# ✅ UPDATED: Use JAVA_TOOL_OPTIONS (Railway standard)
+ENTRYPOINT ["sh", "-c", "java $JAVA_TOOL_OPTIONS -Djava.security.egd=file:/dev/./urandom -Dserver.address=0.0.0.0 -jar app.jar"]
