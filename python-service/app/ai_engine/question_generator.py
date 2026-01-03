@@ -189,7 +189,7 @@ def _extract_json_robust(raw: Any) -> List[Dict[str, Any]]:
         try:
             parsed = json.loads(match)
             if "questions" in parsed:
-                logger.debug(f"✅ Extracted questions object: {len(parsed['questions])} items")
+                logger.debug(f"✅ Extracted questions object: {len(parsed['questions'])} items")
                 return parsed["questions"]
         except json.JSONDecodeError:
             continue
