@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, X, Check, AlertCircle, RotateCw, RefreshCw, FileImage, Monitor, Smartphone } from 'lucide-react';
+import { Camera, Upload, X, Check, AlertCircle, RotateCw, RefreshCw, FileImage, Monitor, Smartphone, FileText } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -48,16 +48,26 @@ export default function SimpleTimetableUpload({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  const getFileIcon = (fileType: string) => {
+    if (fileType.includes('image')) return FileImage;
+    if (fileType.includes('pdf')) return FileText;
+    if (fileType.includes('excel') || fileType.includes('spreadsheet')) return FileText;
+    if (fileType.includes('word') || fileType.includes('document')) return FileText;
+    return FileText;
+  };
+
   const handleImageCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Check if file is an image or PDF
+    // ✅ UPDATED: Accept images, PDFs, Excel, and Word documents
     const isImage = file.type.match(/image\/(jpeg|jpg|png)/);
     const isPDF = file.type === 'application/pdf';
+    const isExcel = file.type.match(/application\/vnd\.(ms-excel|openxmlformats-officedocument\.spreadsheetml\.sheet)/);
+    const isWord = file.type.match(/application\/vnd\.(msword|openxmlformats-officedocument\.wordprocessingml\.document)/);
     
-    if (!isImage && !isPDF) {
-      setError('Please select a valid file (JPG, PNG, or PDF)');
+    if (!isImage && !isPDF && !isExcel && !isWord) {
+      setError('Please select a valid file (JPG, PNG, PDF, Excel, or Word document)');
       return;
     }
 
@@ -69,10 +79,10 @@ export default function SimpleTimetableUpload({
     setError('');
     setSelectedFile(file);
     
-    // For PDFs, show a placeholder preview
-    if (isPDF) {
-      setSelectedImage('PDF_PLACEHOLDER'); // Special marker for PDF
-      setQualityWarning(''); // No quality check for PDFs
+    // For non-images, show a placeholder preview
+    if (!isImage) {
+      setSelectedImage('DOCUMENT_PLACEHOLDER');
+      setQualityWarning('');
     } else {
       // For images, show actual preview and check quality
       const reader = new FileReader();
@@ -142,7 +152,7 @@ export default function SimpleTimetableUpload({
         studentId,
         classId,
         (percentage) => {
-          setUploadProgress(Math.min(percentage, 95)); // Cap at 95% until processing done
+          setUploadProgress(Math.min(percentage, 95));
         }
       );
 
@@ -170,12 +180,9 @@ export default function SimpleTimetableUpload({
     }
   };
 
-  /**
-   * Poll for processing completion
-   */
   const pollForCompletion = async (timetableId: number): Promise<void> => {
-    const maxAttempts = 60; // 60 attempts = 2 minutes
-    const pollInterval = 2000; // 2 seconds
+    const maxAttempts = 60;
+    const pollInterval = 2000;
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -190,7 +197,6 @@ export default function SimpleTimetableUpload({
         } else if (timetable.processingStatus === 'FAILED') {
           throw new Error(timetable.processingError || 'Processing failed');
         }
-        // Still PENDING or PROCESSING, continue polling
       } catch (error) {
         console.error('Polling error:', error);
         throw error;
@@ -210,6 +216,14 @@ export default function SimpleTimetableUpload({
     
     if (cameraInputRef.current) cameraInputRef.current.value = '';
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const getFileTypeDisplay = (file: File) => {
+    if (file.type.includes('pdf')) return 'PDF Document';
+    if (file.type.includes('excel') || file.type.includes('spreadsheet')) return 'Excel Spreadsheet';
+    if (file.type.includes('word') || file.type.includes('document')) return 'Word Document';
+    if (file.type.includes('image')) return 'Image';
+    return 'Document';
   };
 
   if (uploading) {
@@ -232,15 +246,20 @@ export default function SimpleTimetableUpload({
   }
 
   if (selectedImage && selectedFile) {
+    const FileIconComponent = getFileIcon(selectedFile.type);
+    
     return (
       <Card className="p-4 max-w-2xl mx-auto">
         <div className="relative">
-          {selectedImage === 'PDF_PLACEHOLDER' ? (
-            <div className="w-full h-64 bg-gray-100 rounded-lg border-2 border-gray-200 flex items-center justify-center">
+          {selectedImage === 'DOCUMENT_PLACEHOLDER' ? (
+            <div className="w-full h-64 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200 flex items-center justify-center">
               <div className="text-center">
-                <FileImage className="h-16 w-16 mx-auto text-gray-400 mb-2" />
-                <p className="text-gray-600 font-medium">{selectedFile.name}</p>
-                <p className="text-sm text-gray-500">PDF Document</p>
+                <FileIconComponent className="h-20 w-20 mx-auto text-blue-500 mb-3" />
+                <p className="text-gray-900 font-semibold text-lg mb-1">{selectedFile.name}</p>
+                <p className="text-sm text-gray-600">{getFileTypeDisplay(selectedFile)}</p>
+                <p className="text-xs text-gray-500 mt-2">
+                  {(selectedFile.size / 1024).toFixed(0)} KB
+                </p>
               </div>
             </div>
           ) : (
@@ -291,6 +310,9 @@ export default function SimpleTimetableUpload({
           <p className="text-sm text-blue-800">
             <strong>File:</strong> {selectedFile.name} ({(selectedFile.size / 1024).toFixed(0)} KB)
           </p>
+          <p className="text-sm text-blue-800 mt-1">
+            <strong>Type:</strong> {getFileTypeDisplay(selectedFile)}
+          </p>
         </div>
       </Card>
     );
@@ -323,7 +345,7 @@ export default function SimpleTimetableUpload({
       )}
 
       <div className="space-y-3">
-        {/* Only render camera input for mobile devices */}
+        {/* Camera input for mobile devices */}
         {isMobile && (
           <input
             ref={cameraInputRef}
@@ -335,15 +357,16 @@ export default function SimpleTimetableUpload({
           />
         )}
         
+        {/* ✅ UPDATED: Accept all supported file types on all devices */}
         <input
           ref={fileInputRef}
           type="file"
-          accept={isMobile ? "image/jpeg,image/jpg,image/png" : "image/jpeg,image/jpg,image/png,application/pdf"}
+          accept="image/jpeg,image/jpg,image/png,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={handleImageCapture}
           className="hidden"
         />
 
-        {/* Show camera option ONLY for mobile devices */}
+        {/* Camera option ONLY for mobile devices */}
         {isMobile && (
           <Button
             onClick={() => cameraInputRef.current?.click()}
@@ -355,14 +378,14 @@ export default function SimpleTimetableUpload({
           </Button>
         )}
 
-        {/* File upload button - always shown, but styled differently based on device */}
+        {/* File upload button - always shown */}
         <Button
           onClick={() => fileInputRef.current?.click()}
           className="w-full h-20 text-lg"
           variant={isMobile ? "outline" : "default"}
         >
           <Upload className="mr-2 h-6 w-6" />
-          {isMobile ? 'Choose from Gallery' : 'Select File from Computer'}
+          {isMobile ? 'Choose File' : 'Select File from Computer'}
         </Button>
       </div>
 
@@ -372,24 +395,24 @@ export default function SimpleTimetableUpload({
           <ImageIcon className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
           <div>
             <p className="font-medium text-sm text-blue-900 mb-2">
-              {isMobile ? 'Tips for Best Results:' : 'Desktop Upload Tips:'}
+              {isMobile ? 'Mobile Upload Tips:' : 'Desktop Upload Tips:'}
             </p>
             <ul className="text-sm text-blue-800 space-y-1">
               {isMobile ? (
                 <>
-                  <li>• Use good lighting (natural light works best)</li>
-                  <li>• Avoid shadows and glare on the paper</li>
-                  <li>• Keep the timetable flat and centered</li>
+                  <li>• <strong>Camera:</strong> Use good lighting and keep timetable flat</li>
+                  <li>• <strong>Files:</strong> Select PDF, Excel, or Word documents</li>
                   <li>• Make sure all text is clearly visible</li>
-                  <li>• Hold your phone steady when taking the photo</li>
+                  <li>• Avoid shadows and glare</li>
+                  <li>• Files up to 10MB supported</li>
                 </>
               ) : (
                 <>
-                  <li>• Scan or photograph your timetable with a phone/scanner</li>
+                  <li>• Upload scanned or photographed timetables</li>
+                  <li>• PDF, Excel (.xlsx, .xls), Word (.docx, .doc) supported</li>
                   <li>• Ensure good contrast and clear text</li>
-                  <li>• Supported formats: JPG, PNG, PDF</li>
-                  <li>• Use high-quality images (at least 1280x720)</li>
-                  <li>• PDF files should be clear and not password-protected</li>
+                  <li>• High-quality images work best (1280x720+)</li>
+                  <li>• Documents should not be password-protected</li>
                 </>
               )}
             </ul>
@@ -398,7 +421,7 @@ export default function SimpleTimetableUpload({
       </div>
 
       <div className="mt-4 text-xs text-gray-500 text-center">
-        Supported formats: {isMobile ? 'JPG, PNG' : 'JPG, PNG, PDF'} (max 10MB)
+        Supported: JPG, PNG, PDF, Excel (.xlsx, .xls), Word (.docx, .doc) • Max 10MB
       </div>
     </Card>
   );
