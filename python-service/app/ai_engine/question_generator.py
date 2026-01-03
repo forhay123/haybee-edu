@@ -246,15 +246,14 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
             except ValidationError as e:
                 validation_errors.append({
                     "index": i,
-                    "question": item.get("question_text", "N/A")[:50],
+                    "question": item.get("question_text", item.get("question", "N/A"))[:50],
                     "errors": [err["msg"] for err in e.errors()[:3]]
                 })
                 continue
         
-        # In _validate_questions_robust function, around line 270
         if validation_errors:
             logger.warning(f"⚠️ {pass_name}: Failed to validate {len(validation_errors)} questions")
-            # ✅ ADD THIS: Log the actual failed questions
+            # Log the actual failed questions
             for err in validation_errors[:3]:
                 failed_q = parsed[err['index']]
                 logger.warning(f"   Failed Q{err['index']}: {json.dumps(failed_q, indent=2)}")
@@ -276,7 +275,6 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
         if q.type == "mcq":
             options = q.options
             answer_text = q.correct_answer
-            # ✅ FIXED: Removed the try-catch - validator already auto-fixes correct_answer
             correct_index = options.index(q.correct_answer)
             correct_option = ["A", "B", "C", "D"][correct_index]
         else:
@@ -339,38 +337,48 @@ def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count
 def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
     """Generate questions directly from lesson content"""
     
-    system_prompt = """You are an expert mathematics teacher creating assessment questions.
+    system_prompt = """You are an expert teacher creating assessment questions.
 
-CRITICAL REQUIREMENT: You MUST generate EXACTLY the number of questions requested. Not 1, not 2, but the FULL target amount.
+CRITICAL: Output ONLY a valid JSON array. Use EXACT field names shown below.
 
-CRITICAL MCQ RULE: For EVERY MCQ question, the "correct_answer" field MUST be a PERFECT CHARACTER-FOR-CHARACTER copy of ONE of the four options. Do NOT paraphrase or rewrite.
-
-Example - CORRECT:
+Required format - MCQ:
 {
-  "options": ["Factor the numerator", "Cancel x terms", "Find LCM", "Cross multiply"],
-  "correct_answer": "Factor the numerator"  ← EXACT match
+  "type": "mcq",
+  "question_text": "Your question here?",
+  "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+  "correct_answer": "Option 1",
+  "difficulty": "easy",
+  "max_score": 1
 }
 
-Example - WRONG:
+Required format - Theory:
 {
-  "options": ["Factor the numerator", "Cancel x terms", "Find LCM", "Cross multiply"],
-  "correct_answer": "Factorize"  ← WRONG! Not exact match
+  "type": "theory",
+  "question_text": "Your question here?",
+  "answer_text": "Your answer here.",
+  "difficulty": "medium",
+  "max_score": 3
 }
 
-Output ONLY a valid JSON array with NO markdown, NO explanations, NO preamble."""
+CRITICAL FIELD NAMES:
+- Use "question_text" NOT "question"
+- Use "answer_text" NOT "answer" or "explanation"
+- Always include "type" field ("mcq" or "theory")
+- For MCQ: "correct_answer" must EXACTLY match one option (copy-paste it)
+- Always include "difficulty" and "max_score"
+
+Output ONLY the JSON array."""
 
     user_prompt = f"""Create EXACTLY {target_count} assessment questions from this lesson.
 
-CRITICAL: You must generate ALL {target_count} questions. Count your questions before submitting.
-
 {lesson_text}
 
-Include:
-- 60% MCQ questions (4 options each, correct_answer = EXACT copy of one option)
-- 40% Theory questions (with concise answers)
-- Mix of easy, medium, and hard difficulties
+Requirements:
+- 60% MCQ (correct_answer = EXACT copy of one option)
+- 40% Theory (concise answers)
+- Mix of easy, medium, hard
 
-Output ONLY the JSON array with ALL {target_count} questions. No other text."""
+Output ONLY the JSON array with ALL {target_count} questions."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 1 (Content)")
 
@@ -380,42 +388,49 @@ Output ONLY the JSON array with ALL {target_count} questions. No other text."""
 def _generate_application_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
     """Generate questions that apply concepts to new scenarios"""
     
-    system_prompt = """You are an expert mathematics teacher creating application questions.
+    system_prompt = """You are an expert teacher creating application questions.
 
-CRITICAL REQUIREMENT: Generate EXACTLY the target number requested. Count before submitting.
+CRITICAL: Output ONLY a valid JSON array. Use EXACT field names shown below.
 
-CRITICAL MCQ RULE: For EVERY MCQ question:
-1. The "correct_answer" field MUST be a PERFECT CHARACTER-FOR-CHARACTER copy of ONE of the four options
-2. Do NOT paraphrase or rewrite the correct answer
-3. Copy-paste the exact option text
-
-Example - CORRECT:
+Required format - MCQ:
 {
-  "options": ["Factor the numerator", "Cancel x", "Find LCM", "Multiply"],
-  "correct_answer": "Factor the numerator"  ← EXACT match with options[0]
+  "type": "mcq",
+  "question_text": "Your question here?",
+  "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+  "correct_answer": "Option 1",
+  "difficulty": "medium",
+  "max_score": 1
 }
 
-Example - WRONG:
+Required format - Theory:
 {
-  "options": ["Factor the numerator", "Cancel x", "Find LCM", "Multiply"],
-  "correct_answer": "Factorize the top"  ← WRONG! Must be exact copy
+  "type": "theory",
+  "question_text": "Your question here?",
+  "answer_text": "Your answer here.",
+  "difficulty": "medium",
+  "max_score": 3
 }
 
-Output ONLY a valid JSON array."""
+CRITICAL FIELD NAMES:
+- Use "question_text" NOT "question"
+- Use "answer_text" NOT "answer" or "explanation"
+- Always include "type" field ("mcq" or "theory")
+- For MCQ: "correct_answer" must EXACTLY match one option (copy-paste it)
+- Always include "difficulty" and "max_score"
 
-    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} APPLICATION questions.
+Output ONLY the JSON array."""
 
-CRITICAL: Generate ALL {target_count} questions. Count before submitting.
+    user_prompt = f"""Create EXACTLY {target_count} APPLICATION questions from this lesson.
 
 {lesson_text}
 
 Requirements:
 - 50% MCQ (correct_answer = EXACT copy of one option)
-- 50% Theory (requiring worked solutions)
-- Apply concepts to NEW scenarios with different numbers
+- 50% Theory (with worked solutions)
+- Apply to NEW scenarios
 - Mix of difficulties
 
-Output ONLY the JSON array with ALL {target_count} questions. No other text."""
+Output ONLY the JSON array with ALL {target_count} questions."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 2 (Application)")
 
@@ -425,42 +440,49 @@ Output ONLY the JSON array with ALL {target_count} questions. No other text."""
 def _generate_conceptual_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
     """Generate questions testing deeper understanding"""
     
-    system_prompt = """You are an expert mathematics teacher creating conceptual questions.
+    system_prompt = """You are an expert teacher creating conceptual questions.
 
-CRITICAL REQUIREMENT: Generate EXACTLY the target number requested. Count before submitting.
+CRITICAL: Output ONLY a valid JSON array. Use EXACT field names shown below.
 
-CRITICAL MCQ RULE: For EVERY MCQ question:
-1. The "correct_answer" field MUST be a PERFECT CHARACTER-FOR-CHARACTER copy of ONE of the four options
-2. Do NOT paraphrase, shorten, or modify the correct answer
-3. Copy the EXACT text from one of the options
-
-Example - CORRECT:
+Required format - MCQ:
 {
-  "options": ["They added denominators instead of finding LCM", "Multiplied", "Divided", "Subtracted"],
-  "correct_answer": "They added denominators instead of finding LCM"  ← EXACT match
+  "type": "mcq",
+  "question_text": "Your question here?",
+  "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+  "correct_answer": "Option 1",
+  "difficulty": "hard",
+  "max_score": 1
 }
 
-Example - WRONG:
+Required format - Theory:
 {
-  "options": ["They added denominators instead of finding LCM", "Multiplied", "Divided", "Subtracted"],
-  "correct_answer": "Added denominators"  ← WRONG! Not complete match
+  "type": "theory",
+  "question_text": "Your question here?",
+  "answer_text": "Your answer here.",
+  "difficulty": "hard",
+  "max_score": 3
 }
 
-Output ONLY a valid JSON array."""
+CRITICAL FIELD NAMES:
+- Use "question_text" NOT "question"
+- Use "answer_text" NOT "answer" or "explanation"
+- Always include "type" field ("mcq" or "theory")
+- For MCQ: "correct_answer" must EXACTLY match one option (copy-paste it)
+- Always include "difficulty" and "max_score"
 
-    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} CONCEPTUAL questions.
+Output ONLY the JSON array."""
 
-CRITICAL: Generate ALL {target_count} questions. Count before submitting.
+    user_prompt = f"""Create EXACTLY {target_count} CONCEPTUAL questions from this lesson.
 
 {lesson_text}
 
 Requirements:
 - 40% MCQ (correct_answer = EXACT copy of one option)
 - 60% Theory (requiring explanations)
-- Focus on WHY methods work, common errors, misconceptions
+- Focus on WHY methods work
 - Mix of difficulties
 
-Output ONLY the JSON array with ALL {target_count} questions. No other text."""
+Output ONLY the JSON array with ALL {target_count} questions."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 3 (Conceptual)")
 
