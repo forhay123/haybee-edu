@@ -1926,6 +1926,7 @@ public class ProgressRecordFixerController {
 	        result.put("weeksProcessed", weeks.size());
 	        
 	        // Initialize counters
+	        int totalTopicsAssigned = 0;
 	        int totalOrphanedLinked = 0;
 	        int totalSchedulesLinked = 0;
 	        int totalProgressLinked = 0;
@@ -1944,6 +1945,15 @@ public class ProgressRecordFixerController {
 	            LocalDate weekEnd = convertToLocalDate(week.get("week_end"));
 	            
 	            log.info("📝 Processing week: {} to {}", weekStart, weekEnd);
+	            
+	            // ============================================================
+	            // STEP -1: Assign Lesson Topics to Schedules (Student-Specific) ✅ NEW
+	            // ============================================================
+	            Map<String, Integer> stepMinus1 = studentStepMinus1_assignLessonTopics(studentId, weekStart, weekEnd);
+	            int topicsAssigned = stepMinus1.get("topicsAssigned");
+	            log.info("  ✅ Step -1: Assigned {} lesson topics to schedules", topicsAssigned);
+
+	            totalTopicsAssigned += topicsAssigned;
 	            
 	            // ============================================================
 	            // STEP 0: Clear Period 2+ Assessments (Student-Specific)
@@ -2012,7 +2022,8 @@ public class ProgressRecordFixerController {
 	        result.put("success", true);
 	        result.put("fullyFixed", allGood);
 	        result.put("endTime", LocalDateTime.now().toString());
-	        
+
+	        result.put("stepMinus1_topicsAssigned", totalTopicsAssigned);
 	        result.put("step0_assessmentsCleared", totalAssessmentsCleared);
 	        result.put("step1_orphanedLinked", totalOrphanedLinked);
 	        result.put("step2_schedulesLinked", totalSchedulesLinked);
@@ -2030,6 +2041,7 @@ public class ProgressRecordFixerController {
 	            "Complete fix for %s: %d orphaned linked, %d assessments linked, " +
 	            "%d progress created, %d submissions linked, %d windows fixed, %d metadata set",
 	            studentName,
+	            totalTopicsAssigned,
 	            totalOrphanedLinked,
 	            totalProgressLinked,
 	            totalProgressCreated,
@@ -2058,6 +2070,61 @@ public class ProgressRecordFixerController {
 	// ============================================================
 	// STUDENT-SPECIFIC STEP IMPLEMENTATIONS
 	// ============================================================
+
+	// ✅ NEW: Step -1 - Assign lesson topics to schedules that don't have them
+	private Map<String, Integer> studentStepMinus1_assignLessonTopics(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	    Map<String, Integer> result = new HashMap<>();
+	    
+	    try {
+	        // Check if student has individual lesson topics configured
+	        String checkTopicsSql = """
+	            SELECT COUNT(*) FROM academic.individual_lesson_topics
+	            WHERE student_profile_id = ?
+	            """;
+	        Integer hasTopics = jdbcTemplate.queryForObject(checkTopicsSql, Integer.class, studentId);
+	        
+	        if (hasTopics == null || hasTopics == 0) {
+	            log.warn("⚠️ Student {} has no individual lesson topics configured - cannot assign topics to schedules", studentId);
+	            result.put("topicsAssigned", 0);
+	            return result;
+	        }
+	        
+	        log.info("  📚 Student has {} individual lesson topics available", hasTopics);
+	        
+	        // Assign the first available lesson topic for each subject to schedules without topics
+	        String assignTopicsSql = """
+	            UPDATE academic.daily_schedules ds
+	            SET lesson_topic_id = (
+	                SELECT ilt.id 
+	                FROM academic.individual_lesson_topics ilt
+	                WHERE ilt.student_profile_id = ds.student_id
+	                  AND ilt.subject_id = ds.subject_id
+	                ORDER BY ilt.week_number, ilt.id
+	                LIMIT 1
+	            )
+	            WHERE ds.student_id = ?
+	              AND ds.scheduled_date BETWEEN ? AND ?
+	              AND ds.lesson_topic_id IS NULL
+	              AND ds.schedule_source = 'INDIVIDUAL'
+	              AND EXISTS (
+	                  SELECT 1 FROM academic.individual_lesson_topics ilt
+	                  WHERE ilt.student_profile_id = ds.student_id
+	                    AND ilt.subject_id = ds.subject_id
+	              )
+	            """;
+	        
+	        int topicsAssigned = jdbcTemplate.update(assignTopicsSql, studentId, weekStart, weekEnd);
+	        result.put("topicsAssigned", topicsAssigned);
+	        
+	        return result;
+	        
+	    } catch (Exception e) {
+	        log.error("Student Step -1 failed: {}", e.getMessage(), e);
+	        result.put("topicsAssigned", 0);
+	        return result;
+	    }
+	}
+
 
 	private int studentStep0_clearPeriod2Plus(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
 	    try {
