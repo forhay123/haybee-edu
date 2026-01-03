@@ -204,6 +204,16 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
         if not q_text or q_text.lower() in seen:
             continue
         
+        # ✅ ADD THIS: Truncate long text to prevent database errors
+        if len(q_text) > 250:
+            q_text = q_text[:247] + "..."
+            logger.warning(f"⚠️ Truncated long question: {q_text}")
+        
+        answer = q.correct_answer if q.type == "mcq" else q.answer_text
+        if len(answer) > 250:
+            answer = answer[:247] + "..."
+            logger.warning(f"⚠️ Truncated long answer: {answer[:50]}...")
+        
         if q.type == "mcq":
             correct_index = q.options.index(q.correct_answer)
             correct_option = ["A", "B", "C", "D"][correct_index]
