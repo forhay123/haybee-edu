@@ -248,7 +248,7 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
     
     return formatted
 
-# ----------------------------
+# ---------------------------
 # 🎯 SINGLE CALL STRATEGY (THE FIX)
 # ----------------------------
 def generate_questions_with_ai(
