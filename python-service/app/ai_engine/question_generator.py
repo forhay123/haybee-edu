@@ -337,48 +337,50 @@ def _call_and_parse_questions(system_prompt: str, user_prompt: str, target_count
 def _generate_content_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
     """Generate questions directly from lesson content"""
     
-    system_prompt = """You are an expert teacher creating assessment questions.
+    system_prompt = f"""You are an expert teacher. Your task is to create EXACTLY {target_count} assessment questions.
 
-CRITICAL: Output ONLY a valid JSON array. Use EXACT field names shown below.
+⚠️ CRITICAL: YOU MUST GENERATE ALL {target_count} QUESTIONS. NOT 1, NOT 5, BUT EXACTLY {target_count} QUESTIONS.
 
-Required format - MCQ:
-{
+Return a JSON array with EXACTLY {target_count} objects. Each object must have these EXACT field names:
+
+MCQ format:
+{{
   "type": "mcq",
-  "question_text": "Your question here?",
-  "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-  "correct_answer": "Option 1",
+  "question_text": "Your question?",
+  "options": ["Option A", "Option B", "Option C", "Option D"],
+  "correct_answer": "Option A",
   "difficulty": "easy",
   "max_score": 1
-}
+}}
 
-Required format - Theory:
-{
+Theory format:
+{{
   "type": "theory",
-  "question_text": "Your question here?",
-  "answer_text": "Your answer here.",
+  "question_text": "Your question?",
+  "answer_text": "Your answer.",
   "difficulty": "medium",
   "max_score": 3
-}
+}}
 
-CRITICAL FIELD NAMES:
+FIELD NAME RULES (CRITICAL):
 - Use "question_text" NOT "question"
 - Use "answer_text" NOT "answer" or "explanation"
-- Always include "type" field ("mcq" or "theory")
-- For MCQ: "correct_answer" must EXACTLY match one option (copy-paste it)
-- Always include "difficulty" and "max_score"
+- Always include "type" ("mcq" or "theory")
+- For MCQ: "correct_answer" must be an EXACT copy-paste of one option
 
-Output ONLY the JSON array."""
+Before submitting, COUNT your questions. You MUST have EXACTLY {target_count} questions in your array.
 
-    user_prompt = f"""Create EXACTLY {target_count} assessment questions from this lesson.
+Output format: [{{"type": "mcq", ...}}, {{"type": "theory", ...}}, ... ] with {target_count} total items."""
+
+    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} questions (60% MCQ, 40% Theory):
 
 {lesson_text}
 
-Requirements:
-- 60% MCQ (correct_answer = EXACT copy of one option)
-- 40% Theory (concise answers)
-- Mix of easy, medium, hard
+REMINDER: Generate ALL {target_count} questions. Count them before submitting.
+Required count: {target_count} questions
+Current count: ??? (You must verify this equals {target_count})
 
-Output ONLY the JSON array with ALL {target_count} questions."""
+Output ONLY the JSON array with {target_count} questions."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 1 (Content)")
 
@@ -388,49 +390,52 @@ Output ONLY the JSON array with ALL {target_count} questions."""
 def _generate_application_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
     """Generate questions that apply concepts to new scenarios"""
     
-    system_prompt = """You are an expert teacher creating application questions.
+    system_prompt = f"""You are an expert teacher. Your task is to create EXACTLY {target_count} application questions.
 
-CRITICAL: Output ONLY a valid JSON array. Use EXACT field names shown below.
+⚠️ CRITICAL: YOU MUST GENERATE ALL {target_count} QUESTIONS. NOT 1, NOT 3, BUT EXACTLY {target_count} QUESTIONS.
 
-Required format - MCQ:
-{
+Return a JSON array with EXACTLY {target_count} objects. Each object must have these EXACT field names:
+
+MCQ format:
+{{
   "type": "mcq",
-  "question_text": "Your question here?",
-  "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-  "correct_answer": "Option 1",
+  "question_text": "Your question?",
+  "options": ["Option A", "Option B", "Option C", "Option D"],
+  "correct_answer": "Option A",
   "difficulty": "medium",
   "max_score": 1
-}
+}}
 
-Required format - Theory:
-{
+Theory format:
+{{
   "type": "theory",
-  "question_text": "Your question here?",
-  "answer_text": "Your answer here.",
+  "question_text": "Your question?",
+  "answer_text": "Your answer.",
   "difficulty": "medium",
   "max_score": 3
-}
+}}
 
-CRITICAL FIELD NAMES:
+FIELD NAME RULES (CRITICAL):
 - Use "question_text" NOT "question"
 - Use "answer_text" NOT "answer" or "explanation"
-- Always include "type" field ("mcq" or "theory")
-- For MCQ: "correct_answer" must EXACTLY match one option (copy-paste it)
-- Always include "difficulty" and "max_score"
+- Always include "type" ("mcq" or "theory")
+- For MCQ: "correct_answer" must be an EXACT copy-paste of one option
 
-Output ONLY the JSON array."""
+Before submitting, COUNT your questions. You MUST have EXACTLY {target_count} questions in your array.
 
-    user_prompt = f"""Create EXACTLY {target_count} APPLICATION questions from this lesson.
+Output format: [{{"type": "mcq", ...}}, {{"type": "theory", ...}}, ... ] with {target_count} total items."""
+
+    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} application questions (50% MCQ, 50% Theory):
 
 {lesson_text}
 
-Requirements:
-- 50% MCQ (correct_answer = EXACT copy of one option)
-- 50% Theory (with worked solutions)
-- Apply to NEW scenarios
-- Mix of difficulties
+Apply concepts to NEW scenarios with different contexts/numbers.
 
-Output ONLY the JSON array with ALL {target_count} questions."""
+REMINDER: Generate ALL {target_count} questions. Count them before submitting.
+Required count: {target_count} questions
+Current count: ??? (You must verify this equals {target_count})
+
+Output ONLY the JSON array with {target_count} questions."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 2 (Application)")
 
@@ -440,49 +445,52 @@ Output ONLY the JSON array with ALL {target_count} questions."""
 def _generate_conceptual_questions(lesson_text: str, target_count: int) -> List[Dict[str, Any]]:
     """Generate questions testing deeper understanding"""
     
-    system_prompt = """You are an expert teacher creating conceptual questions.
+    system_prompt = f"""You are an expert teacher. Your task is to create EXACTLY {target_count} conceptual questions.
 
-CRITICAL: Output ONLY a valid JSON array. Use EXACT field names shown below.
+⚠️ CRITICAL: YOU MUST GENERATE ALL {target_count} QUESTIONS. NOT 1, NOT 2, BUT EXACTLY {target_count} QUESTIONS.
 
-Required format - MCQ:
-{
+Return a JSON array with EXACTLY {target_count} objects. Each object must have these EXACT field names:
+
+MCQ format:
+{{
   "type": "mcq",
-  "question_text": "Your question here?",
-  "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-  "correct_answer": "Option 1",
+  "question_text": "Your question?",
+  "options": ["Option A", "Option B", "Option C", "Option D"],
+  "correct_answer": "Option A",
   "difficulty": "hard",
   "max_score": 1
-}
+}}
 
-Required format - Theory:
-{
+Theory format:
+{{
   "type": "theory",
-  "question_text": "Your question here?",
-  "answer_text": "Your answer here.",
+  "question_text": "Your question?",
+  "answer_text": "Your answer.",
   "difficulty": "hard",
   "max_score": 3
-}
+}}
 
-CRITICAL FIELD NAMES:
+FIELD NAME RULES (CRITICAL):
 - Use "question_text" NOT "question"
 - Use "answer_text" NOT "answer" or "explanation"
-- Always include "type" field ("mcq" or "theory")
-- For MCQ: "correct_answer" must EXACTLY match one option (copy-paste it)
-- Always include "difficulty" and "max_score"
+- Always include "type" ("mcq" or "theory")
+- For MCQ: "correct_answer" must be an EXACT copy-paste of one option
 
-Output ONLY the JSON array."""
+Before submitting, COUNT your questions. You MUST have EXACTLY {target_count} questions in your array.
 
-    user_prompt = f"""Create EXACTLY {target_count} CONCEPTUAL questions from this lesson.
+Output format: [{{"type": "mcq", ...}}, {{"type": "theory", ...}}, ... ] with {target_count} total items."""
+
+    user_prompt = f"""Based on this lesson, create EXACTLY {target_count} conceptual questions (40% MCQ, 60% Theory):
 
 {lesson_text}
 
-Requirements:
-- 40% MCQ (correct_answer = EXACT copy of one option)
-- 60% Theory (requiring explanations)
-- Focus on WHY methods work
-- Mix of difficulties
+Focus on WHY methods work, common errors, and misconceptions.
 
-Output ONLY the JSON array with ALL {target_count} questions."""
+REMINDER: Generate ALL {target_count} questions. Count them before submitting.
+Required count: {target_count} questions
+Current count: ??? (You must verify this equals {target_count})
+
+Output ONLY the JSON array with {target_count} questions."""
 
     return _call_and_parse_questions(system_prompt, user_prompt, target_count, "Pass 3 (Conceptual)")
 
