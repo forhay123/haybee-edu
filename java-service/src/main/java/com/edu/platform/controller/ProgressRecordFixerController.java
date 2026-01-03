@@ -2470,5 +2470,99 @@ public class ProgressRecordFixerController {
 	    }
 	    throw new IllegalArgumentException("Cannot convert " + obj.getClass() + " to LocalDate");
 	}
+	
+	
+	/**
+	 * ✅ Check if a specific student needs schedule repair
+	 * Returns health status for the student
+	 */
+	@GetMapping("/student/{studentId}/health")
+	public ResponseEntity<Map<String, Object>> checkStudentHealth(
+	        @PathVariable Long studentId) {
+	    
+	    log.info("🔍 Checking schedule health for student {}", studentId);
+	    
+	    Map<String, Object> health = new HashMap<>();
+	    health.put("studentId", studentId);
+	    
+	    try {
+	        // Check for orphaned progress
+	        String orphanedSql = """
+	            SELECT COUNT(*) FROM academic.student_lesson_progress
+	            WHERE student_profile_id = ?
+	              AND daily_schedule_id IS NULL
+	              AND lesson_topic_id IS NOT NULL
+	            """;
+	        Integer orphaned = jdbcTemplate.queryForObject(orphanedSql, Integer.class, studentId);
+	        health.put("orphanedProgress", orphaned != null ? orphaned : 0);
+	        
+	        // Check for schedules without progress
+	        String noProgressSql = """
+	            SELECT COUNT(*) FROM academic.daily_schedules ds
+	            WHERE ds.student_id = ?
+	              AND ds.lesson_topic_id IS NOT NULL
+	              AND NOT EXISTS (
+	                  SELECT 1 FROM academic.student_lesson_progress slp
+	                  WHERE slp.daily_schedule_id = ds.id
+	              )
+	            """;
+	        Integer noProgress = jdbcTemplate.queryForObject(noProgressSql, Integer.class, studentId);
+	        health.put("schedulesWithoutProgress", noProgress != null ? noProgress : 0);
+	        
+	        // Check for progress without assessments (where they should exist)
+	        String noAssessmentSql = """
+	            SELECT COUNT(*) FROM academic.student_lesson_progress p
+	            WHERE p.student_profile_id = ?
+	              AND p.lesson_topic_id IS NOT NULL
+	              AND p.assessment_id IS NULL
+	              AND EXISTS (
+	                  SELECT 1 FROM academic.assessments a
+	                  WHERE a.lesson_topic_id = p.lesson_topic_id
+	                    AND a.type = 'LESSON_TOPIC_ASSESSMENT'
+	              )
+	            """;
+	        Integer noAssessment = jdbcTemplate.queryForObject(noAssessmentSql, Integer.class, studentId);
+	        health.put("missingAssessments", noAssessment != null ? noAssessment : 0);
+	        
+	        // Check for missing assessment windows
+	        String noWindowsSql = """
+	            SELECT COUNT(*) FROM academic.student_lesson_progress
+	            WHERE student_profile_id = ?
+	              AND assessment_id IS NOT NULL
+	              AND completed = false
+	              AND (assessment_window_start IS NULL OR assessment_window_end IS NULL)
+	            """;
+	        Integer noWindows = jdbcTemplate.queryForObject(noWindowsSql, Integer.class, studentId);
+	        health.put("missingWindows", noWindows != null ? noWindows : 0);
+	        
+	        // Calculate if needs repair
+	        boolean needsRepair = 
+	            (orphaned != null && orphaned > 0) ||
+	            (noProgress != null && noProgress > 0) ||
+	            (noAssessment != null && noAssessment > 0) ||
+	            (noWindows != null && noWindows > 0);
+	        
+	        health.put("needsRepair", needsRepair);
+	        health.put("isHealthy", !needsRepair);
+	        
+	        // Calculate health score
+	        int totalIssues = 
+	            (orphaned != null ? orphaned : 0) +
+	            (noProgress != null ? noProgress : 0) +
+	            (noAssessment != null ? noAssessment : 0) +
+	            (noWindows != null ? noWindows : 0);
+	        
+	        health.put("totalIssues", totalIssues);
+	        health.put("success", true);
+	        
+	        return ResponseEntity.ok(health);
+	        
+	    } catch (Exception e) {
+	        log.error("Failed to check student health: {}", e.getMessage(), e);
+	        health.put("success", false);
+	        health.put("error", e.getMessage());
+	        return ResponseEntity.status(500).body(health);
+	    }
+	}
 
 }

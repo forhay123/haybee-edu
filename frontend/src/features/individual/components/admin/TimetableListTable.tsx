@@ -16,6 +16,18 @@ import {
 import { IndividualTimetableDto } from "../../types/individualTypes";
 import { getStatusColor, formatFileSize } from "../../types/individualTypes";
 
+interface StudentHealthData {
+  success: boolean;
+  studentId: number;
+  orphanedProgress: number;
+  schedulesWithoutProgress: number;
+  missingAssessments: number;
+  missingWindows: number;
+  needsRepair: boolean;
+  isHealthy: boolean;
+  totalIssues: number;
+}
+
 interface TimetableListTableProps {
   timetables: IndividualTimetableDto[];
   selectedIds: number[];
@@ -24,7 +36,8 @@ interface TimetableListTableProps {
   onDelete: (id: number) => void;
   onReprocess: (id: number) => void;
   onView: (id: number) => void;
-  onRepair?: (studentId: number, studentName: string) => void; // ✅ NEW
+  onRepair?: (studentId: number, studentName: string) => void;
+  studentHealthMap?: Record<number, StudentHealthData>; // ✅ NEW
 }
 
 const TimetableListTable: React.FC<TimetableListTableProps> = ({
@@ -35,7 +48,8 @@ const TimetableListTable: React.FC<TimetableListTableProps> = ({
   onDelete,
   onReprocess,
   onView,
-  onRepair, // ✅ NEW
+  onRepair,
+  studentHealthMap, // ✅ NEW
 }) => {
   const navigate = useNavigate();
   const [sortField, setSortField] = useState<keyof IndividualTimetableDto>("uploadedAt");
@@ -132,6 +146,10 @@ const TimetableListTable: React.FC<TimetableListTableProps> = ({
               >
                 Uploaded
               </th>
+              {/* ✅ NEW: Health Column */}
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Health
+              </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
@@ -140,139 +158,181 @@ const TimetableListTable: React.FC<TimetableListTableProps> = ({
           <tbody className="bg-white divide-y divide-gray-200">
             {sortedTimetables.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center">
+                <td colSpan={8} className="px-6 py-12 text-center">
                   <FileText className="mx-auto h-12 w-12 text-gray-400" />
                   <p className="mt-2 text-sm text-gray-600">No timetables found</p>
                 </td>
               </tr>
             ) : (
-              sortedTimetables.map((timetable) => (
-                <tr
-                  key={timetable.id}
-                  className={`hover:bg-gray-50 transition-colors ${
-                    selectedIds.includes(timetable.id) ? "bg-indigo-50" : ""
-                  }`}
-                >
-                  <td className="px-6 py-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(timetable.id)}
-                      onChange={() => onSelect(timetable.id)}
-                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {timetable.studentName}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          ID: {timetable.studentProfileId}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-gray-400" />
-                      <div>
-                        <div className="text-sm text-gray-900 max-w-xs truncate">
-                          {timetable.originalFilename}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {formatFileSize(timetable.fileSizeBytes)} • {timetable.fileType}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      {getStatusIcon(timetable.processingStatus)}
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
-                          timetable.processingStatus
-                        )}`}
-                      >
-                        {timetable.processingStatus}
-                      </span>
-                    </div>
-                    {timetable.processingError && (
-                      <div className="mt-1 text-xs text-red-600 max-w-xs truncate">
-                        {timetable.processingError}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {timetable.processingStatus === "COMPLETED" ? (
-                      <div className="text-sm">
-                        <div className="text-gray-900">
-                          {timetable.totalPeriodsExtracted || 0} periods
-                        </div>
-                        <div className="text-gray-500">
-                          {timetable.subjectsIdentified || 0} subjects
-                        </div>
-                        {timetable.confidenceScore && (
-                          <div className="text-xs text-gray-500">
-                            {(timetable.confidenceScore * 100).toFixed(0)}% confidence
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">
-                      {new Date(timetable.uploadedAt).toLocaleDateString()}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {new Date(timetable.uploadedAt).toLocaleTimeString()}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm font-medium">
-                    <div className="flex items-center justify-end gap-2">
-                      {/* ✅ NEW: Repair Button - Only show if status is COMPLETED */}
-                      {onRepair && timetable.processingStatus === "COMPLETED" && (
-                        <button
-                          onClick={() => onRepair(
-                            timetable.studentProfileId,
-                            timetable.studentName
-                          )}
-                          className="text-purple-600 hover:text-purple-900 p-1 hover:bg-purple-50 rounded transition-colors"
-                          title="Repair schedules for this student"
-                        >
-                          <Wrench className="w-4 h-4" />
-                        </button>
-                      )}
+              sortedTimetables.map((timetable) => {
+                // ✅ NEW: Get health status for this student
+                const health = studentHealthMap?.[timetable.studentProfileId];
+                const needsRepair = health?.needsRepair || false;
 
-                      <button
-                        onClick={() => onView(timetable.id)}
-                        className="text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-50 rounded transition-colors"
-                        title="View details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      {timetable.processingStatus === "FAILED" && (
-                        <button
-                          onClick={() => onReprocess(timetable.id)}
-                          className="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded transition-colors"
-                          title="Reprocess"
+                return (
+                  <tr
+                    key={timetable.id}
+                    className={`hover:bg-gray-50 transition-colors ${
+                      selectedIds.includes(timetable.id) ? "bg-indigo-50" : ""
+                    }`}
+                  >
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(timetable.id)}
+                        onChange={() => onSelect(timetable.id)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {timetable.studentName}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            ID: {timetable.studentProfileId}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        <div>
+                          <div className="text-sm text-gray-900 max-w-xs truncate">
+                            {timetable.originalFilename}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {formatFileSize(timetable.fileSizeBytes)} • {timetable.fileType}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(timetable.processingStatus)}
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
+                            timetable.processingStatus
+                          )}`}
                         >
-                          <RefreshCw className="w-4 h-4" />
-                        </button>
+                          {timetable.processingStatus}
+                        </span>
+                      </div>
+                      {timetable.processingError && (
+                        <div className="mt-1 text-xs text-red-600 max-w-xs truncate">
+                          {timetable.processingError}
+                        </div>
                       )}
-                      <button
-                        onClick={() => onDelete(timetable.id)}
-                        className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                    </td>
+                    <td className="px-6 py-4">
+                      {timetable.processingStatus === "COMPLETED" ? (
+                        <div className="text-sm">
+                          <div className="text-gray-900">
+                            {timetable.totalPeriodsExtracted || 0} periods
+                          </div>
+                          <div className="text-gray-500">
+                            {timetable.subjectsIdentified || 0} subjects
+                          </div>
+                          {timetable.confidenceScore && (
+                            <div className="text-xs text-gray-500">
+                              {(timetable.confidenceScore * 100).toFixed(0)}% confidence
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">
+                        {new Date(timetable.uploadedAt).toLocaleDateString()}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {new Date(timetable.uploadedAt).toLocaleTimeString()}
+                      </div>
+                    </td>
+
+                    {/* ✅ NEW: Health Status Column */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {timetable.processingStatus === "COMPLETED" && (
+                        <>
+                          {health ? (
+                            needsRepair ? (
+                              <div className="flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4 text-amber-600" />
+                                <div>
+                                  <div className="text-sm font-medium text-amber-600">
+                                    Needs Repair
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {health.totalIssues} issue{health.totalIssues > 1 ? 's' : ''}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                                <span className="text-sm text-green-600 font-medium">
+                                  Healthy
+                                </span>
+                              </div>
+                            )
+                          ) : (
+                            <span className="text-sm text-gray-400">Checking...</span>
+                          )}
+                        </>
+                      )}
+                    </td>
+
+                    {/* Actions Column */}
+                    <td className="px-6 py-4 text-right text-sm font-medium">
+                      <div className="flex items-center justify-end gap-2">
+                        {/* ✅ UPDATED: Show repair button only if needs repair */}
+                        {onRepair && 
+                         timetable.processingStatus === "COMPLETED" && 
+                         needsRepair && (
+                          <button
+                            onClick={() => onRepair(
+                              timetable.studentProfileId,
+                              timetable.studentName
+                            )}
+                            className="text-purple-600 hover:text-purple-900 p-1 hover:bg-purple-50 rounded transition-colors"
+                            title={`Repair schedules (${health?.totalIssues || 0} issues)`}
+                          >
+                            <Wrench className="w-4 h-4" />
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => onView(timetable.id)}
+                          className="text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-50 rounded transition-colors"
+                          title="View details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {timetable.processingStatus === "FAILED" && (
+                          <button
+                            onClick={() => onReprocess(timetable.id)}
+                            className="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded transition-colors"
+                            title="Reprocess"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => onDelete(timetable.id)}
+                          className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

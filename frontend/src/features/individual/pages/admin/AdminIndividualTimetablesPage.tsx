@@ -17,8 +17,9 @@ import BulkActionsToolbar from "../../components/admin/BulkActionsToolbar";
 import SystemStatsCards from "../../components/admin/SystemStatsCards";
 import { ProcessingStatus } from "../../types/individualTypes";
 import axiosInstance from "@/api/axios";
+import { useMultipleStudentHealth } from "../../hooks/admin/useStudentHealth"; // ✅ NEW
 
-// ✅ NEW: Interface for repair result
+// ✅ Interface for repair result
 interface StudentRepairResultData {
   success: boolean;
   message: string;
@@ -85,7 +86,7 @@ const AdminIndividualTimetablesPage: React.FC = () => {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  // ✅ NEW: Repair state
+  // ✅ Repair state
   const [repairResult, setRepairResult] = useState<StudentRepairResultData | null>(null);
   const [repairingStudentId, setRepairingStudentId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +125,14 @@ const AdminIndividualTimetablesPage: React.FC = () => {
       dateTo,
     });
   }, [allTimetables, statusFilter, searchQuery, dateFrom, dateTo, applyFilters]);
+
+  // ✅ NEW: Fetch health status for all students
+  const studentIds = useMemo(
+    () => filteredTimetables.map((t) => t.studentProfileId),
+    [filteredTimetables]
+  );
+
+  const { data: studentHealthMap } = useMultipleStudentHealth(studentIds);
 
   // ============================================================
   // HANDLERS
@@ -193,7 +202,7 @@ const AdminIndividualTimetablesPage: React.FC = () => {
     }
   };
 
-  // ✅ NEW: Repair handler
+  // ✅ Repair handler
   const handleRepair = async (studentId: number, studentName: string) => {
     const confirmed = window.confirm(
       `Repair all schedules for ${studentName}?\n\n` +
@@ -317,7 +326,7 @@ const AdminIndividualTimetablesPage: React.FC = () => {
           />
         </div>
 
-        {/* ✅ NEW: Repair Result Display */}
+        {/* ✅ Repair Result Display */}
         {repairResult && (
           <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -410,7 +419,7 @@ const AdminIndividualTimetablesPage: React.FC = () => {
           </div>
         )}
 
-        {/* ✅ NEW: Error Display */}
+        {/* ✅ Error Display */}
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-center gap-2">
@@ -521,7 +530,8 @@ const AdminIndividualTimetablesPage: React.FC = () => {
             onView={handleView}
             onDelete={handleDelete}
             onReprocess={handleReprocess}
-            onRepair={handleRepair} {/* ✅ NEW: Pass repair handler */}
+            onRepair={handleRepair}
+            studentHealthMap={studentHealthMap} {/* ✅ NEW: Pass health data */}
           />
         </div>
 
@@ -550,7 +560,7 @@ const AdminIndividualTimetablesPage: React.FC = () => {
           </div>
         )}
 
-        {/* ✅ NEW: Loading indicator for repair */}
+        {/* ✅ Loading indicator for repair */}
         {repairingStudentId && (
           <div className="fixed bottom-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2">
             <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
