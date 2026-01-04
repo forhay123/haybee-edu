@@ -1,5 +1,5 @@
 // ============================================================
-// FILE: assessmentTypes.ts (UPDATED WITH CUSTOM ASSESSMENT SUPPORT)
+// FILE: assessmentTypes.ts (UPDATED WITH WORKINGS SUPPORT)
 // Location: frontend/src/features/assessments/types/assessmentTypes.ts
 // ============================================================
 
@@ -48,56 +48,15 @@ export interface Assessment {
   studentScore?: number;
   studentPassed?: boolean;
   
-  // ============================================================
-  // ⭐ NEW: CUSTOM PERIOD ASSESSMENT FIELDS
-  // ============================================================
-  
-  /**
-   * TRUE if this is a teacher-created custom assessment for a specific student
-   */
+  // Custom period assessment fields
   isCustomAssessment?: boolean;
-  
-  /**
-   * ID of the student this custom assessment is targeted to
-   * NULL for regular assessments available to all students
-   */
   targetStudentId?: number;
-  
-  /**
-   * Name of the target student (for display purposes)
-   */
   targetStudentName?: string;
-  
-  /**
-   * Which period this assessment is for (1, 2, 3, etc.)
-   * Only used for custom period assessments
-   */
   periodNumber?: number;
-  
-  /**
-   * ID of the base assessment this was derived from
-   * Usually links to the Period 1 assessment
-   */
   parentAssessmentId?: number;
-  
-  /**
-   * Title of the parent assessment
-   */
   parentAssessmentTitle?: string;
-  
-  /**
-   * When the custom assessment was created
-   */
   customAssessmentCreatedAt?: string;
-  
-  /**
-   * User ID of the teacher who created the custom assessment
-   */
   customAssessmentCreatedBy?: number;
-  
-  /**
-   * Name of the teacher who created it
-   */
   customAssessmentCreatedByName?: string;
 }
 
@@ -114,6 +73,9 @@ export interface AssessmentQuestion {
   marks: number;
   orderNumber: number;
   aiGenerated: boolean;
+  
+  // ✅ NEW: Step-by-step workings
+  workings?: string | null;
 }
 
 export interface AssessmentAnswer {
@@ -127,6 +89,9 @@ export interface AssessmentAnswer {
   marksObtained?: number | null;
   maxMarks?: number;
   teacherFeedback?: string;
+  
+  // ✅ NEW: Step-by-step workings
+  workings?: string | null;
 }
 
 export interface AssessmentSubmission {
@@ -162,7 +127,7 @@ export interface CreateAssessmentRequest {
   teacherQuestionIds?: number[];
   mixAIAndTeacherQuestions?: boolean;
   
-  // ⭐ NEW: Custom period assessment fields
+  // Custom period assessment fields
   isCustomPeriodAssessment?: boolean;
   targetStudentProfileId?: number;
   periodNumber?: number;
@@ -194,6 +159,9 @@ export interface TeacherQuestion {
   correctAnswer: string;
   difficultyLevel?: string;
   createdAt: string;
+  
+  // ✅ NEW: Step-by-step workings
+  workings?: string | null;
 }
 
 export interface CreateTeacherQuestionRequest {
@@ -207,6 +175,9 @@ export interface CreateTeacherQuestionRequest {
   optionD?: string;
   correctAnswer: string;
   difficultyLevel?: string;
+  
+  // ✅ NEW: Step-by-step workings
+  workings?: string | null;
 }
 
 // ============================================================
@@ -261,33 +232,22 @@ export interface GradingStats {
 // ACCESS CONTROL TYPES
 // ============================================================
 
-/**
- * Access check result from backend
- * Matches backend AccessCheckResult DTO exactly
- */
 export interface AccessCheckResult {
   canAccess: boolean;
   reason?: string;
-  windowStart?: string; // ISO datetime string
-  windowEnd?: string; // ISO datetime string
-  currentTime?: string; // ISO datetime string
+  windowStart?: string;
+  windowEnd?: string;
+  currentTime?: string;
   minutesUntilOpen?: number;
   minutesRemaining?: number;
   gracePeriodActive?: boolean;
   statusCode?: 'ALLOWED' | 'NOT_YET_OPEN' | 'EXPIRED' | 'ALREADY_SUBMITTED' | 'BLOCKED';
 }
 
-/**
- * Computed property to check if already submitted
- * For backward compatibility with existing code that checks alreadySubmitted
- */
 export const isAlreadySubmitted = (result: AccessCheckResult | undefined): boolean => {
   return result?.statusCode === 'ALREADY_SUBMITTED';
 };
 
-/**
- * Status variants for UI display
- */
 export type AssessmentAccessStatus =
   | 'allowed'
   | 'not-yet-open'
@@ -296,15 +256,11 @@ export type AssessmentAccessStatus =
   | 'blocked'
   | 'loading';
 
-/**
- * Helper to determine status from AccessCheckResult
- */
 export const getAccessStatus = (
   result: AccessCheckResult | undefined
 ): AssessmentAccessStatus => {
   if (!result) return 'loading';
   
-  // Use statusCode if available (preferred)
   if (result.statusCode) {
     switch (result.statusCode) {
       case 'ALLOWED':
@@ -320,7 +276,6 @@ export const getAccessStatus = (
     }
   }
   
-  // Fallback logic if statusCode not present
   if (result.canAccess) return 'allowed';
   if ((result.minutesUntilOpen ?? 0) > 0) return 'not-yet-open';
   if ((result.minutesRemaining ?? 0) <= 0) return 'expired';
@@ -328,9 +283,6 @@ export const getAccessStatus = (
   return 'blocked';
 };
 
-/**
- * Helper to get color class based on status
- */
 export const getStatusColor = (status: AssessmentAccessStatus): string => {
   switch (status) {
     case 'allowed':
@@ -348,9 +300,6 @@ export const getStatusColor = (status: AssessmentAccessStatus): string => {
   }
 };
 
-/**
- * Helper to get icon based on status
- */
 export const getStatusIcon = (status: AssessmentAccessStatus): string => {
   switch (status) {
     case 'allowed':
@@ -372,10 +321,6 @@ export const getStatusIcon = (status: AssessmentAccessStatus): string => {
 // VALIDATION TYPES
 // ============================================================
 
-/**
- * Schedule validation result
- * Used in: WeeklyScheduleForm, useScheduleValidation hook
- */
 export interface ValidationResult {
   canCreate: boolean;
   reason: string | string[];  
@@ -392,29 +337,23 @@ export interface ValidationResult {
 // INCOMPLETE LESSONS TYPES
 // ============================================================
 
-/**
- * Single incomplete lesson info
- */
 export interface IncompleteLessonInfo {
   id: number;
   lessonTopicId?: number;
   lessonTopicTitle: string;
   subjectId: number;
   subjectName: string;
-  scheduledDate: string; // ISO date YYYY-MM-DD
+  scheduledDate: string;
   periodNumber: number;
   incompleteReason: 'MISSED_GRACE_PERIOD' | 'LATE_SUBMISSION' | 'NO_SUBMISSION';
-  lessonStartTime?: string; // HH:mm
-  lessonEndTime?: string; // HH:mm
-  graceEndTime?: string; // HH:mm
-  autoMarkedIncompleteAt?: string; // ISO datetime
-  assessmentWindowStart?: string; // ISO datetime
-  assessmentWindowEnd?: string; // ISO datetime
+  lessonStartTime?: string;
+  lessonEndTime?: string;
+  graceEndTime?: string;
+  autoMarkedIncompleteAt?: string;
+  assessmentWindowStart?: string;
+  assessmentWindowEnd?: string;
 }
 
-/**
- * Complete report of incomplete lessons grouped by reason
- */
 export interface IncompleteLessonsReport {
   studentId: number;
   studentName?: string;
@@ -448,32 +387,23 @@ export interface LessonProgressDto {
 }
 
 // ============================================================
-// ⭐ NEW: HELPER FUNCTIONS FOR CUSTOM ASSESSMENTS
+// HELPER FUNCTIONS FOR CUSTOM ASSESSMENTS
 // ============================================================
 
-/**
- * Check if assessment is a custom assessment
- */
 export const isCustomAssessment = (assessment: Assessment): boolean => {
   return assessment.isCustomAssessment === true;
 };
 
-/**
- * Check if student can access custom assessment
- */
 export const canAccessCustomAssessment = (
   assessment: Assessment,
   studentId: number
 ): boolean => {
   if (!isCustomAssessment(assessment)) {
-    return true; // Regular assessments are accessible to all
+    return true;
   }
   return assessment.targetStudentId === studentId;
 };
 
-/**
- * Get assessment display name with period info
- */
 export const getAssessmentDisplayName = (assessment: Assessment): string => {
   if (!isCustomAssessment(assessment)) {
     return assessment.title;
@@ -489,17 +419,38 @@ export const getAssessmentDisplayName = (assessment: Assessment): string => {
   return name;
 };
 
-/**
- * Check if assessment is for a specific period
- */
 export const isForPeriod = (assessment: Assessment, periodNumber: number): boolean => {
   return assessment.periodNumber === periodNumber;
 };
 
-/**
- * Get period label
- */
 export const getPeriodLabel = (periodNumber?: number): string => {
   if (!periodNumber) return 'Period 1';
   return `Period ${periodNumber}`;
+};
+
+// ============================================================
+// ✅ NEW: WORKINGS HELPER FUNCTIONS
+// ============================================================
+
+/**
+ * Check if a question has workings
+ */
+export const hasWorkings = (question: AssessmentQuestion | AssessmentAnswer): boolean => {
+  return question.workings !== null && 
+         question.workings !== undefined && 
+         question.workings.trim() !== '';
+};
+
+/**
+ * Format workings text for display (convert \n to <br/>)
+ */
+export const formatWorkings = (workings: string): string => {
+  return workings.replace(/\n/g, '<br/>');
+};
+
+/**
+ * Get workings lines as array
+ */
+export const getWorkingsLines = (workings: string): string[] => {
+  return workings.split('\n').filter(line => line.trim() !== '');
 };

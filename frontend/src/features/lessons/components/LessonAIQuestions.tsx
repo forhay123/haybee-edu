@@ -1,11 +1,11 @@
-// ✅ FINAL: LessonAIQuestions.tsx - Uses existing term hooks
+// ✅ ENHANCED: LessonAIQuestions.tsx with Workings Support
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useLessonAIQuestions } from "../hooks/useLessonAIQuestions";
-import { LessonAIQuestionDto, EnhancedQuestionDto } from "../types/lessonAIQuestionsTypes";
+import { LessonAIQuestionDto, EnhancedQuestionDto, hasWorkings } from "../types/lessonAIQuestionsTypes";
 import { useAuth } from "../../auth/useAuth";
 import { useGetCurrentTermWithWeek } from "../../terms/api/termsApi";
-import { Lock } from "lucide-react";
+import { Lock, Calculator, ChevronDown, ChevronUp } from "lucide-react";
 import axios from "../../../api/axios";
 
 interface LessonAIQuestionsProps {
@@ -21,16 +21,30 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
   const [showAnswers, setShowAnswers] = useState(false);
   const [enhancedQuestions, setEnhancedQuestions] = useState<EnhancedQuestionDto[]>([]);
   const [loadingLessons, setLoadingLessons] = useState(false);
+  
+  // ✅ NEW: Track expanded workings per question
+  const [expandedWorkings, setExpandedWorkings] = useState<Set<number>>(new Set());
+  
   const { user } = useAuth();
-
-  // ✅ Use existing hook to get current term with week
   const { data: currentTermData } = useGetCurrentTermWithWeek();
 
   const isStudent = user?.roles?.includes('STUDENT') && 
                     !user?.roles?.includes('ADMIN') && 
                     !user?.roles?.includes('TEACHER');
 
-  // ✅ Extract week from lesson topic title
+  // ✅ Toggle workings for a specific question
+  const toggleWorkings = (questionId: number) => {
+    setExpandedWorkings(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(questionId)) {
+        newSet.delete(questionId);
+      } else {
+        newSet.add(questionId);
+      }
+      return newSet;
+    });
+  };
+
   const extractWeekFromTitle = (title: string): { week: string | null; weekNumber: number | null } => {
     if (!title) return { week: null, weekNumber: null };
     
@@ -47,7 +61,6 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
     return { week: null, weekNumber: null };
   };
 
-  // ✅ Fetch lesson TOPIC details
   useEffect(() => {
     if (!data || data.length === 0) {
       setEnhancedQuestions([]);
@@ -105,25 +118,19 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
     fetchLessonTopicDetails();
   }, [data]);
 
-  // ✅ Get current week from term data
   const currentWeek = useMemo(() => {
     if (!currentTermData || !currentTermData.currentWeek) {
-      console.warn('⚠️ Current term data not available');
       return 'Week1';
     }
     return `Week${currentTermData.currentWeek}`;
   }, [currentTermData]);
 
-  // ✅ Filter questions by selected week
   const filteredQuestions = useMemo(() => {
     if (!enhancedQuestions || enhancedQuestions.length === 0) return [];
-    
     if (!selectedWeek) return enhancedQuestions;
-    
     return enhancedQuestions.filter(q => q.week === selectedWeek);
   }, [enhancedQuestions, selectedWeek]);
 
-  // ✅ Check if question answers should be visible
   const canViewAnswerForQuestion = (question: EnhancedQuestionDto): boolean => {
     if (!isStudent) return true;
     if (!question.week) return true;
@@ -179,17 +186,11 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
   const hasLockedQuestions = isStudent && filteredQuestions.some(q => !canViewAnswerForQuestion(q));
   const isViewingCurrentWeek = selectedWeek === currentWeek;
 
+  // ✅ Count questions with workings
+  const questionsWithWorkings = filteredQuestions.filter(q => hasWorkings(q)).length;
+
   return (
     <div>
-      {/* Debug Info - Only in development */}
-      {process.env.NODE_ENV === 'development' && currentTermData && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs">
-          <strong>🐛 Debug:</strong> Current Week = <code className="bg-blue-100 px-1">{currentWeek}</code>
-          , Term = <code className="bg-blue-100 px-1">{currentTermData.name}</code>
-          , Start = <code className="bg-blue-100 px-1">{currentTermData.startDate}</code>
-        </div>
-      )}
-
       {/* Header with Toggle */}
       <div className="flex justify-between items-center mb-6 bg-white rounded-lg border border-gray-200 p-4">
         <div>
@@ -199,6 +200,11 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
           <p className="text-sm text-gray-600 mt-1">
             {filteredQuestions.length} question{filteredQuestions.length !== 1 ? 's' : ''} found
             {selectedWeek && ` for ${selectedWeek}`}
+            {questionsWithWorkings > 0 && (
+              <span className="ml-2 text-indigo-600 font-medium">
+                • {questionsWithWorkings} with step-by-step workings
+              </span>
+            )}
           </p>
         </div>
 
@@ -241,6 +247,8 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
       <div className="space-y-6">
         {filteredQuestions.map((q, index) => {
           const canViewThisAnswer = canViewAnswerForQuestion(q);
+          const questionHasWorkings = hasWorkings(q);
+          const isWorkingsExpanded = expandedWorkings.has(q.id);
           
           return (
             <div key={q.id} className="p-6 border-2 border-gray-200 rounded-lg shadow-sm bg-white hover:shadow-md transition-shadow">
@@ -278,6 +286,14 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
                     {q.maxScore && (
                       <span className="text-xs px-3 py-1 rounded-full bg-purple-100 text-purple-700 font-medium">
                         {q.maxScore} {q.maxScore === 1 ? "point" : "points"}
+                      </span>
+                    )}
+                    
+                    {/* ✅ NEW: Workings indicator */}
+                    {questionHasWorkings && (
+                      <span className="text-xs px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-medium flex items-center gap-1">
+                        <Calculator className="w-3 h-3" />
+                        Has Workings
                       </span>
                     )}
                     
@@ -364,6 +380,59 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
                 )
               )}
 
+              {/* ✅ NEW: Workings Display */}
+              {showAnswers && canViewThisAnswer && questionHasWorkings && q.workings && (
+                <div className="mt-4">
+                  <button
+                    onClick={() => toggleWorkings(q.id)}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 border-2 border-indigo-200 rounded-lg transition-all w-full text-left font-medium text-indigo-900"
+                  >
+                    <Calculator className="w-5 h-5 text-indigo-600" />
+                    <span>{isWorkingsExpanded ? 'Hide' : 'Show'} Step-by-Step Workings</span>
+                    {isWorkingsExpanded ? (
+                      <ChevronUp className="w-5 h-5 ml-auto text-indigo-600" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 ml-auto text-indigo-600" />
+                    )}
+                  </button>
+
+                  {isWorkingsExpanded && (
+                    <div className="mt-3 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-indigo-200 rounded-lg">
+                      <div className="flex items-center gap-2 mb-4 pb-3 border-b-2 border-indigo-200">
+                        <Calculator className="w-5 h-5 text-indigo-600" />
+                        <h4 className="font-bold text-indigo-900">Solution Steps:</h4>
+                      </div>
+                      
+                      <div className="space-y-2 font-mono text-sm">
+                        {q.workings.split('\n').filter(line => line.trim() !== '').map((line, idx) => {
+                          const isStepHeader = /^Step \d+:/i.test(line.trim());
+                          
+                          return (
+                            <div
+                              key={idx}
+                              className={`${
+                                isStepHeader
+                                  ? 'font-bold text-indigo-900 text-base mt-4 first:mt-0'
+                                  : 'text-gray-800 pl-4 leading-relaxed'
+                              }`}
+                            >
+                              {line}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t-2 border-indigo-200">
+                        <p className="text-xs text-indigo-700 italic flex items-center gap-1">
+                          <span>💡</span>
+                          <span>Follow these steps to understand how the answer was derived</span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
                 <div className="flex items-center gap-4 text-xs text-gray-500">
                   <span className="flex items-center gap-1">
@@ -401,6 +470,15 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
                 <span className="text-sm text-gray-700">
                   <strong>{filteredQuestions.filter(q => !isMultipleChoice(q)).length}</strong> theory
                 </span>
+                {questionsWithWorkings > 0 && (
+                  <>
+                    <span className="text-gray-300">•</span>
+                    <span className="text-sm text-indigo-700 font-medium flex items-center gap-1">
+                      <Calculator className="w-3 h-3" />
+                      <strong>{questionsWithWorkings}</strong> with workings
+                    </span>
+                  </>
+                )}
                 {isStudent && hasLockedQuestions && (
                   <>
                     <span className="text-gray-300">•</span>
