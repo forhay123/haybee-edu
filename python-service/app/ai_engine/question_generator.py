@@ -13,7 +13,7 @@ from app.core.logger import get_logger
 logger = get_logger("QuestionGenerator")
 
 # ----------------------------
-# 🔒 Pydantic schema for MCQ and Theory question validation
+# 🔒 ENHANCED Pydantic schemas with workings field
 # ----------------------------
 
 class MCQQuestion(BaseModel):
@@ -23,6 +23,12 @@ class MCQQuestion(BaseModel):
     correct_answer: str = Field(..., description="The correct answer (must be one of options)")
     difficulty: str = Field(default="medium", description="easy | medium | hard")
     max_score: int = Field(default=1, description="Max score for MCQ (usually 1)")
+    
+    # ✅ NEW: Step-by-step workings field
+    workings: Optional[str] = Field(
+        default=None, 
+        description="Detailed step-by-step solution showing how to arrive at the answer"
+    )
 
     @model_validator(mode='after')
     def check_correct_answer_in_options(self):
@@ -63,6 +69,12 @@ class TheoryQuestion(BaseModel):
     answer_text: str = Field(..., description="Concise answer/explanation")
     difficulty: str = Field(default="medium", description="easy | medium | hard")
     max_score: int = Field(default=3, description="Max score for theory question (usually 3)")
+    
+    # ✅ NEW: Step-by-step workings field (for calculation-based theory questions)
+    workings: Optional[str] = Field(
+        default=None, 
+        description="Detailed step-by-step solution if the question involves calculations"
+    )
 
 QuestionSchema = Union[MCQQuestion, TheoryQuestion]
 
@@ -170,10 +182,10 @@ def _extract_json_robust(raw: Any) -> List[Dict[str, Any]]:
     return []
 
 # ----------------------------
-# ✅ Validation
+# ✅ ENHANCED Validation with workings
 # ----------------------------
 def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, pass_name: str = "") -> List[Dict[str, Any]]:
-    """Validate and format questions"""
+    """Validate and format questions including workings field"""
     
     if not parsed:
         return []
@@ -215,14 +227,17 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
             answer = answer[:247] + "..."
             logger.warning(f"⚠️ Truncated long answer: {answer[:50]}...")
         
+        # ✅ NEW: Extract workings field
+        workings = getattr(q, 'workings', None)
+        
         if q.type == "mcq":
             correct_index = q.options.index(q.correct_answer)
             correct_option = ["A", "B", "C", "D"][correct_index]
             opts_dict = map_options_to_fields(q.options)
             
             formatted.append({
-                "question_text": q_text,  # ✅ USE TRUNCATED VERSION
-                "answer_text": answer,    # ✅ USE TRUNCATED VERSION
+                "question_text": q_text,
+                "answer_text": answer,
                 "difficulty": q.difficulty,
                 "max_score": q.max_score,
                 "option_a": opts_dict["option_a"],
@@ -230,11 +245,12 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
                 "option_c": opts_dict["option_c"],
                 "option_d": opts_dict["option_d"],
                 "correct_option": correct_option,
+                "workings": workings  # ✅ ADD WORKINGS
             })
         else:
             formatted.append({
-                "question_text": q_text,  # ✅ USE TRUNCATED VERSION
-                "answer_text": answer,    # ✅ USE TRUNCATED VERSION
+                "question_text": q_text,
+                "answer_text": answer,
                 "difficulty": q.difficulty,
                 "max_score": q.max_score,
                 "option_a": None,
@@ -242,14 +258,15 @@ def _validate_questions_robust(parsed: List[Dict[str, Any]], target_count: int, 
                 "option_c": None,
                 "option_d": None,
                 "correct_option": None,
+                "workings": workings  # ✅ ADD WORKINGS
             })
             
-            seen.add(q_text.lower())
+        seen.add(q_text.lower())
     
     return formatted
 
 # ---------------------------
-# 🎯 SINGLE CALL STRATEGY (THE FIX)
+# 🎯 ENHANCED GENERATION WITH WORKINGS
 # ----------------------------
 def generate_questions_with_ai(
     lesson_text: str,
@@ -257,14 +274,14 @@ def generate_questions_with_ai(
     min_expected: Optional[int] = None,
     enable_semantic_filter: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Generate questions in ONE API call - the ONLY approach that works"""
+    """Generate questions with step-by-step workings for calculations"""
     
-    logger.info(f"🧠 Starting question generation (target: {max_questions})")
+    logger.info(f"🧠 Starting question generation with workings (target: {max_questions})")
     
-    # Single comprehensive prompt
-    system_prompt = """You are an expert teacher creating assessment questions.
+    # ✅ ENHANCED prompt with workings instructions
+    system_prompt = """You are an expert mathematics teacher creating assessment questions with detailed solutions.
 
-Generate a JSON array of questions with this EXACT structure:
+Generate a JSON array with this EXACT structure:
 
 [
   {
@@ -273,36 +290,51 @@ Generate a JSON array of questions with this EXACT structure:
     "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
     "correct_answer": "Option 1",
     "difficulty": "easy",
-    "max_score": 1
+    "max_score": 1,
+    "workings": "Step 1: Explanation\\nStep 2: Calculation\\nStep 3: Final answer"
   },
   {
     "type": "theory",
     "question_text": "Your question here?",
     "answer_text": "Your answer here.",
     "difficulty": "medium",
-    "max_score": 3
+    "max_score": 3,
+    "workings": "Step-by-step solution if applicable, null otherwise"
   }
 ]
 
-CRITICAL RULES:
+CRITICAL RULES FOR WORKINGS:
+1. Include "workings" field for ALL calculation-based questions
+2. Format: Clear numbered steps (Step 1, Step 2, etc.)
+3. Show ALL intermediate calculations
+4. Include formulas used
+5. Explain key reasoning at each step
+6. For conceptual/definition questions, set workings to null
+7. Use \\n for line breaks in workings
+
+EXAMPLE WORKINGS FOR: "Simplify (6x/5) ÷ (3x/2)"
+
+"workings": "Step 1: Convert division to multiplication by reciprocal\\n(6x/5) ÷ (3x/2) = (6x/5) × (2/3x)\\n\\nStep 2: Multiply numerators and denominators\\n= (6x × 2) / (5 × 3x)\\n= 12x / 15x\\n\\nStep 3: Cancel common factors\\nCancel x: 12x/15x = 12/15\\nDivide by 3: 12/15 = 4/5\\n\\nFinal Answer: 4/5"
+
+OTHER RULES:
 1. Field names: "question_text" (NOT "question"), "answer_text" (NOT "answer")
-2. For MCQ: "correct_answer" must EXACTLY match one of the options (copy-paste it)
-3. Always include "type", "difficulty", "max_score"
+2. For MCQ: "correct_answer" must EXACTLY match one of the options
+3. Always include "type", "difficulty", "max_score", "workings"
 4. Mix 60% MCQ / 40% Theory
 5. Mix difficulties: 30% easy, 40% medium, 30% hard
 
-Output ONLY the JSON array. No explanations."""
+Output ONLY the JSON array. No markdown, no explanations."""
 
     user_prompt = f"""Generate {max_questions} assessment questions from this lesson:
 
 {lesson_text}
 
-Create ALL {max_questions} questions now. Include a variety of:
-- Direct recall questions
-- Application questions (new scenarios)
-- Conceptual questions (why/how/explain)
+Create ALL {max_questions} questions now with workings for calculation questions. Include:
+- Direct recall questions (with workings if calculations involved)
+- Application questions with NEW scenarios (with workings)
+- Conceptual questions (workings = null)
 
-Output the JSON array with {max_questions} questions."""
+Output the JSON array with {max_questions} questions:"""
 
     try:
         # Make the API call
@@ -310,7 +342,6 @@ Output the JSON array with {max_questions} questions."""
             f"{system_prompt}\n\n{user_prompt}",
             model=None,
             max_tokens=4096,
-            #response_format="json",
         )
         
         logger.debug(f"✅ OpenAI call successful")
@@ -324,13 +355,17 @@ Output the JSON array with {max_questions} questions."""
         
         logger.info(f"📦 Extracted {len(parsed)} raw questions")
         
+        # Count questions with workings
+        with_workings = sum(1 for q in parsed if q.get("workings"))
+        logger.info(f"📝 {with_workings}/{len(parsed)} questions have workings")
+        
         validated = _validate_questions_robust(parsed, max_questions, "Generation")
         
         if not validated:
             logger.error("❌ No questions passed validation")
             return _create_fallback_question(lesson_text)
         
-        logger.info(f"✅ Validated {len(validated)} questions")
+        logger.info(f"✅ Validated {len(validated)} questions with workings")
         
         # Apply semantic filtering if enabled
         if enable_semantic_filter and len(validated) > max_questions:
@@ -341,7 +376,9 @@ Output the JSON array with {max_questions} questions."""
         if len(validated) > max_questions:
             validated = validated[:max_questions]
         
-        logger.info(f"✅ Final output: {len(validated)} questions")
+        final_with_workings = sum(1 for q in validated if q.get("workings"))
+        logger.info(f"✅ Final output: {len(validated)} questions ({final_with_workings} with workings)")
+        
         return validated
         
     except Exception as e:
@@ -360,4 +397,5 @@ def _create_fallback_question(lesson_text: str) -> List[Dict[str, Any]]:
         "option_c": None,
         "option_d": None,
         "correct_option": None,
+        "workings": None  # ✅ No workings for conceptual question
     }]

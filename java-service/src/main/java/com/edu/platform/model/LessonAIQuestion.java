@@ -8,6 +8,12 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * ✅ ENHANCED: LessonAIQuestion entity with workings support
+ * 
+ * Represents AI-generated questions from lesson topics.
+ * Now includes step-by-step solution workings for calculation-based questions.
+ */
 @Entity
 @Table(name = "lesson_questions", schema = "ai")
 @Getter
@@ -26,7 +32,6 @@ public class LessonAIQuestion {
     @JoinColumn(name = "lesson_id", nullable = false)
     private LessonAIResult lessonAIResult;
 
-    // ✅ REMOVE @Lob and @Column(columnDefinition = "TEXT")
     @Column(name = "question_text", nullable = false)
     private String questionText;
 
@@ -36,11 +41,11 @@ public class LessonAIQuestion {
     @Column(name = "max_score")
     private Integer maxScore;
 
-    // ✅ REMOVE @Lob
+    // Theory question answer
     @Column(name = "answer_text")
     private String answerText;
 
-    // ✅ REMOVE @Lob for all option columns
+    // MCQ options
     @Column(name = "option_a")
     private String optionA;
 
@@ -56,6 +61,10 @@ public class LessonAIQuestion {
     @Column(name = "correct_option", length = 1)
     private String correctOption;
 
+    // ✅ NEW: Step-by-step workings for calculation-based questions
+    @Column(name = "workings", columnDefinition = "TEXT")
+    private String workings;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -63,4 +72,47 @@ public class LessonAIQuestion {
     @Enumerated(EnumType.STRING)
     @Column(name = "student_type", length = 20)
     private StudentType studentType;
+
+    /**
+     * Check if this is an MCQ question
+     */
+    public boolean isMCQ() {
+        return optionA != null || optionB != null || optionC != null || optionD != null;
+    }
+
+    /**
+     * Check if this is a theory question
+     */
+    public boolean isTheory() {
+        return !isMCQ();
+    }
+
+    /**
+     * Check if this question has workings
+     */
+    public boolean hasWorkings() {
+        return workings != null && !workings.trim().isEmpty();
+    }
+
+    /**
+     * Get the correct answer (for MCQ questions)
+     */
+    public String getCorrectAnswer() {
+        if (!isMCQ() || correctOption == null) {
+            return answerText;
+        }
+
+        switch (correctOption.toUpperCase()) {
+            case "A":
+                return optionA;
+            case "B":
+                return optionB;
+            case "C":
+                return optionC;
+            case "D":
+                return optionD;
+            default:
+                return answerText;
+        }
+    }
 }

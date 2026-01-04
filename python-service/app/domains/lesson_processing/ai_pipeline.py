@@ -198,7 +198,7 @@ def save_generated_questions_json(lesson_topic_id: int, questions: List[Dict[str
         logger.warning(f"⚠️ Failed to save generated questions JSON: {e}")
 
 # ----------------------------
-# Main AI pipeline (FIXED TARGET: 30 QUESTIONS)
+# ✅ ENHANCED: Main AI pipeline with workings support
 # ----------------------------
 def generate_questions_from_lesson(
     lesson_text: Optional[str] = None,
@@ -207,13 +207,15 @@ def generate_questions_from_lesson(
     db: Session = None,
     file_path: Optional[str] = None,
     chunk_size: int = 2500,
-    max_questions_per_chunk: int = 15,  # ✅ Back to reasonable 15 per chunk
-    total_max_questions: int = 30,  # ✅ FIXED: Changed from 150 to 30
+    max_questions_per_chunk: int = 15,
+    total_max_questions: int = 30,
     difficulty_ratios: Dict[str, float] = None,
     semantic_threshold: float = 0.85
 ) -> List[LessonQuestion]:
     """
-    Generate and persist AI-generated questions for a lesson.
+    Generate and persist AI-generated questions with step-by-step workings.
+    
+    ✅ ENHANCED: Now includes workings field for calculation-based questions
     
     Args:
         lesson_ai_result_id: ai.lesson_ai_results.id (for saving questions)
@@ -231,7 +233,7 @@ def generate_questions_from_lesson(
     if not lesson_topic_id:
         raise ValueError("lesson_topic_id is required for reporting progress")
 
-    logger.info(f"🚀 Starting AI pipeline: ai_result_id={lesson_ai_result_id}, lesson_topic_id={lesson_topic_id}")
+    logger.info(f"🚀 Starting AI pipeline with workings: ai_result_id={lesson_ai_result_id}, lesson_topic_id={lesson_topic_id}")
     logger.info(f"🎯 Target: {total_max_questions} questions")
 
     # --- Choose input source ---
@@ -296,7 +298,8 @@ def generate_questions_from_lesson(
             question_text="What is the main idea of this lesson?",
             answer_text=text[:150] + ("..." if len(text) > 150 else ""),
             difficulty="medium",
-            max_score=1
+            max_score=1,
+            workings=None  # ✅ No workings for conceptual question
         )
         db.add(q)
         db.commit()
@@ -305,6 +308,10 @@ def generate_questions_from_lesson(
         return [q]
 
     logger.info(f"🔎 Collected {len(candidates)} raw candidate questions from AI.")
+    
+    # ✅ Log workings statistics
+    with_workings = sum(1 for c in candidates if c.get("workings"))
+    logger.info(f"📝 {with_workings}/{len(candidates)} candidates have workings")
 
     # --- Global semantic dedupe ---
     try:
@@ -322,7 +329,7 @@ def generate_questions_from_lesson(
     logger.info(f"🎯 Selected {len(selected)} questions after difficulty filtering.")
     report_ai_progress(lesson_topic_id, "processing", 85, len(selected))
 
-    # --- Save to DB ---
+    # --- ✅ ENHANCED: Save to DB with workings ---
     saved, seen_texts = [], set()
     for s in selected:
         q_text = (s.get("question_text") or "").strip()
@@ -348,6 +355,9 @@ def generate_questions_from_lesson(
             if s.get(opt_key) is not None and not str(s[opt_key]).strip():
                 s[opt_key] = None
 
+        # ✅ NEW: Extract workings field
+        workings = s.get("workings", None)
+
         db_q = LessonQuestion(
             lesson_id=lesson_ai_result_id,
             question_text=q_text,
@@ -358,7 +368,8 @@ def generate_questions_from_lesson(
             option_b=s.get("option_b"),
             option_c=s.get("option_c"),
             option_d=s.get("option_d"),
-            correct_option=s.get("correct_option")
+            correct_option=s.get("correct_option"),
+            workings=workings  # ✅ SAVE WORKINGS TO DATABASE
         )
         db.add(db_q)
         saved.append(db_q)
@@ -371,7 +382,8 @@ def generate_questions_from_lesson(
             pass
 
     total_questions = len(saved)
-    logger.info(f"🎉 Completed AI pipeline | Total saved: {total_questions}")
+    final_with_workings = sum(1 for q in saved if q.workings)
+    logger.info(f"🎉 Completed AI pipeline | Total saved: {total_questions} ({final_with_workings} with workings)")
     save_generated_questions_json(lesson_topic_id, [sqlalchemy_to_dict(q) for q in saved])
     report_ai_progress(lesson_topic_id, "done", 100, total_questions)
 
