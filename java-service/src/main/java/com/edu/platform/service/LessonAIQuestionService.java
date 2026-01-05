@@ -80,6 +80,7 @@ public class LessonAIQuestionService {
                 .optionC(q.getOptionC())
                 .optionD(q.getOptionD())
                 .correctOption(q.getCorrectOption())
+                .workings(q.getWorkings())
                 .studentType(q.getStudentType())
                 .build()
         ).collect(Collectors.toList());
