@@ -103,12 +103,12 @@ class LessonAIService:
     def process_lesson(self, lesson_id: int, local_file_path: str):
         """
         Handles the full AI pipeline:
-          1. Extract text from file
-          2. Generate summary
-          3. Generate questions (via ai_pipeline)
-          4. Persist all results to DB
-          5. Update status throughout the process
-          
+        1. Extract text from file
+        2. Generate summary
+        3. Generate questions (via ai_pipeline)
+        4. Persist all results to DB
+        5. Update status throughout the process
+        
         Args:
             lesson_id: The ai.lesson_ai_results.id
             local_file_path: Path to the uploaded file
@@ -120,6 +120,35 @@ class LessonAIService:
 
         # ✅ Store the lesson_topic_id for reporting to Java
         lesson_topic_id = lesson.lesson_topic_id
+        
+        # ✅ NEW: Validate that lesson_topic exists in Java BEFORE processing
+        try:
+            import requests
+            java_api_url = "https://haybee-edu-production.up.railway.app/api/v1"
+            
+            response = requests.get(
+                f"{java_api_url}/lesson-topics/{lesson_topic_id}",
+                timeout=10
+            )
+            
+            if response.status_code == 404:
+                error_msg = f"Lesson topic {lesson_topic_id} not found in Java service"
+                logger.error(f"❌ {error_msg}")
+                self.update_lesson_status(lesson_id, "failed", 0, error_msg)
+                raise ValueError(error_msg)
+                
+            if response.status_code != 200:
+                error_msg = f"Failed to verify lesson topic {lesson_topic_id}: HTTP {response.status_code}"
+                logger.error(f"❌ {error_msg}")
+                raise ValueError(error_msg)
+                
+            logger.info(f"✅ Verified lesson topic {lesson_topic_id} exists")
+            
+        except requests.RequestException as e:
+            error_msg = f"Cannot connect to Java service to verify lesson topic: {e}"
+            logger.error(f"❌ {error_msg}")
+            self.update_lesson_status(lesson_id, "failed", 0, error_msg)
+            raise ValueError(error_msg)
 
         try:
             # Step 0: Start processing
