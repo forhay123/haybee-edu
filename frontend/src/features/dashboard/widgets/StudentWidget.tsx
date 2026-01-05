@@ -8,6 +8,8 @@ import { useQuery } from "@tanstack/react-query";
 import axiosInstance from "../../../api/axios";
 import { BookOpen, Clock, CheckCircle, Video, TrendingUp, Calendar, PlayCircle, Eye, Users, AlertCircle, Award, CheckCircle2, XCircle } from "lucide-react";
 import { format, isValid, parseISO, startOfWeek, endOfWeek } from "date-fns";
+import ProfilePendingScreen from "../../individual/components/student/ProfilePendingScreen";
+import { useAuth } from "../../auth/useAuth";
 
 // ----------------------
 // INTERFACES
@@ -82,6 +84,7 @@ const formatDurationShort = (seconds: number | undefined | null): string => {
 // ----------------------
 const StudentWidget: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: dailyProgress, isLoading: loadingProgress, isError } = useMyDailyProgress();
   const { data: profile, isLoading: loadingProfile } = useMyProfile({ enabled: true });
   
@@ -236,13 +239,8 @@ const StudentWidget: React.FC = () => {
   }
 
   if (!profile) {
-    return (
-      <div className="p-8 bg-white rounded-xl shadow-sm border border-yellow-200 h-40 flex items-center justify-center">
-        <div className="text-yellow-600 text-sm">
-          ⚠️ Unable to load student profile. Please try refreshing the page.
-        </div>
-      </div>
-    );
+    // Show the pending screen if profile is not found
+    return <ProfilePendingScreen userEmail={user?.email} />;
   }
 
   if (isIndividualStudent) {
@@ -343,8 +341,177 @@ const StudentWidget: React.FC = () => {
           </div>
         ) : null}
 
-        {/* CONTINUE WITH OTHER SECTIONS (Videos, Sessions, etc.) */}
-        {/* ... (Keep the rest of the component sections below) ... */}
+        {/* CONTINUE WATCHING */}
+        {loadingHistory ? (
+          <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm border border-blue-200">
+            <div className="animate-pulse space-y-3">
+              <div className="h-6 bg-blue-200 rounded w-1/2"></div>
+              <div className="h-24 bg-blue-100 rounded"></div>
+            </div>
+          </div>
+        ) : incompleteVideos.length > 0 ? (
+          <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm border border-blue-200 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Video className="w-5 h-5 text-blue-600" />
+                Continue Watching
+              </h3>
+              <Link to="/videos" className="text-sm text-blue-600 hover:underline font-semibold">
+                View all
+              </Link>
+            </div>
+
+            <div className="space-y-4">
+              {incompleteVideos.map((item: any) => {
+                const completionPercentage = item.completionPercentage || 0;
+                return (
+                  <Link
+                    key={item.id}
+                    to={`/videos/${item.videoLessonId}`}
+                    className="block p-4 bg-white/60 rounded-xl border border-blue-200/50 hover:border-blue-400 transition-all group"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="flex-shrink-0 w-32 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center border border-blue-200/50 group-hover:scale-105 transition-transform">
+                        <PlayCircle className="w-10 h-10 text-blue-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 mb-2 truncate">
+                          Video Lesson #{item.videoLessonId}
+                        </p>
+                        <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                          <div
+                            className="bg-blue-600 h-2 rounded-full transition-all"
+                            style={{ width: `${completionPercentage}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-blue-600">
+                            {Math.round(completionPercentage)}% complete
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {formatDurationShort(item.durationSeconds)} total
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {/* RECOMMENDED VIDEOS */}
+        {loadingVideos ? (
+          <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-sm border border-green-200">
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 bg-green-200 rounded w-1/2"></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="h-32 bg-green-100 rounded-xl"></div>
+                <div className="h-32 bg-green-100 rounded-xl"></div>
+              </div>
+            </div>
+          </div>
+        ) : recommendedVideos.length > 0 ? (
+          <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-sm border border-green-200 hover:shadow-md transition-shadow">
+            
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-green-600" />
+                Recommended For You
+              </h3>
+              <Link to="/videos" className="text-sm text-green-600 hover:underline font-semibold">
+                Explore more
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"> 
+              {recommendedVideos.map(video => {
+                const durationDisplay = formatDurationShort(video.durationSeconds);
+
+                return (
+                  <Link
+                    key={video.id}
+                    to={`/videos/${video.id}`}
+                    className="block bg-white rounded-xl border border-green-200 hover:border-green-400 hover:shadow-lg transition-all duration-300 overflow-hidden"
+                  >
+                    <div className="relative w-full h-36 bg-gradient-to-br from-green-100 to-emerald-100 flex items-center justify-center">
+                      <PlayCircle className="w-12 h-12 text-green-600 absolute z-10 opacity-80" />
+                    </div>
+
+                    <div className="p-4 flex flex-col h-full">
+                      <h4 className="font-semibold text-gray-900 line-clamp-2 text-base leading-snug mb-2 flex-shrink-0">
+                        {video.title}
+                      </h4>
+
+                      <div className="space-y-1.5 text-sm text-gray-600 flex-1">
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-green-600" />
+                          <span className="truncate">{video.subjectName}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-green-600" />
+                          <span className="truncate">{video.teacherName}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs text-gray-500 mt-3 pt-2 border-t border-gray-200 flex-shrink-0">
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-green-600" />
+                          {durationDisplay}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <Eye className="w-3.5 h-3.5 text-green-600" />
+                          {video.totalViews} views
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {/* QUICK ACTIONS */}
+        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Link
+              to="/individual/dashboard"
+              className="flex flex-col items-center justify-center gap-2 p-4 bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100 transition font-semibold border border-blue-200"
+            >
+              <BookOpen className="w-6 h-6" />
+              <span className="text-sm">My Dashboard</span>
+            </Link>
+
+            <Link
+              to="/videos"
+              className="flex flex-col items-center justify-center gap-2 p-4 bg-green-50 text-green-700 rounded-xl hover:bg-green-100 transition font-semibold border border-green-200"
+            >
+              <Video className="w-6 h-6" />
+              <span className="text-sm">Video Library</span>
+            </Link>
+
+            <Link
+              to="/live-sessions"
+              className="flex flex-col items-center justify-center gap-2 p-4 bg-purple-50 text-purple-700 rounded-xl hover:bg-purple-100 transition font-semibold border border-purple-200"
+            >
+              <Users className="w-6 h-6" />
+              <span className="text-sm">Live Classes</span>
+            </Link>
+
+            <Link
+              to="/assessments/student"
+              className="flex flex-col items-center justify-center gap-2 p-4 bg-orange-50 text-orange-700 rounded-xl hover:bg-orange-100 transition font-semibold border border-orange-200"
+            >
+              <CheckCircle className="w-6 h-6" />
+              <span className="text-sm">Assessments</span>
+            </Link>
+          </div>
+        </div>
+
       </div>
     );
   }
