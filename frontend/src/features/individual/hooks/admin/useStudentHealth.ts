@@ -1,18 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import axiosInstance from "@/api/axios";
+import { StudentHealthData } from "../../types/individualTypes";
 
-interface StudentHealthData {
-  success: boolean;
-  studentId: number;
-  orphanedProgress: number;
-  schedulesWithoutProgress: number;
-  missingAssessments: number;
-  missingWindows: number;
-  needsRepair: boolean;
-  isHealthy: boolean;
-  totalIssues: number;
-}
-
+/**
+ * Fetch health check data for a single student
+ */
 export const useStudentHealth = (studentId: number | null) => {
   return useQuery({
     queryKey: ["student-health", studentId],
@@ -32,7 +24,9 @@ export const useStudentHealth = (studentId: number | null) => {
   });
 };
 
-// Batch hook for multiple students
+/**
+ * Batch hook for multiple students
+ */
 export const useMultipleStudentHealth = (studentIds: number[]) => {
   return useQuery({
     queryKey: ["multiple-student-health", studentIds],

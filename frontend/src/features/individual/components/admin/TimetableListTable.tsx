@@ -2,21 +2,7 @@
 
 import React, { useState } from "react";
 import { FileText, Eye, Trash2, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle, Wrench, RotateCcw } from "lucide-react";
-import { IndividualTimetableDto } from "../../types/individualTypes";
-import { getStatusColor, formatFileSize } from "../../types/individualTypes";
-
-interface StudentHealthData {
-  success: boolean;
-  studentId: number;
-  orphanedProgress: number;
-  schedulesWithoutProgress: number;
-  schedulesWithoutLessonTopics: number;
-  missingAssessments: number;
-  missingWindows: number;
-  needsRepair: boolean;
-  isHealthy: boolean;
-  totalIssues: number;
-}
+import { IndividualTimetableDto, StudentHealthData, getStatusColor, formatFileSize } from "../../types/individualTypes";
 
 interface TimetableListTableProps {
   timetables: IndividualTimetableDto[];

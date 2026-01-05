@@ -421,6 +421,27 @@ export interface TeacherDashboardStats {
   failedTimetables: number;
 }
 
+
+// ============================================================
+// STUDENT HEALTH & MAINTENANCE TYPES
+// ============================================================
+
+/**
+ * Student health check data for maintenance operations
+ */
+export interface StudentHealthData {
+  success: boolean;
+  studentId: number;
+  orphanedProgress: number;
+  schedulesWithoutProgress: number;
+  schedulesWithoutLessonTopics: number; // ✅ NEW: Critical field!
+  missingAssessments: number;
+  missingWindows: number;
+  needsRepair: boolean;
+  isHealthy: boolean;
+  totalIssues: number;
+}
+
 // ============================================================
 // HELPER FUNCTIONS
 // ============================================================
