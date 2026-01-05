@@ -121,34 +121,8 @@ class LessonAIService:
         # ✅ Store the lesson_topic_id for reporting to Java
         lesson_topic_id = lesson.lesson_topic_id
         
-        # ✅ NEW: Validate that lesson_topic exists in Java BEFORE processing
-        try:
-            import requests
-            java_api_url = "https://haybee-edu-production.up.railway.app/api/v1"
-            
-            response = requests.get(
-                f"{java_api_url}/lesson-topics/{lesson_topic_id}",
-                timeout=10
-            )
-            
-            if response.status_code == 404:
-                error_msg = f"Lesson topic {lesson_topic_id} not found in Java service"
-                logger.error(f"❌ {error_msg}")
-                self.update_lesson_status(lesson_id, "failed", 0, error_msg)
-                raise ValueError(error_msg)
-                
-            if response.status_code != 200:
-                error_msg = f"Failed to verify lesson topic {lesson_topic_id}: HTTP {response.status_code}"
-                logger.error(f"❌ {error_msg}")
-                raise ValueError(error_msg)
-                
-            logger.info(f"✅ Verified lesson topic {lesson_topic_id} exists")
-            
-        except requests.RequestException as e:
-            error_msg = f"Cannot connect to Java service to verify lesson topic: {e}"
-            logger.error(f"❌ {error_msg}")
-            self.update_lesson_status(lesson_id, "failed", 0, error_msg)
-            raise ValueError(error_msg)
+        # ✅ REMOVED: Validation - Java already validates lesson_topic_id when creating the lesson
+        # No need to validate again here, which was causing 403 errors
 
         try:
             # Step 0: Start processing
@@ -196,10 +170,10 @@ class LessonAIService:
 
             # Step 3: Generate questions (delegated to ai_pipeline)
             logger.info(f"🧠 Generating AI questions...")
-            # ✅ Pass BOTH IDs: lesson_id for DB, lesson_topic_id for reporting
+            # ✅ FIXED: Use lesson_id parameter instead of lesson.id to avoid ObjectDeletedError
             questions_data = ai_pipeline.generate_questions_from_lesson(
                 lesson_text=extracted_text,
-                lesson_ai_result_id=lesson.id,  # ✅ For saving to DB
+                lesson_ai_result_id=lesson_id,  # ✅ FIXED: Use parameter, not lesson.id
                 lesson_topic_id=lesson_topic_id,  # ✅ For reporting to Java
                 db=self.db,
             )
