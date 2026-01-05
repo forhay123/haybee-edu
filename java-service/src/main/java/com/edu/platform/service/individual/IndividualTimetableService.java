@@ -438,25 +438,84 @@ public class IndividualTimetableService {
     
     /**
      * Bulk delete timetables (ADMIN ONLY)
+     * UPDATED: Better error handling and null-safe file deletion
      */
     @Transactional
     public BulkOperationResultDto bulkDelete(List<Long> ids) {
         log.info("🗑️ Admin: Bulk deleting {} timetables", ids.size());
         
+        if (ids == null || ids.isEmpty()) {
+            log.warn("⚠️ Empty ID list provided for bulk delete");
+            return BulkOperationResultDto.builder()
+                .successCount(0)
+                .failedCount(0)
+                .failedIds(new ArrayList<>())
+                .build();
+        }
+        
         int successCount = 0;
         List<Long> failedIds = new ArrayList<>();
+        Map<Long, String> failureReasons = new HashMap<>();
         
         for (Long id : ids) {
             try {
-                deleteTimetable(id);
+                log.debug("🗑️ Attempting to delete timetable {}", id);
+                
+                // Check if timetable exists
+                Optional<IndividualStudentTimetable> timetableOpt = timetableRepository.findById(id);
+                if (timetableOpt.isEmpty()) {
+                    log.warn("⚠️ Timetable {} not found", id);
+                    failedIds.add(id);
+                    failureReasons.put(id, "Timetable not found");
+                    continue;
+                }
+                
+                IndividualStudentTimetable timetable = timetableOpt.get();
+                
+                // Delete associated schedules first (to avoid FK constraint issues)
+                try {
+                    scheduleRepository.deleteByIndividualTimetableId(id);
+                    log.debug("  ✅ Deleted schedules for timetable {}", id);
+                } catch (Exception e) {
+                    log.warn("  ⚠️ Failed to delete schedules for timetable {}: {}", id, e.getMessage());
+                    // Continue anyway - schedules might not exist
+                }
+                
+                // Delete physical file if exists (NULL-SAFE for manual timetables)
+                if (timetable.getFileUrl() != null && !timetable.getFileUrl().trim().isEmpty()) {
+                    try {
+                        Path filePath = Paths.get(uploadBasePath, timetable.getFileUrl());
+                        boolean deleted = Files.deleteIfExists(filePath);
+                        if (deleted) {
+                            log.debug("  ✅ Deleted file: {}", filePath);
+                        } else {
+                            log.debug("  ℹ️ File not found (already deleted): {}", filePath);
+                        }
+                    } catch (IOException e) {
+                        log.warn("  ⚠️ Failed to delete file for timetable {}: {}", id, e.getMessage());
+                        // Continue anyway - file deletion is not critical
+                    }
+                } else {
+                    log.debug("  ℹ️ No file to delete (manual timetable or NULL file_url)");
+                }
+                
+                // Delete timetable record
+                timetableRepository.delete(timetable);
                 successCount++;
+                log.debug("  ✅ Deleted timetable {}", id);
+                
             } catch (Exception e) {
-                log.error("❌ Failed to delete timetable {}: {}", id, e.getMessage());
+                log.error("❌ Failed to delete timetable {}: {}", id, e.getMessage(), e);
                 failedIds.add(id);
+                failureReasons.put(id, e.getMessage());
             }
         }
         
         log.info("✅ Bulk delete completed: {} success, {} failed", successCount, failedIds.size());
+        
+        if (!failedIds.isEmpty()) {
+            log.warn("⚠️ Failed deletions: {}", failureReasons);
+        }
         
         return BulkOperationResultDto.builder()
             .successCount(successCount)
