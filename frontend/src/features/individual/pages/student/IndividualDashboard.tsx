@@ -39,6 +39,7 @@ import { NotificationIcon } from "../../../notifications/components/Notification
 
 import { useLiveSessions } from "../../../live/hooks/useLiveSessions";
 import { useGetStudentSubjects } from "../../../subjects/hooks/useSubjects";
+import ProfilePendingScreen from "../../components/student/ProfilePendingScreen";
 
 type Tab = "schedule" | "liveSessions" | "uploads";
 
@@ -317,7 +318,20 @@ const IndividualDashboard: React.FC = () => {
     );
   }
 
+  // ✅ NEW: Show friendly pending screen for new users without profile
   if (profileError || !profile) {
+    // Check if it's a "profile not found" error (new user waiting for admin setup)
+    const isProfileNotFound =
+      profileError?.message?.toLowerCase().includes('not found') ||
+      profileError?.message?.toLowerCase().includes('no profile') ||
+      profileError?.response?.status === 404 ||
+      !profile;
+
+    if (isProfileNotFound) {
+      return <ProfilePendingScreen userEmail={user?.email} />;
+    }
+
+    // For other errors, show the error screen
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md text-center">
