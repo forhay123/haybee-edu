@@ -1,5 +1,5 @@
-// ✅ FIXED: IndividualDashboard.tsx
-// Shows only upload section for new students without timetable
+// ✅ COMPLETE: IndividualDashboard.tsx
+// Supports: Upload timetable OR Manual subject selection
 
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -41,7 +41,12 @@ import { useLiveSessions } from "../../../live/hooks/useLiveSessions";
 import { useGetStudentSubjects } from "../../../subjects/hooks/useSubjects";
 import ProfilePendingScreen from "../../components/student/ProfilePendingScreen";
 
+// ✅ NEW IMPORTS
+import TimetableSetupChoice from "../../components/TimetableSetupChoice";
+import SubjectSelectionModal from "../../components/SubjectSelectionModal";
+
 type Tab = "schedule" | "liveSessions" | "uploads";
+type SetupMode = "choice" | "upload" | "manual"; // ✅ NEW: Track which mode user chose
 
 const getDayDisplayName = (day: string): string => {
   const days: Record<string, string> = {
@@ -63,6 +68,10 @@ const IndividualDashboard: React.FC = () => {
   const [showWeeklyScheduleModal, setShowWeeklyScheduleModal] = useState(false);
   const uploadsTabRef = React.useRef<HTMLDivElement>(null);
 
+  // ✅ NEW: Track setup mode
+  const [setupMode, setSetupMode] = useState<SetupMode>("choice");
+  const [showSubjectModal, setShowSubjectModal] = useState(false);
+
   const { data: profile, isLoading: loadingProfile, error: profileError } =
     useMyProfile({ enabled: true });
 
@@ -83,6 +92,7 @@ const IndividualDashboard: React.FC = () => {
     totalProcessing,
     processingTimetables,
     processingSchemes,
+    refetch: refetchOverview,
   } = useStudentProcessingStatus(profile?.id || null);
 
   const latestTimetable = overview?.timetables.find(
@@ -307,6 +317,24 @@ const IndividualDashboard: React.FC = () => {
   const { data: recentNotifications = [] } = useRecentNotifications(true);
   const topNotifications = recentNotifications.slice(0, 5);
 
+  // ✅ NEW: Handlers for setup choice
+  const handleChooseUpload = () => {
+    setSetupMode("upload");
+  };
+
+  const handleChooseManual = () => {
+    setShowSubjectModal(true);
+  };
+
+  const handleManualSuccess = () => {
+    // Refresh overview to see new timetable
+    refetchOverview();
+    refetchWeek();
+    refetchToday();
+    setShowSubjectModal(false);
+    setSetupMode("choice"); // Reset to choice for consistency
+  };
+
   if (loadingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -318,9 +346,8 @@ const IndividualDashboard: React.FC = () => {
     );
   }
 
-  // ✅ NEW: Show friendly pending screen for new users without profile
+  // ✅ Show friendly pending screen for new users without profile
   if (profileError || !profile) {
-    // Check if it's a "profile not found" error (new user waiting for admin setup)
     const isProfileNotFound =
       profileError?.message?.toLowerCase().includes('not found') ||
       profileError?.message?.toLowerCase().includes('no profile') ||
@@ -331,7 +358,6 @@ const IndividualDashboard: React.FC = () => {
       return <ProfilePendingScreen userEmail={user?.email} />;
     }
 
-    // For other errors, show the error screen
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md text-center">
@@ -343,90 +369,123 @@ const IndividualDashboard: React.FC = () => {
     );
   }
 
-  // ✅ NEW STUDENT VIEW: Show only welcome banner and upload section
+  // ✅ NEW STUDENT VIEW: Show choice screen or upload section
   if (isNewStudent) {
-    return (
-      <div className="space-y-6 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* NEW STUDENT BANNER */}
-        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-xl shadow-lg p-8 text-white overflow-hidden relative">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
-          <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/10 rounded-full -ml-20 -mb-20"></div>
+    // Show setup choice screen
+    if (setupMode === "choice") {
+      return (
+        <>
+          <TimetableSetupChoice
+            onChooseUpload={handleChooseUpload}
+            onChooseManual={handleChooseManual}
+          />
 
-          <div className="relative z-10">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="bg-white/20 p-4 rounded-lg backdrop-blur-sm flex-shrink-0">
-                <Zap className="w-8 h-8 text-white" />
-              </div>
-              <div className="flex-1">
-                <h2 className="text-3xl md:text-4xl font-bold mb-2">Welcome to Your Learning Portal! 🎓</h2>
-                <p className="text-white/90 text-xl">Let's get you started in just 60 seconds</p>
-              </div>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 mb-6 border border-white/20">
-              <p className="text-white text-lg mb-4 font-semibold">Here's what happens when you upload your timetable:</p>
-              <ul className="space-y-3 text-white/95">
-                <li className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
-                  <span className="text-base">Our AI automatically extracts all your subjects and class times</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
-                  <span className="text-base">Your personalized weekly schedule is generated instantly</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
-                  <span className="text-base">Track your progress and manage your study time from one place</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="flex items-center gap-2 text-white/90 text-sm mb-6 bg-white/10 backdrop-blur-sm rounded-lg p-4">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span>Processing takes just a few minutes. You'll be notified when your schedule is ready!</span>
-            </div>
-          </div>
-        </div>
-
-        {/* UPLOAD SECTION */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
-            <div className="flex items-center gap-3">
-              <Upload className="w-6 h-6" />
-              <div>
-                <h3 className="text-xl font-semibold">Upload Your Timetable</h3>
-                <p className="text-indigo-100 text-sm mt-1">Get started by uploading your school timetable</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6">
-            <TimetableUpload 
-              studentProfileId={profile.id!} 
-              isAdmin={isAdmin}
+          {/* Subject Selection Modal */}
+          {showSubjectModal && (
+            <SubjectSelectionModal
+              studentProfileId={profile.id!}
+              onClose={() => setShowSubjectModal(false)}
+              onSuccess={handleManualSuccess}
             />
-          </div>
-        </div>
+          )}
+        </>
+      );
+    }
 
-        {/* HELP SECTION */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-blue-900 mb-2">Getting Started Tips</h3>
-              <ul className="text-sm text-blue-800 space-y-2">
-                <li>📅 <strong>Accepted formats:</strong> PDF, Excel, Word, or Image files</li>
-                <li>📝 <strong>File size limit:</strong> Up to 10MB</li>
-                <li>🤖 <strong>AI Processing:</strong> Automatic extraction of subjects, times, and days</li>
-                <li>⏰ <strong>Processing time:</strong> Usually 2-5 minutes</li>
-                <li>🔔 <strong>Notifications:</strong> You'll be notified when processing is complete</li>
-                <li>📚 <strong>Next step:</strong> Upload scheme of work for each subject to see lesson topics</li>
-              </ul>
+    // Show upload section (if user chose upload)
+    if (setupMode === "upload") {
+      return (
+        <div className="space-y-6 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Back button */}
+          <button
+            onClick={() => setSetupMode("choice")}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
+          >
+            <ArrowRight className="w-4 h-4 rotate-180" />
+            <span>Back to setup options</span>
+          </button>
+
+          {/* NEW STUDENT BANNER */}
+          <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-xl shadow-lg p-8 text-white overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+            <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/10 rounded-full -ml-20 -mb-20"></div>
+
+            <div className="relative z-10">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="bg-white/20 p-4 rounded-lg backdrop-blur-sm flex-shrink-0">
+                  <Zap className="w-8 h-8 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-3xl md:text-4xl font-bold mb-2">Upload Your Timetable 📄</h2>
+                  <p className="text-white/90 text-xl">AI will extract everything automatically</p>
+                </div>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 mb-6 border border-white/20">
+                <p className="text-white text-lg mb-4 font-semibold">Here's what happens next:</p>
+                <ul className="space-y-3 text-white/95">
+                  <li className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
+                    <span className="text-base">Our AI automatically extracts all your subjects and class times</span>
+                  </li>
+                  <li className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
+                    <span className="text-base">Your personalized weekly schedule is generated instantly</span>
+                  </li>
+                  <li className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
+                    <span className="text-base">Track your progress and manage your study time from one place</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="flex items-center gap-2 text-white/90 text-sm mb-6 bg-white/10 backdrop-blur-sm rounded-lg p-4">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span>Processing takes just a few minutes. You'll be notified when your schedule is ready!</span>
+              </div>
+            </div>
+          </div>
+
+          {/* UPLOAD SECTION */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+              <div className="flex items-center gap-3">
+                <Upload className="w-6 h-6" />
+                <div>
+                  <h3 className="text-xl font-semibold">Upload Your Timetable</h3>
+                  <p className="text-indigo-100 text-sm mt-1">Get started by uploading your school timetable</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <TimetableUpload 
+                studentProfileId={profile.id!} 
+                isAdmin={isAdmin}
+              />
+            </div>
+          </div>
+
+          {/* HELP SECTION */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-blue-900 mb-2">Getting Started Tips</h3>
+                <ul className="text-sm text-blue-800 space-y-2">
+                  <li>📅 <strong>Accepted formats:</strong> PDF, Excel, Word, or Image files</li>
+                  <li>📝 <strong>File size limit:</strong> Up to 10MB</li>
+                  <li>🤖 <strong>AI Processing:</strong> Automatic extraction of subjects, times, and days</li>
+                  <li>⏰ <strong>Processing time:</strong> Usually 2-5 minutes</li>
+                  <li>🔔 <strong>Notifications:</strong> You'll be notified when processing is complete</li>
+                  <li>📚 <strong>Next step:</strong> Upload scheme of work for each subject to see lesson topics</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    );
+      );
+    }
   }
 
   // ✅ EXISTING STUDENT VIEW: Show full dashboard

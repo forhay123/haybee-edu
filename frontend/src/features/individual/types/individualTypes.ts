@@ -244,6 +244,73 @@ export interface TimeWindow {
   endTime: string;   // HH:mm format
 }
 
+// ============================================================
+// MANUAL SUBJECT SELECTION TYPES
+// ADD THIS SECTION TO THE END OF:
+// frontend/src/features/individual/types/individualTypes.ts
+// ============================================================
+
+/**
+ * Request to create manual timetable from selected subjects
+ */
+export interface ManualTimetableCreationRequest {
+  studentProfileId: number;
+  subjectIds: number[];
+  academicYear?: string;
+}
+
+/**
+ * Response after creating manual timetable
+ */
+export interface ManualTimetableCreationResponse {
+  success: boolean;
+  timetableId: number;
+  schedulesCreated: number;
+  message: string;
+  weekStart?: string;
+  weekEnd?: string;
+}
+
+/**
+ * Subject option for manual selection
+ * Extends the existing SubjectOption with additional metadata
+ */
+export interface ManualSubjectOption extends SubjectOption {
+  description?: string;
+  classNames?: string[]; // Which classes this subject belongs to
+  departmentName?: string;
+  isCore?: boolean; // Is it a core/compulsory subject
+}
+
+/**
+ * Validation result for subject selection
+ */
+export interface SubjectSelectionValidation {
+  isValid: boolean;
+  error?: string;
+  warning?: string;
+}
+
+/**
+ * Configuration for manual timetable generation
+ */
+export interface ManualTimetableConfig {
+  minSubjects: number;  // Default: 4
+  maxSubjects: number;  // Default: 10
+  defaultAcademicYear: string;
+  allowDuplicates: boolean;
+}
+
+/**
+ * Default configuration for manual subject selection
+ */
+export const DEFAULT_MANUAL_CONFIG: ManualTimetableConfig = {
+  minSubjects: 4,
+  maxSubjects: 10,
+  defaultAcademicYear: '2024/2025',
+  allowDuplicates: false,
+};
+
 /**
  * Default time windows for INDIVIDUAL students
  * Mon-Fri: 4pm-6pm

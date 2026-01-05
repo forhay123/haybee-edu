@@ -13,6 +13,8 @@ import {
   IndividualDailyScheduleDto,
   TimetableSystemStatsDto,
   BulkOperationResultDto,
+  ManualTimetableCreationRequest,     // ← ADD THIS
+  ManualTimetableCreationResponse,
 } from "../types/individualTypes";
 
 const BASE_URL = "/individual";
@@ -363,6 +365,45 @@ export const schemeApi = {
   },
 };
 
+
+
+/**
+ * Manual Subject Selection API
+ * For students who want to choose subjects instead of uploading timetable
+ */
+export const manualSubjectApi = {
+  /**
+   * Get available subjects for a student based on their class/department
+   * 
+   * @param studentProfileId - Student's profile ID
+   * @returns List of subjects available for selection
+   */
+  getAvailableSubjects: async (studentProfileId: number): Promise<SubjectOption[]> => {
+    const res = await axios.get(
+      `${BASE_URL}/manual-selection/student/${studentProfileId}/available-subjects`
+    );
+    return res.data;
+  },
+
+  /**
+   * Create a manual timetable from selected subjects
+   * Generates virtual timetable and weekly schedules
+   * 
+   * @param request - Contains studentProfileId and selected subject IDs
+   * @returns Response with created timetable and schedule info
+   */
+  createManualTimetable: async (
+    request: ManualTimetableCreationRequest
+  ): Promise<ManualTimetableCreationResponse> => {
+    const res = await axios.post(
+      `${BASE_URL}/manual-selection/create`,
+      request
+    );
+    return res.data;
+  },
+};
+
+
 // ============================================================
 // STUDENT OVERVIEW API
 // ============================================================
@@ -459,3 +500,4 @@ export const scheduleApi = {
     return res.data;
   },
 };
+
