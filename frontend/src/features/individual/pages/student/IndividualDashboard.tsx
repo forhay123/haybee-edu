@@ -1,5 +1,5 @@
 // ✅ FIXED: IndividualDashboard.tsx
-// All schedule displays now use GENERATED schedules from API
+// Shows only upload section for new students without timetable
 
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -88,15 +88,19 @@ const IndividualDashboard: React.FC = () => {
     (t) => t.processingStatus === "COMPLETED"
   );
 
-  // ✅ FIXED: Fetch CURRENT WEEK's generated schedules
+  // ✅ Check if student has ANY timetable (including processing ones)
+  const hasTimetable = overview?.timetables && overview.timetables.length > 0;
+  const hasCompletedTimetable = !!latestTimetable;
+  const isNewStudent = !hasProcessingItems && !overviewLoading && overview && !hasTimetable;
+
+  // ✅ FIXED: Fetch CURRENT WEEK's generated schedules (only if completed timetable exists)
   const { data: weekSchedules = [], refetch: refetchWeek } = useQuery({
     queryKey: ['week-generated-schedule', profile?.id],
     queryFn: async () => {
       if (!profile?.id) return [];
       
-      // Get current week dates (Sunday to Saturday)
       const now = new Date();
-      const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const dayOfWeek = now.getDay();
       const sunday = new Date(now);
       sunday.setDate(now.getDate() - dayOfWeek);
       sunday.setHours(0, 0, 0, 0);
@@ -114,11 +118,11 @@ const IndividualDashboard: React.FC = () => {
       );
       return res.data;
     },
-    enabled: !!profile?.id && !!latestTimetable,
+    enabled: !!profile?.id && hasCompletedTimetable,
     refetchInterval: 30000,
   });
 
-  // ✅ FIXED: Fetch TODAY's generated schedule
+  // ✅ FIXED: Fetch TODAY's generated schedule (only if completed timetable exists)
   const { data: todayGeneratedSchedule = [], refetch: refetchToday } = useQuery({
     queryKey: ['today-generated-schedule', profile?.id],
     queryFn: async () => {
@@ -131,11 +135,11 @@ const IndividualDashboard: React.FC = () => {
       );
       return res.data;
     },
-    enabled: !!profile?.id && !!latestTimetable,
+    enabled: !!profile?.id && hasCompletedTimetable,
     refetchInterval: 30000,
   });
 
-  // ✅ FIXED: Fetch TOMORROW's generated schedule
+  // ✅ FIXED: Fetch TOMORROW's generated schedule (only if completed timetable exists)
   const { data: tomorrowGeneratedSchedule = [] } = useQuery({
     queryKey: ['tomorrow-generated-schedule', profile?.id],
     queryFn: async () => {
@@ -149,11 +153,11 @@ const IndividualDashboard: React.FC = () => {
       );
       return res.data;
     },
-    enabled: !!profile?.id && !!latestTimetable,
+    enabled: !!profile?.id && hasCompletedTimetable,
     refetchInterval: 30000,
   });
 
-  // ✅ FIXED: Calculate weekly stats from GENERATED schedules
+  // ✅ Calculate stats
   const weeklyStats = useMemo(() => {
     const subjectDistribution: Record<string, number> = {};
     
@@ -165,11 +169,9 @@ const IndividualDashboard: React.FC = () => {
     return { subjectDistribution };
   }, [weekSchedules]);
 
-  // ✅ FIXED: Get next class from GENERATED schedules
   const nextClass = useMemo(() => {
     const now = new Date();
     
-    // Filter to future periods only
     const futurePeriods = weekSchedules.filter((schedule: any) => {
       const scheduleDate = new Date(schedule.scheduledDate);
       const [hours, minutes] = schedule.startTime.split(':');
@@ -179,7 +181,6 @@ const IndividualDashboard: React.FC = () => {
 
     if (futurePeriods.length === 0) return null;
 
-    // Sort by date and time
     const sorted = futurePeriods.sort((a: any, b: any) => {
       const dateA = new Date(a.scheduledDate + 'T' + a.startTime);
       const dateB = new Date(b.scheduledDate + 'T' + b.startTime);
@@ -187,7 +188,6 @@ const IndividualDashboard: React.FC = () => {
     });
 
     const next = sorted[0];
-    const scheduleDate = new Date(next.scheduledDate);
     
     return {
       subjectName: next.subjectName,
@@ -198,7 +198,6 @@ const IndividualDashboard: React.FC = () => {
     };
   }, [weekSchedules]);
 
-  // ✅ FIXED: Today's schedule from GENERATED data
   const todaySchedule = useMemo(() => {
     if (!todayGeneratedSchedule || todayGeneratedSchedule.length === 0) return null;
     
@@ -220,7 +219,6 @@ const IndividualDashboard: React.FC = () => {
     };
   }, [todayGeneratedSchedule]);
 
-  // ✅ FIXED: Tomorrow's schedule from GENERATED data
   const tomorrowSchedule = useMemo(() => {
     if (!tomorrowGeneratedSchedule || tomorrowGeneratedSchedule.length === 0) return null;
     
@@ -245,7 +243,6 @@ const IndividualDashboard: React.FC = () => {
     };
   }, [tomorrowGeneratedSchedule]);
 
-  // ✅ FIXED: Weekly schedule modal data
   const weeklyScheduleDisplay = useMemo(() => {
     const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
     
@@ -309,9 +306,6 @@ const IndividualDashboard: React.FC = () => {
   const { data: recentNotifications = [] } = useRecentNotifications(true);
   const topNotifications = recentNotifications.slice(0, 5);
 
-  const hasTimetable = overview?.timetables && overview.timetables.length > 0;
-  const isNewStudent = !hasProcessingItems && !overviewLoading && overview && !hasTimetable;
-
   if (loadingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -335,6 +329,93 @@ const IndividualDashboard: React.FC = () => {
     );
   }
 
+  // ✅ NEW STUDENT VIEW: Show only welcome banner and upload section
+  if (isNewStudent) {
+    return (
+      <div className="space-y-6 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* NEW STUDENT BANNER */}
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-xl shadow-lg p-8 text-white overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+          <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/10 rounded-full -ml-20 -mb-20"></div>
+
+          <div className="relative z-10">
+            <div className="flex items-start gap-4 mb-6">
+              <div className="bg-white/20 p-4 rounded-lg backdrop-blur-sm flex-shrink-0">
+                <Zap className="w-8 h-8 text-white" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-3xl md:text-4xl font-bold mb-2">Welcome to Your Learning Portal! 🎓</h2>
+                <p className="text-white/90 text-xl">Let's get you started in just 60 seconds</p>
+              </div>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 mb-6 border border-white/20">
+              <p className="text-white text-lg mb-4 font-semibold">Here's what happens when you upload your timetable:</p>
+              <ul className="space-y-3 text-white/95">
+                <li className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
+                  <span className="text-base">Our AI automatically extracts all your subjects and class times</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
+                  <span className="text-base">Your personalized weekly schedule is generated instantly</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
+                  <span className="text-base">Track your progress and manage your study time from one place</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="flex items-center gap-2 text-white/90 text-sm mb-6 bg-white/10 backdrop-blur-sm rounded-lg p-4">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span>Processing takes just a few minutes. You'll be notified when your schedule is ready!</span>
+            </div>
+          </div>
+        </div>
+
+        {/* UPLOAD SECTION */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+            <div className="flex items-center gap-3">
+              <Upload className="w-6 h-6" />
+              <div>
+                <h3 className="text-xl font-semibold">Upload Your Timetable</h3>
+                <p className="text-indigo-100 text-sm mt-1">Get started by uploading your school timetable</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <TimetableUpload 
+              studentProfileId={profile.id!} 
+              isAdmin={isAdmin}
+            />
+          </div>
+        </div>
+
+        {/* HELP SECTION */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-blue-900 mb-2">Getting Started Tips</h3>
+              <ul className="text-sm text-blue-800 space-y-2">
+                <li>📅 <strong>Accepted formats:</strong> PDF, Excel, Word, or Image files</li>
+                <li>📝 <strong>File size limit:</strong> Up to 10MB</li>
+                <li>🤖 <strong>AI Processing:</strong> Automatic extraction of subjects, times, and days</li>
+                <li>⏰ <strong>Processing time:</strong> Usually 2-5 minutes</li>
+                <li>🔔 <strong>Notifications:</strong> You'll be notified when processing is complete</li>
+                <li>📚 <strong>Next step:</strong> Upload scheme of work for each subject to see lesson topics</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ EXISTING STUDENT VIEW: Show full dashboard
   const completedTimetables =
     overview?.timetables.filter((t) => t.processingStatus === "COMPLETED").length || 0;
   const completedSchemes =
@@ -342,53 +423,6 @@ const IndividualDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      {/* NEW STUDENT BANNER */}
-      {isNewStudent && (
-        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-xl shadow-lg p-6 text-white overflow-hidden relative">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
-          <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/10 rounded-full -ml-20 -mb-20"></div>
-
-          <div className="relative z-10">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="bg-white/20 p-3 rounded-lg backdrop-blur-sm flex-shrink-0">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-              <div className="flex-1">
-                <h2 className="text-2xl md:text-3xl font-bold mb-1">Welcome to Your Learning Portal! 🎓</h2>
-                <p className="text-white/90 text-lg">Let's get you started in just 60 seconds</p>
-              </div>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 mb-4 border border-white/20">
-              <p className="text-white mb-3">Here's what happens when you upload your timetable:</p>
-              <ul className="space-y-2 text-sm text-white/95">
-                <li className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-white/30 flex items-center justify-center text-xs font-bold">1</span>
-                  Our AI automatically extracts all your subjects and class times
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-white/30 flex items-center justify-center text-xs font-bold">2</span>
-                  Your personalized weekly schedule is generated instantly
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-white/30 flex items-center justify-center text-xs font-bold">3</span>
-                  Track your progress and manage your study time from one place
-                </li>
-              </ul>
-            </div>
-
-            <button
-              onClick={handleUploadClick}
-              className="w-full md:w-auto inline-flex items-center justify-center gap-3 px-6 py-3 bg-white text-orange-600 font-bold rounded-lg hover:bg-gray-100 transition-all shadow-lg hover:shadow-xl"
-            >
-              <Upload className="w-5 h-5" />
-              Upload Your Timetable Now
-              <ArrowRight className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* HEADER */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
         <div className="flex items-start justify-between mb-4">
@@ -511,7 +545,7 @@ const IndividualDashboard: React.FC = () => {
               <button
                 onClick={() => setShowWeeklyScheduleModal(true)}
                 className="flex items-center gap-2 px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                disabled={!latestTimetable || latestTimetable.processingStatus !== "COMPLETED"}
+                disabled={!hasCompletedTimetable}
                 title="View your personalized weekly schedule"
               >
                 <Eye className="w-4 h-4" />
@@ -521,7 +555,7 @@ const IndividualDashboard: React.FC = () => {
           </div>
 
           <div className="p-6">
-            {!latestTimetable || latestTimetable.processingStatus !== "COMPLETED" ? (
+            {!hasCompletedTimetable ? (
               <div className="text-center py-12">
                 <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">No Timetable Available</h3>
@@ -779,7 +813,7 @@ const IndividualDashboard: React.FC = () => {
                 )}
               </div>
 
-              {!latestTimetable || latestTimetable.processingStatus !== "COMPLETED" ? (
+              {!hasCompletedTimetable ? (
                 <div className="text-center py-12">
                   <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">No Timetable Available</h3>
