@@ -439,11 +439,8 @@ public class IndividualTimetableService {
     }
     
     /**
-     * ✅ FIXED: Replace bulkDelete in IndividualTimetableService.java
-     * Properly handles FK constraints by deleting in correct order:
-     * 1. Unlink/delete progress records first
-     * 2. Then delete schedules
-     * 3. Finally delete timetable
+     * ✅ FIXED V2: Replace bulkDelete in IndividualTimetableService.java
+     * Handles linked progress records (previousPeriodProgress/nextPeriodProgress)
      */
 
     @Transactional
@@ -479,9 +476,7 @@ public class IndividualTimetableService {
                 IndividualStudentTimetable timetable = timetableOpt.get();
                 StudentProfile student = timetable.getStudentProfile();
                 
-                // ✅ CRITICAL FIX: Delete/unlink in correct order to avoid FK violations
-                
-                // Step 1: Get all schedules for this timetable
+                // ✅ Step 1: Get all schedules for this timetable
                 List<DailySchedule> schedulesToDelete = scheduleRepository
                     .findByIndividualTimetableId(id);
                 
@@ -491,56 +486,86 @@ public class IndividualTimetableService {
                     int progressPreserved = 0;
                     int progressDeleted = 0;
                     
-                    // Step 2: For each schedule, handle progress records first
+                    // ✅ Step 2: Collect ALL progress records first
+                    Set<StudentLessonProgress> allProgressRecords = new HashSet<>();
+                    
                     for (DailySchedule schedule : schedulesToDelete) {
+                        List<StudentLessonProgress> progressRecords = progressRepository
+                            .findByScheduledDateBetweenAndStudentProfile(
+                                schedule.getScheduledDate(),
+                                schedule.getScheduledDate(),
+                                student
+                            ).stream()
+                            .filter(p -> p.getSchedule() != null && 
+                                        p.getSchedule().getId().equals(schedule.getId()))
+                            .collect(Collectors.toList());
+                        
+                        allProgressRecords.addAll(progressRecords);
+                    }
+                    
+                    log.debug("  📊 Collected {} total progress records to process", allProgressRecords.size());
+                    
+                    // ✅ Step 3: FIRST - Unlink all previousPeriodProgress references
+                    for (StudentLessonProgress progress : allProgressRecords) {
                         try {
-                            // Find progress records linked to this schedule
-                            List<StudentLessonProgress> progressRecords = progressRepository
-                                .findByScheduledDateBetweenAndStudentProfile(
-                                    schedule.getScheduledDate(),
-                                    schedule.getScheduledDate(),
-                                    student
-                                ).stream()
-                                .filter(p -> p.getSchedule() != null && 
-                                            p.getSchedule().getId().equals(schedule.getId()))
-                                .collect(Collectors.toList());
-                            
-                            for (StudentLessonProgress progress : progressRecords) {
-                                if (progress.getAssessmentSubmission() != null) {
-                                    // Preserve progress with submissions - just unlink from schedule
-                                    progress.setSchedule(null);
-                                    progressRepository.save(progress);
-                                    progressPreserved++;
-                                    log.debug("    🔒 Preserved progress {} (has submission)", progress.getId());
-                                } else {
-                                    // Delete progress without submissions
-                                    progressRepository.delete(progress);
-                                    progressDeleted++;
-                                    log.debug("    🗑️ Deleted progress {} (no submission)", progress.getId());
-                                }
+                            if (progress.getPreviousPeriodProgress() != null) {
+                                log.debug("    🔗 Unlinking progress {} from previous period {}", 
+                                    progress.getId(), progress.getPreviousPeriodProgress().getId());
+                                progress.setPreviousPeriodProgress(null);
+                                progressRepository.save(progress);
                             }
-                            
                         } catch (Exception e) {
-                            log.error("  ❌ Failed to handle progress for schedule {}: {}", 
-                                schedule.getId(), e.getMessage());
-                            // Continue with next schedule
+                            log.warn("    ⚠️ Failed to unlink progress {}: {}", 
+                                progress.getId(), e.getMessage());
+                            // Continue - we'll try to delete it anyway
                         }
                     }
                     
-                    // Step 3: Now it's safe to delete schedules (no more FK references)
+                    // Force flush to ensure all unlinks are persisted
+                    progressRepository.flush();
+                    
+                    log.debug("  ✅ Unlinked all multi-period references");
+                    
+                    // ✅ Step 4: NOW delete or preserve progress records
+                    for (StudentLessonProgress progress : allProgressRecords) {
+                        try {
+                            if (progress.getAssessmentSubmission() != null) {
+                                // Preserve progress with submissions - unlink from schedule
+                                progress.setSchedule(null);
+                                progressRepository.save(progress);
+                                progressPreserved++;
+                                log.debug("    🔒 Preserved progress {} (has submission)", progress.getId());
+                            } else {
+                                // Delete progress without submissions
+                                progressRepository.delete(progress);
+                                progressDeleted++;
+                                log.debug("    🗑️ Deleted progress {} (no submission)", progress.getId());
+                            }
+                        } catch (Exception e) {
+                            log.error("    ❌ Failed to handle progress {}: {}", 
+                                progress.getId(), e.getMessage());
+                            // Continue with next progress
+                        }
+                    }
+                    
+                    // Force flush again before deleting schedules
+                    progressRepository.flush();
+                    
+                    // ✅ Step 5: Delete schedules (now safe - no FK references)
                     try {
                         scheduleRepository.deleteAll(schedulesToDelete);
+                        scheduleRepository.flush();
                         log.debug("  ✅ Deleted {} schedules (preserved {} progress, deleted {} progress)", 
                             schedulesToDelete.size(), progressPreserved, progressDeleted);
                     } catch (Exception e) {
                         log.error("  ❌ Failed to delete schedules: {}", e.getMessage());
-                        throw e; // This will mark timetable deletion as failed
+                        throw e;
                     }
                 } else {
                     log.debug("  ℹ️ No schedules found for timetable {}", id);
                 }
                 
-                // Step 4: Delete physical file if exists
+                // ✅ Step 6: Delete physical file if exists
                 if (timetable.getFileUrl() != null && !timetable.getFileUrl().trim().isEmpty()) {
                     try {
                         Path filePath = Paths.get(uploadBasePath, timetable.getFileUrl());
@@ -552,14 +577,14 @@ public class IndividualTimetableService {
                         }
                     } catch (IOException e) {
                         log.warn("  ⚠️ Failed to delete file for timetable {}: {}", id, e.getMessage());
-                        // Continue anyway - file deletion is not critical
                     }
                 } else {
                     log.debug("  ℹ️ No file to delete (manual timetable or NULL file_url)");
                 }
                 
-                // Step 5: Delete timetable record (now safe - no FK references)
+                // ✅ Step 7: Delete timetable record
                 timetableRepository.delete(timetable);
+                timetableRepository.flush();
                 successCount++;
                 log.debug("  ✅ Deleted timetable {}", id);
                 
