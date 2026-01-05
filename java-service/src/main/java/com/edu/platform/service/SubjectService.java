@@ -253,7 +253,7 @@ public class SubjectService {
         
         Set<Subject> availableSubjects = new LinkedHashSet<>();
         
-        // ✅ Find ASPIRANT classes for SSS3
+        // ✅ Find ALL ASPIRANT classes for SSS3 (across all departments)
         List<Long> aspirantClassIds = classRepository.findAll().stream()
                 .filter(c -> {
                     String grade = extractGradeFromClassName(c.getName());
@@ -270,22 +270,37 @@ public class SubjectService {
             return Collections.emptyList();
         }
         
-        // Get general subjects for ASPIRANT
+        // ✅ Get general subjects for ALL ASPIRANT classes (available to all departments)
         List<Subject> generalSubjects = subjectRepository.findGeneralSubjectsByGradeAndAllowedClasses(
                 SSS3_GRADE, GENERAL_DEPT_ID, aspirantClassIds
         );
-        log.info("📚 Found {} general ASPIRANT subjects", generalSubjects.size());
+        log.info("📚 Found {} general ASPIRANT subjects (available to all departments)", generalSubjects.size());
         availableSubjects.addAll(generalSubjects);
         
-        // ✅ NEW: Get optional subjects for ASPIRANT
+        // ✅ Get optional subjects for ALL ASPIRANT classes (available to all departments)
         List<Subject> optionalSubjects = subjectRepository.findOptionalSubjectsByGradeAndAllowedClasses(
                 SSS3_GRADE, OPTIONAL_DEPT_ID, aspirantClassIds
         );
-        log.info("🔄 Found {} optional ASPIRANT subjects", optionalSubjects.size());
+        log.info("🔄 Found {} optional ASPIRANT subjects (available to all departments)", optionalSubjects.size());
         availableSubjects.addAll(optionalSubjects);
         
-        // Get departmental subjects for ASPIRANT
-        if (departmentId != null && !departmentId.equals(GENERAL_DEPT_ID) && !departmentId.equals(OPTIONAL_DEPT_ID)) {
+        // ✅ Get departmental subjects for ALL departments if no specific department provided
+        if (departmentId == null || departmentId.equals(GENERAL_DEPT_ID) || departmentId.equals(OPTIONAL_DEPT_ID)) {
+            // Return subjects from ALL departments (Science, Commercial, Art)
+            log.info("🌐 No specific department - fetching subjects from ALL departments");
+            for (Long deptId : Arrays.asList(1L, 2L, 3L)) { // Science, Commercial, Art
+                for (Long classId : aspirantClassIds) {
+                    List<Subject> deptSubjects = subjectRepository.findByGradeDepartmentAndClass(
+                            SSS3_GRADE, deptId, classId
+                    );
+                    log.info("🎓 Found {} subjects for department {} in class {}", 
+                            deptSubjects.size(), deptId, classId);
+                    availableSubjects.addAll(deptSubjects);
+                }
+            }
+        } else {
+            // Return subjects only for the specified department
+            log.info("🎯 Specific department {} requested", departmentId);
             for (Long classId : aspirantClassIds) {
                 List<Subject> deptSubjects = subjectRepository.findByGradeDepartmentAndClass(
                         SSS3_GRADE, departmentId, classId
