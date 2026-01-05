@@ -44,7 +44,7 @@ public class AutoAssessmentService {
     private final SubjectRepository subjectRepository;
     
     private static final int MINIMUM_QUESTIONS = 5;
-    private static final int MAXIMUM_QUESTIONS = 10;
+    private static final int MAXIMUM_QUESTIONS = 50;
     private static final int MINUTES_PER_QUESTION = 2;
     private static final double PASS_PERCENTAGE = 0.5; // 50%
     
