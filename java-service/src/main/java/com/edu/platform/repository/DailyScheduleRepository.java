@@ -145,7 +145,13 @@ public interface DailyScheduleRepository extends JpaRepository<DailySchedule, Lo
     @EntityGraph(attributePaths = {"studentProfile", "subject", "lessonTopic"})
     List<DailySchedule> findByIndividualTimetableIdOrderByScheduledDateAscPeriodNumberAsc(
             Long individualTimetableId);
-    
+	
+	/**
+	 * Find all schedules linked to a specific individual timetable (without ordering)
+	 */
+	@EntityGraph(attributePaths = {"studentProfile", "subject", "lessonTopic"})
+	List<DailySchedule> findByIndividualTimetableId(Long individualTimetableId);
+	    
     /**
      * Delete schedules for a student on a specific date (for regeneration)
      */

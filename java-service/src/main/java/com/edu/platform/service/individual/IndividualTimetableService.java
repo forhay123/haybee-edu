@@ -5,11 +5,13 @@ import com.edu.platform.exception.ResourceNotFoundException;
 import com.edu.platform.exception.ValidationException;
 import com.edu.platform.integration.PythonIndividualClient;
 import com.edu.platform.model.ClassEntity;
+import com.edu.platform.model.DailySchedule;
 import com.edu.platform.model.StudentProfile;
 import com.edu.platform.model.Term;
 import com.edu.platform.model.TeacherProfile;
 import com.edu.platform.model.enums.StudentType;
 import com.edu.platform.model.individual.IndividualStudentTimetable;
+import com.edu.platform.model.progress.StudentLessonProgress;
 import com.edu.platform.repository.ClassRepository;
 import com.edu.platform.repository.DailyScheduleRepository;
 import com.edu.platform.repository.StudentProfileRepository;
@@ -437,9 +439,13 @@ public class IndividualTimetableService {
     }
     
     /**
-     * Bulk delete timetables (ADMIN ONLY)
-     * UPDATED: Better error handling and null-safe file deletion
+     * ✅ FIXED: Replace bulkDelete in IndividualTimetableService.java
+     * Properly handles FK constraints by deleting in correct order:
+     * 1. Unlink/delete progress records first
+     * 2. Then delete schedules
+     * 3. Finally delete timetable
      */
+
     @Transactional
     public BulkOperationResultDto bulkDelete(List<Long> ids) {
         log.info("🗑️ Admin: Bulk deleting {} timetables", ids.size());
@@ -471,17 +477,70 @@ public class IndividualTimetableService {
                 }
                 
                 IndividualStudentTimetable timetable = timetableOpt.get();
+                StudentProfile student = timetable.getStudentProfile();
                 
-                // Delete associated schedules first (to avoid FK constraint issues)
-                try {
-                    scheduleRepository.deleteByIndividualTimetableId(id);
-                    log.debug("  ✅ Deleted schedules for timetable {}", id);
-                } catch (Exception e) {
-                    log.warn("  ⚠️ Failed to delete schedules for timetable {}: {}", id, e.getMessage());
-                    // Continue anyway - schedules might not exist
+                // ✅ CRITICAL FIX: Delete/unlink in correct order to avoid FK violations
+                
+                // Step 1: Get all schedules for this timetable
+                List<DailySchedule> schedulesToDelete = scheduleRepository
+                    .findByIndividualTimetableId(id);
+                
+                if (!schedulesToDelete.isEmpty()) {
+                    log.debug("  📋 Found {} schedules to delete", schedulesToDelete.size());
+                    
+                    int progressPreserved = 0;
+                    int progressDeleted = 0;
+                    
+                    // Step 2: For each schedule, handle progress records first
+                    for (DailySchedule schedule : schedulesToDelete) {
+                        try {
+                            // Find progress records linked to this schedule
+                            List<StudentLessonProgress> progressRecords = progressRepository
+                                .findByScheduledDateBetweenAndStudentProfile(
+                                    schedule.getScheduledDate(),
+                                    schedule.getScheduledDate(),
+                                    student
+                                ).stream()
+                                .filter(p -> p.getSchedule() != null && 
+                                            p.getSchedule().getId().equals(schedule.getId()))
+                                .collect(Collectors.toList());
+                            
+                            for (StudentLessonProgress progress : progressRecords) {
+                                if (progress.getAssessmentSubmission() != null) {
+                                    // Preserve progress with submissions - just unlink from schedule
+                                    progress.setSchedule(null);
+                                    progressRepository.save(progress);
+                                    progressPreserved++;
+                                    log.debug("    🔒 Preserved progress {} (has submission)", progress.getId());
+                                } else {
+                                    // Delete progress without submissions
+                                    progressRepository.delete(progress);
+                                    progressDeleted++;
+                                    log.debug("    🗑️ Deleted progress {} (no submission)", progress.getId());
+                                }
+                            }
+                            
+                        } catch (Exception e) {
+                            log.error("  ❌ Failed to handle progress for schedule {}: {}", 
+                                schedule.getId(), e.getMessage());
+                            // Continue with next schedule
+                        }
+                    }
+                    
+                    // Step 3: Now it's safe to delete schedules (no more FK references)
+                    try {
+                        scheduleRepository.deleteAll(schedulesToDelete);
+                        log.debug("  ✅ Deleted {} schedules (preserved {} progress, deleted {} progress)", 
+                            schedulesToDelete.size(), progressPreserved, progressDeleted);
+                    } catch (Exception e) {
+                        log.error("  ❌ Failed to delete schedules: {}", e.getMessage());
+                        throw e; // This will mark timetable deletion as failed
+                    }
+                } else {
+                    log.debug("  ℹ️ No schedules found for timetable {}", id);
                 }
                 
-                // Delete physical file if exists (NULL-SAFE for manual timetables)
+                // Step 4: Delete physical file if exists
                 if (timetable.getFileUrl() != null && !timetable.getFileUrl().trim().isEmpty()) {
                     try {
                         Path filePath = Paths.get(uploadBasePath, timetable.getFileUrl());
@@ -499,7 +558,7 @@ public class IndividualTimetableService {
                     log.debug("  ℹ️ No file to delete (manual timetable or NULL file_url)");
                 }
                 
-                // Delete timetable record
+                // Step 5: Delete timetable record (now safe - no FK references)
                 timetableRepository.delete(timetable);
                 successCount++;
                 log.debug("  ✅ Deleted timetable {}", id);
