@@ -1,6 +1,6 @@
 """
 app/domains/individual_processing/subject_mapper.py
-COMPLETE FIXED VERSION - Includes General department subjects for Individual students
+ULTRA-SAFE VERSION - Strict validation to prevent ANY wrong assignments
 """
 from typing import List, Dict, Tuple, Optional
 import re
@@ -12,9 +12,13 @@ from app.models.subject import Subject
 
 logger = get_logger(__name__)
 
-# Confidence thresholds
-CONFIDENCE_THRESHOLD = 70.0
-MIN_MATCH_SCORE = 55.0
+# STRICT Confidence thresholds - NO COMPROMISES
+CONFIDENCE_THRESHOLD = 85.0  # High confidence required
+MIN_MATCH_SCORE = 80.0  # Very strict minimum
+SAFE_FALLBACK_THRESHOLD = 85.0  # Anything below this = FALLBACK
+
+# Fallback subject names (will find appropriate Individual versions)
+FALLBACK_SUBJECTS = ["Mathematics", "English Language", "English"]
 
 
 def map_subjects(
@@ -25,23 +29,17 @@ def map_subjects(
 ) -> schemas.SubjectMappingResult:
     """
     Maps extracted subject names to platform subjects.
-    FIXED: Includes General department subjects that are shared across all classes in the same grade.
+    ULTRA-SAFE VERSION: Only accepts very high confidence matches (≥85%).
+    Anything below 85% = IMMEDIATE FALLBACK to Math/English.
     
-    Mapping Strategy Priority (STRICT):
-    1. Individual subjects in the SAME class (department-specific) - 15% boost
-    2. General Individual subjects in the SAME grade (shared across departments) - 15% boost
-    3. Individual subjects in other grades - 10% boost
-    4. Non-individual subjects - ONLY AS LAST RESORT
-    
-    This ensures individual students get Individual-tagged subjects first, including
-    General department subjects that are shared across all classes in their grade.
+    This ensures ZERO wrong assignments - we'd rather give Math/English
+    than assign incorrect subjects that lead to wrong topics.
     """
     logger.info(
-        f"🔍 Mapping {len(extracted_subjects)} subjects "
+        f"🔍 [ULTRA-SAFE MODE] Mapping {len(extracted_subjects)} subjects "
         f"(individual: {is_individual}, class_id: {class_id})"
     )
     
-    # ⚠️ TEMPORARY FIX: If class_id is None, log warning
     if not class_id:
         logger.warning("⚠️ class_id is None! Java service should send class_id in request.")
         logger.warning("⚠️ Falling back to level-based filtering without class restriction.")
@@ -83,30 +81,21 @@ def map_subjects(
         logger.info(f"📊 Total available subjects: {len(combined_subjects)}")
         
         if combined_subjects:
-            result = _map_with_subjects(
+            result = _map_with_strict_validation(
                 extracted_subjects,
                 combined_subjects,
-                is_individual=True,
+                db,
+                student_grade,
+                class_id,
                 filter_description=f"Individual subjects (class {class_id} + General {student_grade})",
-                boost_factor=1.15  # 15% boost for Individual + same grade
+                boost_factor=1.15
             )
             
-            if result.matched_subjects:
-                logger.info(f"✅ Found {len(result.matched_subjects)} matches in Individual subjects")
-                
-                # For any unmatched, try broader search
-                if result.unmatched_subjects:
-                    logger.info(f"🔄 Trying broader search for {len(result.unmatched_subjects)} unmatched subjects")
-                    broader_result = _map_remaining_subjects(
-                        result.unmatched_subjects,
-                        all_subjects,
-                        is_individual,
-                        class_id,
-                        student_grade
-                    )
-                    result.matched_subjects.extend(broader_result.matched_subjects)
-                    result.unmatched_subjects = broader_result.unmatched_subjects
-                
+            if result.matched_subjects or result.unmatched_subjects:
+                logger.info(
+                    f"✅ STRICT MAPPING: {len(result.matched_subjects)} high-confidence, "
+                    f"{len(result.unmatched_subjects)} fallback"
+                )
                 return result
     
     # PRIORITY 2: All Individual subjects (any grade) - but filter by level if possible
@@ -117,13 +106,11 @@ def map_subjects(
         level_filter = None
         
         if student_grade:
-            # Use student's actual grade
             if 'SSS' in student_grade.upper():
                 level_filter = 'SSS'
             elif 'JSS' in student_grade.upper():
                 level_filter = 'JSS'
         elif class_id:
-            # Check the level of subjects in this class
             class_subject_sample = [s for s in all_subjects if s.class_id == class_id][:5]
             if class_subject_sample:
                 for s in class_subject_sample:
@@ -134,9 +121,7 @@ def map_subjects(
                         level_filter = 'JSS'
                         break
         
-        # If no class_id, try to infer from extracted subject names
         if not level_filter and extracted_subjects:
-            # Look for level indicators in extracted subject names
             all_extracted_text = ' '.join(extracted_subjects).upper()
             if 'SSS' in all_extracted_text or 'SENIOR' in all_extracted_text:
                 level_filter = 'SSS'
@@ -145,11 +130,9 @@ def map_subjects(
                 level_filter = 'JSS'
                 logger.info("🔍 Inferred level: JSS from extracted subject names")
             else:
-                # Default to SSS for most individual students (they're usually senior secondary)
                 level_filter = 'SSS'
                 logger.info("🔍 Defaulting to SSS level (most individual students are senior secondary)")
         
-        # Filter Individual subjects by level if determined
         if level_filter:
             individual_subjects_filtered = [
                 s for s in individual_subjects 
@@ -158,161 +141,77 @@ def map_subjects(
             logger.info(f"📊 Individual {level_filter} subjects: {len(individual_subjects_filtered)}")
             
             if individual_subjects_filtered:
-                result = _map_with_subjects(
+                result = _map_with_strict_validation(
                     extracted_subjects,
                     individual_subjects_filtered,
-                    is_individual=True,
+                    db,
+                    student_grade,
+                    class_id,
                     filter_description=f"Individual {level_filter} subjects",
-                    boost_factor=1.15  # Higher boost for level-matched subjects
+                    boost_factor=1.15
                 )
                 
-                if result.matched_subjects:
-                    logger.info(f"✅ Found {len(result.matched_subjects)} matches in Individual {level_filter} subjects")
-                    
-                    # For unmatched, try all Individual subjects (any level)
-                    if result.unmatched_subjects:
-                        broader_result = _map_with_subjects(
-                            result.unmatched_subjects,
-                            individual_subjects,
-                            is_individual=True,
-                            filter_description="All Individual subjects (any level)",
-                            boost_factor=1.05
-                        )
-                        result.matched_subjects.extend(broader_result.matched_subjects)
-                        result.unmatched_subjects = broader_result.unmatched_subjects
-                    
+                if result.matched_subjects or result.unmatched_subjects:
+                    logger.info(
+                        f"✅ STRICT MAPPING: {len(result.matched_subjects)} high-confidence, "
+                        f"{len(result.unmatched_subjects)} fallback"
+                    )
                     return result
         
-        # No level filter or level-filtered search failed, try all Individual subjects
+        # Try all Individual subjects
         logger.info(f"📊 All Individual subjects: {len(individual_subjects)}")
         
         if individual_subjects:
-            result = _map_with_subjects(
+            result = _map_with_strict_validation(
                 extracted_subjects,
                 individual_subjects,
-                is_individual=True,
+                db,
+                student_grade,
+                class_id,
                 filter_description="All Individual subjects",
-                boost_factor=1.10  # 10% boost for Individual subjects
+                boost_factor=1.10
             )
             
-            if result.matched_subjects:
-                logger.info(f"✅ Found {len(result.matched_subjects)} matches in Individual subjects")
-                
-                # For any unmatched, try all subjects as fallback
-                if result.unmatched_subjects:
-                    logger.warning(f"⚠️ {len(result.unmatched_subjects)} subjects not matched to Individual subjects")
-                    logger.info(f"🔄 Trying all subjects as fallback")
-                    broader_result = _map_with_subjects(
-                        result.unmatched_subjects,
-                        all_subjects,
-                        is_individual=False,
-                        filter_description="All subjects (fallback)",
-                        boost_factor=1.0
-                    )
-                    result.matched_subjects.extend(broader_result.matched_subjects)
-                    result.unmatched_subjects = broader_result.unmatched_subjects
-                
+            if result.matched_subjects or result.unmatched_subjects:
+                logger.info(
+                    f"✅ STRICT MAPPING: {len(result.matched_subjects)} high-confidence, "
+                    f"{len(result.unmatched_subjects)} fallback"
+                )
                 return result
     
-    # PRIORITY 3: All subjects (fallback)
-    logger.info(f"📊 Trying all {len(all_subjects)} subjects")
-    return _map_with_subjects(
-        extracted_subjects,
-        all_subjects,
-        is_individual=False,
-        filter_description="All subjects",
-        boost_factor=1.0
-    )
+    # FINAL FALLBACK: All subjects go to Math/English
+    logger.warning(f"⚠️ ALL {len(extracted_subjects)} subjects using SAFE FALLBACK (Math/English)")
+    return _assign_fallback_subjects(extracted_subjects, db, student_grade, class_id)
 
 
-def _map_remaining_subjects(
-    unmatched_subjects: List[str],
-    all_subjects: List[Subject],
-    is_individual: bool,
-    class_id: Optional[int],
-    student_grade: Optional[str] = None
-) -> schemas.SubjectMappingResult:
-    """
-    Helper to map remaining unmatched subjects with broader search.
-    FIXED: Includes General department subjects.
-    """
-    # Try Individual subjects from the same grade (any department)
-    if is_individual and student_grade:
-        individual_same_grade = [
-            s for s in all_subjects 
-            if 'Individual' in s.name and s.grade == student_grade
-        ]
-        
-        if individual_same_grade:
-            result = _map_with_subjects(
-                unmatched_subjects,
-                individual_same_grade,
-                is_individual=True,
-                filter_description=f"Individual subjects (same grade {student_grade})",
-                boost_factor=1.12
-            )
-            
-            if result.matched_subjects:
-                return result
-    
-    # Try Individual subjects from other grades
-    if is_individual:
-        individual_other_grades = [
-            s for s in all_subjects 
-            if 'Individual' in s.name and (not class_id or s.class_id != class_id)
-        ]
-        
-        if individual_other_grades:
-            result = _map_with_subjects(
-                unmatched_subjects,
-                individual_other_grades,
-                is_individual=True,
-                filter_description="Individual subjects (other grades)",
-                boost_factor=1.08
-            )
-            
-            if result.matched_subjects:
-                return result
-    
-    # Final fallback: all subjects
-    return _map_with_subjects(
-        unmatched_subjects,
-        all_subjects,
-        is_individual=False,
-        filter_description="All subjects (final fallback)",
-        boost_factor=1.0
-    )
-
-
-def _map_with_subjects(
+def _map_with_strict_validation(
     extracted_subjects: List[str],
     platform_subjects: List[Subject],
-    is_individual: bool,
+    db: Session,
+    student_grade: Optional[str],
+    class_id: Optional[int],
     filter_description: str,
     boost_factor: float = 1.0
 ) -> schemas.SubjectMappingResult:
     """
-    Internal function to perform actual mapping with given subject list.
-    FIXED: Better boosting for Individual subjects
+    STRICT validation: Only accepts ≥85% confidence matches.
+    Everything else goes to fallback (Math/English).
     """
     if not platform_subjects:
-        logger.warning("⚠️ No platform subjects to map against")
-        return schemas.SubjectMappingResult(
-            matched_subjects=[],
-            unmatched_subjects=extracted_subjects
-        )
+        logger.warning("⚠️ No platform subjects to map against - using fallback")
+        return _assign_fallback_subjects(extracted_subjects, db, student_grade, class_id)
     
-    logger.info(f"🔍 Mapping against {len(platform_subjects)} subjects ({filter_description})")
+    logger.info(f"🔍 [STRICT] Mapping against {len(platform_subjects)} subjects ({filter_description})")
     
-    matched = []
-    unmatched = []
+    high_confidence_matches = []
+    needs_fallback = []
     
     for extracted_name in extracted_subjects:
         best_match = None
         best_score = 0.0
         best_strategy = ""
         
-        # Strategy 1: Direct fuzzy matching
+        # Strategy 1: Direct fuzzy matching with STRICT threshold
         for platform_subject in platform_subjects:
             scores = _calculate_match_scores(extracted_name, platform_subject.name)
             score = max(scores.values())
@@ -351,32 +250,204 @@ def _map_with_subjects(
                 best_score = min(100.0, code_score * boost_factor)
                 best_strategy = "code_match"
         
-        # Check if match meets minimum threshold
-        if best_match and best_score >= MIN_MATCH_SCORE:
-            confidence_level = "✅ HIGH" if best_score >= CONFIDENCE_THRESHOLD else "⚠️ MEDIUM"
+        # STRICT VALIDATION: Must be ≥85% to accept
+        if best_match and best_score >= SAFE_FALLBACK_THRESHOLD:
             confidence_value = min(1.0, best_score / 100.0)
             
-            matched.append(schemas.SubjectMatch(
-                extracted_name=extracted_name,
-                platform_subject_id=best_match.id,
-                platform_subject_name=best_match.name,
-                confidence=confidence_value
-            ))
-            
-            individual_marker = "🎯" if 'Individual' in best_match.name else ""
-            logger.info(
-                f"{confidence_level} {individual_marker} Matched '{extracted_name}' → "
-                f"'{best_match.name}' ({best_score:.1f}% via {best_strategy})"
-            )
+            # Additional safety check: validate the match makes semantic sense
+            if _validate_subject_match(extracted_name, best_match.name):
+                high_confidence_matches.append(schemas.SubjectMatch(
+                    extracted_name=extracted_name,
+                    platform_subject_id=best_match.id,
+                    platform_subject_name=best_match.name,
+                    confidence=confidence_value
+                ))
+                
+                individual_marker = "🎯" if 'Individual' in best_match.name else ""
+                logger.info(
+                    f"✅ HIGH CONFIDENCE {individual_marker} '{extracted_name}' → "
+                    f"'{best_match.name}' ({best_score:.1f}% via {best_strategy})"
+                )
+            else:
+                # Failed semantic validation
+                needs_fallback.append(extracted_name)
+                logger.warning(
+                    f"⚠️ SEMANTIC MISMATCH: '{extracted_name}' → '{best_match.name}' "
+                    f"({best_score:.1f}%) - using FALLBACK"
+                )
         else:
-            unmatched.append(extracted_name)
+            # Below 85% threshold
+            needs_fallback.append(extracted_name)
             best_match_name = best_match.name if best_match else "None"
             logger.warning(
-                f"❌ No match for '{extracted_name}' "
-                f"(best: {best_match_name} at {best_score:.1f}%)"
+                f"⚠️ LOW CONFIDENCE: '{extracted_name}' → '{best_match_name}' "
+                f"({best_score:.1f}%) - using FALLBACK"
             )
     
-    logger.info(f"📊 Mapping complete: {len(matched)} matched, {len(unmatched)} unmatched")
+    # Assign fallback subjects for all low-confidence matches
+    if needs_fallback:
+        fallback_result = _assign_fallback_subjects(needs_fallback, db, student_grade, class_id)
+        high_confidence_matches.extend(fallback_result.matched_subjects)
+    
+    logger.info(
+        f"📊 STRICT MAPPING: {len(high_confidence_matches)} total "
+        f"({len(high_confidence_matches) - len(needs_fallback)} high-confidence, "
+        f"{len(needs_fallback)} fallback)"
+    )
+    
+    return schemas.SubjectMappingResult(
+        matched_subjects=high_confidence_matches,
+        unmatched_subjects=[]  # Everything is either matched or has fallback
+    )
+
+
+def _validate_subject_match(extracted_name: str, platform_name: str) -> bool:
+    """
+    Semantic validation to catch obvious mismatches.
+    Returns False for clearly wrong matches (e.g., "Geography" → "Physics").
+    """
+    # Extract base subjects for comparison
+    extracted_base = _extract_base_subject(extracted_name).lower()
+    platform_base = _extract_base_subject(platform_name).lower()
+    
+    # Define subject groups that should NOT be matched to each other
+    subject_groups = [
+        {"math", "mathematics", "further math", "further maths"},
+        {"english", "literature", "english language"},
+        {"physics", "chemistry", "biology"},
+        {"geography", "economics", "government", "civic"},
+        {"commerce", "accounting", "financial accounting"},
+        {"history", "christian religious studies", "islamic studies"},
+    ]
+    
+    # Check if subjects are in different incompatible groups
+    extracted_group = None
+    platform_group = None
+    
+    for group in subject_groups:
+        if any(subj in extracted_base for subj in group):
+            extracted_group = group
+        if any(subj in platform_base for subj in group):
+            platform_group = group
+    
+    # If both are in identified groups and they're different groups = MISMATCH
+    if extracted_group and platform_group and extracted_group != platform_group:
+        logger.warning(
+            f"🚫 SEMANTIC VALIDATION FAILED: '{extracted_name}' in group {extracted_group}, "
+            f"but '{platform_name}' in group {platform_group}"
+        )
+        return False
+    
+    # Additional check: if extracted name has specific keyword, platform must have it too
+    critical_keywords = {
+        "math": ["math"],
+        "english": ["english", "literature"],
+        "physics": ["physics"],
+        "chemistry": ["chemistry", "chem"],
+        "biology": ["biology", "bio"],
+        "geography": ["geography", "geo"],
+        "economics": ["economics", "econ"],
+        "commerce": ["commerce"],
+        "accounting": ["accounting"],
+        "government": ["government", "gov"],
+        "civic": ["civic"],
+        "literature": ["literature", "english"],
+    }
+    
+    for keyword, required_terms in critical_keywords.items():
+        if keyword in extracted_base:
+            if not any(term in platform_base for term in required_terms):
+                logger.warning(
+                    f"🚫 KEYWORD VALIDATION FAILED: '{extracted_name}' has '{keyword}', "
+                    f"but '{platform_name}' doesn't contain {required_terms}"
+                )
+                return False
+    
+    # Passed all validations
+    return True
+
+
+def _assign_fallback_subjects(
+    subject_names: List[str],
+    db: Session,
+    student_grade: Optional[str] = None,
+    class_id: Optional[int] = None
+) -> schemas.SubjectMappingResult:
+    """
+    Assign Mathematics or English Language as fallback for unmapped subjects.
+    Alternates between Math and English for multiple subjects.
+    """
+    if not subject_names:
+        return schemas.SubjectMappingResult(matched_subjects=[], unmatched_subjects=[])
+    
+    logger.info(f"🔄 [FALLBACK] Assigning Math/English for {len(subject_names)} subjects")
+    
+    # Find appropriate Math and English subjects
+    all_subjects = db.query(Subject).all()
+    
+    # Try to find Individual Math and English for the student's grade
+    math_subject = None
+    english_subject = None
+    
+    if student_grade:
+        # Look for Individual subjects in the same grade
+        for subject in all_subjects:
+            if 'Individual' in subject.name and subject.grade == student_grade:
+                subject_base = _extract_base_subject(subject.name).lower()
+                if 'math' in subject_base and not math_subject:
+                    math_subject = subject
+                elif 'english' in subject_base and not english_subject:
+                    english_subject = subject
+    
+    # Fallback to any Individual Math/English if grade-specific not found
+    if not math_subject or not english_subject:
+        for subject in all_subjects:
+            if 'Individual' in subject.name:
+                subject_base = _extract_base_subject(subject.name).lower()
+                if 'math' in subject_base and not math_subject:
+                    math_subject = subject
+                elif 'english' in subject_base and not english_subject:
+                    english_subject = subject
+    
+    # Last resort: any Math/English subject
+    if not math_subject:
+        for subject in all_subjects:
+            if 'math' in subject.name.lower():
+                math_subject = subject
+                break
+    
+    if not english_subject:
+        for subject in all_subjects:
+            if 'english' in subject.name.lower():
+                english_subject = subject
+                break
+    
+    matched = []
+    unmatched = []
+    
+    for i, subject_name in enumerate(subject_names):
+        # Alternate between Math and English
+        fallback_subject = math_subject if i % 2 == 0 else english_subject
+        
+        if fallback_subject:
+            matched.append(schemas.SubjectMatch(
+                extracted_name=subject_name,
+                platform_subject_id=fallback_subject.id,
+                platform_subject_name=fallback_subject.name,
+                confidence=0.50  # Mark as fallback with 50% confidence
+            ))
+            logger.info(
+                f"🔄 FALLBACK ASSIGNED: '{subject_name}' → '{fallback_subject.name}' "
+                f"(ID: {fallback_subject.id}) [50% confidence marker]"
+            )
+        else:
+            unmatched.append(subject_name)
+            logger.error(
+                f"❌ CRITICAL ERROR: Could not find fallback subject for '{subject_name}' "
+                f"- Math or English must exist in database!"
+            )
+    
+    logger.info(f"✅ Fallback complete: {len(matched)} assigned, {len(unmatched)} failed")
     
     return schemas.SubjectMappingResult(
         matched_subjects=matched,
@@ -466,7 +537,7 @@ def _extract_base_subject(subject_name: str) -> str:
         ' Individual', ' ASPIRANT',
         'SSS1', 'SSS2', 'SSS3', 'JSS1', 'JSS2', 'JSS3',
         ' Revision', ' Practical',
-        'Individual'  # Remove this too for base subject comparison
+        'Individual'
     ]
     
     for modifier in modifiers:
@@ -489,7 +560,6 @@ def get_subjects_by_class(
     FIXED: Uses the new helper method to include General subjects
     """
     if is_individual:
-        # Use the helper method that includes General subjects
         subjects = Subject.get_individual_subjects_for_class(db, class_id)
         
         return [
