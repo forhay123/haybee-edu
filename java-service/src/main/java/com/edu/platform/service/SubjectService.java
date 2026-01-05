@@ -136,18 +136,43 @@ public class SubjectService {
     }
 
     /**
-     * Get all subjects assigned to a specific class
+     * Get all subjects assigned to a specific class (includes Optional department subjects)
      */
     public List<SubjectResponseDto> getSubjectsByClass(Long classId) {
         log.info("📖 getSubjectsByClass - ClassId: {}", classId);
         
-        List<Subject> subjects = subjectRepository.findByClassEntityId(classId);
+        ClassEntity classEntity = classRepository.findById(classId)
+                .orElseThrow(() -> new RuntimeException("Class not found"));
         
-        List<SubjectResponseDto> dtos = subjects.stream()
+        String grade = extractGradeFromClassName(classEntity.getName());
+        StudentType studentType = classEntity.getStudentType();
+        
+        Set<Subject> subjectsSet = new LinkedHashSet<>();
+        
+        // Get subjects directly assigned to this class
+        List<Subject> directSubjects = subjectRepository.findByClassEntityId(classId);
+        log.info("📚 Found {} direct subjects for class {}", directSubjects.size(), classId);
+        subjectsSet.addAll(directSubjects);
+        
+        // ✅ Add Optional department subjects for this grade and student type
+        if (grade != null && studentType != null) {
+            List<Long> allowedClassIds = findClassesByGradeAndStudentType(grade, studentType);
+            if (!allowedClassIds.isEmpty()) {
+                List<Subject> optionalSubjects = subjectRepository.findOptionalSubjectsByGradeAndAllowedClasses(
+                        grade, OPTIONAL_DEPT_ID, allowedClassIds
+                );
+                log.info("🔄 Found {} optional subjects for grade={}, type={}", 
+                        optionalSubjects.size(), grade, studentType);
+                subjectsSet.addAll(optionalSubjects);
+            }
+        }
+        
+        List<SubjectResponseDto> dtos = subjectsSet.stream()
                 .map(this::toResponseDto)
+                .sorted(Comparator.comparing(SubjectResponseDto::getName))
                 .collect(Collectors.toList());
         
-        log.info("✅ Found {} subjects for class {}", dtos.size(), classId);
+        log.info("✅ Returning total {} subjects for class {}", dtos.size(), classId);
         return dtos;
     }
 
