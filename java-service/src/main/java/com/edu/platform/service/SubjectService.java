@@ -136,7 +136,7 @@ public class SubjectService {
     }
 
     /**
-     * Get all subjects assigned to a specific class (includes Optional department subjects)
+     * Get all subjects assigned to a specific class (includes General and Optional department subjects)
      */
     public List<SubjectResponseDto> getSubjectsByClass(Long classId) {
         log.info("📖 getSubjectsByClass - ClassId: {}", classId);
@@ -154,10 +154,19 @@ public class SubjectService {
         log.info("📚 Found {} direct subjects for class {}", directSubjects.size(), classId);
         subjectsSet.addAll(directSubjects);
         
-        // ✅ Add Optional department subjects for this grade and student type
+        // ✅ Add General and Optional department subjects for this grade and student type
         if (grade != null && studentType != null) {
             List<Long> allowedClassIds = findClassesByGradeAndStudentType(grade, studentType);
             if (!allowedClassIds.isEmpty()) {
+                // Add General subjects (available to all students of same type)
+                List<Subject> generalSubjects = subjectRepository.findGeneralSubjectsByGradeAndAllowedClasses(
+                        grade, GENERAL_DEPT_ID, allowedClassIds
+                );
+                log.info("📚 Found {} general subjects for grade={}, type={}", 
+                        generalSubjects.size(), grade, studentType);
+                subjectsSet.addAll(generalSubjects);
+                
+                // Add Optional subjects (cross-departmental)
                 List<Subject> optionalSubjects = subjectRepository.findOptionalSubjectsByGradeAndAllowedClasses(
                         grade, OPTIONAL_DEPT_ID, allowedClassIds
                 );
