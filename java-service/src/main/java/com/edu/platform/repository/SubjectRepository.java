@@ -30,8 +30,7 @@ public interface SubjectRepository extends JpaRepository<Subject, Long> {
         @Param("classId") Long classId
     );
 
-    // ✅ FIXED: General subjects ONLY for the same student type (matching allowed class IDs)
-    // Uses INNER JOIN to ensure classEntity is NOT NULL and must be in allowedClassIds
+    // ✅ General subjects ONLY for the same student type (matching allowed class IDs)
     @EntityGraph(attributePaths = {"classEntity", "department"})
     @Query("SELECT DISTINCT s FROM Subject s " +
            "INNER JOIN s.classEntity c " +
@@ -42,6 +41,21 @@ public interface SubjectRepository extends JpaRepository<Subject, Long> {
     List<Subject> findGeneralSubjectsByGradeAndAllowedClasses(
         @Param("grade") String grade,
         @Param("generalDeptId") Long generalDeptId,
+        @Param("allowedClassIds") List<Long> allowedClassIds
+    );
+
+    // ✅ NEW: Optional subjects that can be used across departments
+    // These are subjects marked as "Optional" department (ID 5) that students from any department can take
+    @EntityGraph(attributePaths = {"classEntity", "department"})
+    @Query("SELECT DISTINCT s FROM Subject s " +
+           "INNER JOIN s.classEntity c " +
+           "INNER JOIN s.department d " +
+           "WHERE s.grade = :grade " +
+           "AND d.id = :optionalDeptId " +
+           "AND c.id IN :allowedClassIds")
+    List<Subject> findOptionalSubjectsByGradeAndAllowedClasses(
+        @Param("grade") String grade,
+        @Param("optionalDeptId") Long optionalDeptId,
         @Param("allowedClassIds") List<Long> allowedClassIds
     );
 
@@ -66,12 +80,10 @@ public interface SubjectRepository extends JpaRepository<Subject, Long> {
     @EntityGraph(attributePaths = {"classEntity", "department"})
     List<Subject> findByClassEntityIdAndDepartmentId(Long classId, Long departmentId);
 
-
     /**
      * Find subject by name (case-insensitive)
      * Used for mapping INDIVIDUAL student subjects
      */
     @EntityGraph(attributePaths = {"classEntity", "department"})
     Optional<Subject> findByNameIgnoreCase(String name);
-
 }

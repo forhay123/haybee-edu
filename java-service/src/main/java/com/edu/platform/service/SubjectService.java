@@ -26,6 +26,7 @@ public class SubjectService {
     private final TeacherProfileRepository teacherProfileRepository;
 
     private static final Long GENERAL_DEPT_ID = 4L;
+    private static final Long OPTIONAL_DEPT_ID = 5L;
     private static final String SSS3_GRADE = "SSS3";
 
     public SubjectResponseDto toDto(Subject subject) {
@@ -166,7 +167,7 @@ public class SubjectService {
                 .build();
     }
 
-    // ✅ FIXED: Core method with proper student type filtering
+    // ✅ UPDATED: Include Optional department subjects for all students
     public List<SubjectResponseDto> getSubjectsForStudent(Long classId, Long departmentId, StudentType type) {
         log.info("🔍 getSubjectsForStudent CALLED with classId={}, departmentId={}, type={}", classId, departmentId, type);
 
@@ -186,7 +187,7 @@ public class SubjectService {
         List<Long> allowedClassIds = findClassesByGradeAndStudentType(grade, type);
         log.info("🏫 Allowed class IDs for grade={}, type={}: {}", grade, type, allowedClassIds);
 
-        // ✅ CRITICAL FIX: Only proceed if we have allowed classes
+        // ✅ Only proceed if we have allowed classes
         if (!allowedClassIds.isEmpty()) {
             // Get general subjects (same type)
             List<Subject> generalSubjects = subjectRepository.findGeneralSubjectsByGradeAndAllowedClasses(
@@ -195,12 +196,20 @@ public class SubjectService {
             log.info("📚 Found {} general subjects", generalSubjects.size());
             generalSubjects.forEach(s -> log.debug("  - General: {} (classId={})", s.getName(), s.getClassEntity() != null ? s.getClassEntity().getId() : "null"));
             subjectsSet.addAll(generalSubjects);
+            
+            // ✅ NEW: Get optional subjects (cross-departmental subjects)
+            List<Subject> optionalSubjects = subjectRepository.findOptionalSubjectsByGradeAndAllowedClasses(
+                    grade, OPTIONAL_DEPT_ID, allowedClassIds
+            );
+            log.info("🔄 Found {} optional subjects", optionalSubjects.size());
+            optionalSubjects.forEach(s -> log.debug("  - Optional: {} (classId={})", s.getName(), s.getClassEntity() != null ? s.getClassEntity().getId() : "null"));
+            subjectsSet.addAll(optionalSubjects);
         } else {
             log.warn("⚠️ No allowed classes found for grade={}, type={}", grade, type);
         }
 
         // ✅ Add department subjects for specific class
-        if (departmentId != null && !departmentId.equals(GENERAL_DEPT_ID)) {
+        if (departmentId != null && !departmentId.equals(GENERAL_DEPT_ID) && !departmentId.equals(OPTIONAL_DEPT_ID)) {
             List<Subject> deptSubjects = subjectRepository.findByGradeDepartmentAndClass(grade, departmentId, classId);
             log.info("🎓 Found {} departmental subjects", deptSubjects.size());
             deptSubjects.forEach(s -> log.debug("  - Dept: {} (classId={})", s.getName(), s.getClassEntity() != null ? s.getClassEntity().getId() : "null"));
@@ -243,8 +252,15 @@ public class SubjectService {
         log.info("📚 Found {} general ASPIRANT subjects", generalSubjects.size());
         availableSubjects.addAll(generalSubjects);
         
+        // ✅ NEW: Get optional subjects for ASPIRANT
+        List<Subject> optionalSubjects = subjectRepository.findOptionalSubjectsByGradeAndAllowedClasses(
+                SSS3_GRADE, OPTIONAL_DEPT_ID, aspirantClassIds
+        );
+        log.info("🔄 Found {} optional ASPIRANT subjects", optionalSubjects.size());
+        availableSubjects.addAll(optionalSubjects);
+        
         // Get departmental subjects for ASPIRANT
-        if (departmentId != null && !departmentId.equals(GENERAL_DEPT_ID)) {
+        if (departmentId != null && !departmentId.equals(GENERAL_DEPT_ID) && !departmentId.equals(OPTIONAL_DEPT_ID)) {
             for (Long classId : aspirantClassIds) {
                 List<Subject> deptSubjects = subjectRepository.findByGradeDepartmentAndClass(
                         SSS3_GRADE, departmentId, classId
@@ -339,7 +355,7 @@ public class SubjectService {
         return students;
     }
 
-    // ✅ CRITICAL FIX: Use ClassEntity.studentType field directly instead of parsing name
+    // ✅ Use ClassEntity.studentType field directly
     private List<Long> findClassesByGradeAndStudentType(String grade, StudentType type) {
         log.info("🔎 Finding classes for grade={}, type={}", grade, type);
         
@@ -355,7 +371,6 @@ public class SubjectService {
                         return false;
                     }
                     
-                    // ✅ FIX: Use the studentType field from ClassEntity, not the name
                     StudentType classStudentType = cls.getStudentType();
                     boolean typeMatches = (classStudentType != null && classStudentType == type);
                     
