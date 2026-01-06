@@ -41,9 +41,10 @@ import { useLiveSessions } from "../../../live/hooks/useLiveSessions";
 import { useGetStudentSubjects } from "../../../subjects/hooks/useSubjects";
 import ProfilePendingScreen from "../../components/student/ProfilePendingScreen";
 
-// ✅ NEW IMPORTS
+// ✅ NEW IMPORTS - Including ClassSelectionModal
 import TimetableSetupChoice from "../../components/TimetableSetupChoice";
 import SubjectSelectionModal from "../../components/SubjectSelectionModal";
+import ClassSelectionModal from "../../components/ClassSelectionModal";
 
 type Tab = "schedule" | "liveSessions" | "uploads";
 type SetupMode = "choice" | "upload" | "manual";
@@ -68,7 +69,7 @@ const IndividualDashboard: React.FC = () => {
   const [showWeeklyScheduleModal, setShowWeeklyScheduleModal] = useState(false);
   const uploadsTabRef = React.useRef<HTMLDivElement>(null);
 
-  // ✅ NEW: Track setup mode - now always starts with choice
+  // ✅ NEW: Track setup mode and modals
   const [setupMode, setSetupMode] = useState<SetupMode>("choice");
   const [showSubjectModal, setShowSubjectModal] = useState(false);
 
@@ -320,7 +321,12 @@ const IndividualDashboard: React.FC = () => {
   const { data: recentNotifications = [] } = useRecentNotifications(true);
   const topNotifications = recentNotifications.slice(0, 5);
 
-  // ✅ NEW: Handlers for setup choice
+  // ✅ NEW: Handlers for setup flow
+  const handleClassSelected = () => {
+    // Profile will be refetched automatically by query invalidation in ClassSelectionModal
+    // This will trigger a re-render and move to the next step
+  };
+
   const handleChooseUpload = () => {
     setSetupMode("upload");
   };
@@ -338,6 +344,11 @@ const IndividualDashboard: React.FC = () => {
     setSetupMode("choice"); // Reset to choice for consistency
   };
 
+  // ============================================
+  // CONDITIONAL RENDERING - PRIORITY ORDER
+  // ============================================
+
+  // 1. Loading state
   if (loadingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -349,7 +360,7 @@ const IndividualDashboard: React.FC = () => {
     );
   }
 
-  // ✅ Show friendly pending screen for new users without profile
+  // 2. Profile error handling
   if (profileError || !profile) {
     const isProfileNotFound =
       profileError?.message?.toLowerCase().includes('not found') ||
@@ -372,28 +383,23 @@ const IndividualDashboard: React.FC = () => {
     );
   }
 
-  // ✅ CRITICAL CHECK: If student doesn't have a class assigned, show error
+  // ✅ 3. STEP 1: CLASS SELECTION (if no class assigned)
   if (!hasClassAssigned) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 max-w-md text-center">
-          <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-yellow-900 mb-3">Class Not Assigned</h2>
-          <p className="text-yellow-800 mb-4">
-            Your profile doesn't have a class assigned yet. Please contact an administrator to assign you to a class before you can start using your learning portal.
-          </p>
-          <div className="bg-yellow-100 rounded-lg p-4 text-sm text-yellow-900">
-            <p className="font-semibold mb-2">Why do I need a class?</p>
-            <p>Your class determines which subjects are available to you and helps us generate your personalized schedule.</p>
-          </div>
-        </div>
-      </div>
+      <ClassSelectionModal
+        studentProfileId={profile.id!}
+        onClose={() => {
+          // Class selection is mandatory, so we don't allow closing
+          // User must select a class to proceed
+        }}
+        onSuccess={handleClassSelected}
+      />
     );
   }
 
-  // ✅ NEW STUDENT VIEW: Show choice screen ONLY (consistent across all devices)
+  // ✅ 4. STEP 2 & 3: NEW STUDENT SETUP (if no timetable exists)
   if (isNewStudent) {
-    // Always show setup choice screen first
+    // STEP 2: Show setup choice screen
     if (setupMode === "choice") {
       return (
         <>
@@ -402,7 +408,7 @@ const IndividualDashboard: React.FC = () => {
             onChooseManual={handleChooseManual}
           />
 
-          {/* Subject Selection Modal */}
+          {/* STEP 3B: Subject Selection Modal (if user chose manual) */}
           {showSubjectModal && (
             <SubjectSelectionModal
               studentProfileId={profile.id!}
@@ -414,7 +420,7 @@ const IndividualDashboard: React.FC = () => {
       );
     }
 
-    // Show upload section (if user chose upload)
+    // STEP 3A: Show upload section (if user chose upload)
     if (setupMode === "upload") {
       return (
         <div className="space-y-6 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -510,7 +516,7 @@ const IndividualDashboard: React.FC = () => {
     }
   }
 
-  // ✅ EXISTING STUDENT VIEW: Show full dashboard
+  // ✅ 5. EXISTING STUDENT VIEW: Show full dashboard
   const completedTimetables =
     overview?.timetables.filter((t) => t.processingStatus === "COMPLETED").length || 0;
   const completedSchemes =
