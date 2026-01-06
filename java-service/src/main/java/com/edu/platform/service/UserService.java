@@ -12,6 +12,7 @@ import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.util.List;
 import java.util.Optional;
@@ -71,8 +72,8 @@ public class UserService {
     }
 
     /**
-     * ✅ SAFE: Delete a user with proper cascade cleanup
-     * Each deletion is wrapped separately to handle column name mismatches
+     * ✅ FIXED: Delete user with isolated sub-transactions to prevent abort cascade
+     * Each deletion runs in its own transaction using REQUIRES_NEW propagation
      */
     @Transactional
     public void deleteUser(Long userId) {
@@ -90,63 +91,62 @@ public class UserService {
         int totalDeleted = 0;
 
         // ============================================================
-        // STUDENT-RELATED CLEANUP
+        // STUDENT-RELATED CLEANUP - Each in separate nested transaction
         // ============================================================
         if (studentProfileId != null) {
             log.info("📚 User is a STUDENT - cleaning up student-related data...");
             
-            // Each deletion is a separate method to isolate failures
-            totalDeleted += safeDelete("enrollments", "student_profile_id", studentProfileId);
-            totalDeleted += safeDelete("student_subjects", "student_profile_id", studentProfileId);
-            totalDeleted += safeDelete("assessment_submissions", "student_id", studentProfileId);
-            totalDeleted += safeDelete("assessments", "target_student_profile_id", studentProfileId);
-            totalDeleted += safeDelete("student_lesson_progress", "student_profile_id", studentProfileId);
-            totalDeleted += safeDelete("daily_schedules", "student_id", studentProfileId);
-            totalDeleted += safeDelete("individual_lesson_topics", "student_profile_id", studentProfileId);
-            totalDeleted += safeDelete("individual_student_schemes", "student_profile_id", studentProfileId);
-            totalDeleted += safeDelete("individual_student_timetables", "student_profile_id", studentProfileId);
-            totalDeleted += safeDelete("daily_progress_summary", "student_profile_id", studentProfileId);
+            // Each deletion is isolated - if one fails, others continue
+            totalDeleted += safeDeleteInNewTransaction("enrollments", "student_profile_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("student_subjects", "student_profile_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("assessment_submissions", "student_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("assessments", "target_student_profile_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("student_lesson_progress", "student_profile_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("daily_schedules", "student_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("individual_lesson_topics", "student_profile_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("individual_student_schemes", "student_profile_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("individual_student_timetables", "student_profile_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("daily_progress_summary", "student_profile_id", studentProfileId);
             
-            // Archived tables (currently empty, but using correct column names if needed)
-            // Both archived tables use student_id, not student_profile_id
-            totalDeleted += safeDelete("archived_daily_schedules", "student_id", studentProfileId);
-            totalDeleted += safeDelete("archived_student_lesson_progress", "student_id", studentProfileId);
+            // Archived tables (use student_id, not student_profile_id)
+            totalDeleted += safeDeleteInNewTransaction("archived_daily_schedules", "student_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("archived_student_lesson_progress", "student_id", studentProfileId);
             
             // Optional tables
-            totalDeleted += safeDelete("video_watch_history", "student_id", studentProfileId);
-            totalDeleted += safeDelete("session_attendance", "student_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("video_watch_history", "student_id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("session_attendance", "student_id", studentProfileId);
 
             // Finally, delete student profile
-            totalDeleted += safeDelete("student_profiles", "id", studentProfileId);
+            totalDeleted += safeDeleteInNewTransaction("student_profiles", "id", studentProfileId);
             log.info("  ✅ Deleted student profile");
         }
 
         // ============================================================
-        // TEACHER-RELATED CLEANUP
+        // TEACHER-RELATED CLEANUP - Each in separate nested transaction
         // ============================================================
         if (teacherProfileId != null) {
             log.info("👨‍🏫 User is a TEACHER - cleaning up teacher-related data...");
 
-            totalDeleted += safeDelete("teacher_subjects", "teacher_profile_id", teacherProfileId);
-            totalDeleted += safeDelete("teacher_classes", "teacher_id", teacherProfileId);
-            totalDeleted += safeDelete("teacher_question_bank", "teacher_id", teacherProfileId);
-            totalDeleted += safeDelete("teacher_youtube_tokens", "teacher_id", teacherProfileId);
-            totalDeleted += safeDelete("live_sessions", "teacher_id", teacherProfileId);
+            totalDeleted += safeDeleteInNewTransaction("teacher_subjects", "teacher_profile_id", teacherProfileId);
+            totalDeleted += safeDeleteInNewTransaction("teacher_classes", "teacher_id", teacherProfileId);
+            totalDeleted += safeDeleteInNewTransaction("teacher_question_bank", "teacher_id", teacherProfileId);
+            totalDeleted += safeDeleteInNewTransaction("teacher_youtube_tokens", "teacher_id", teacherProfileId);
+            totalDeleted += safeDeleteInNewTransaction("live_sessions", "teacher_id", teacherProfileId);
 
             // Finally, delete teacher profile
-            totalDeleted += safeDelete("teacher_profiles", "id", teacherProfileId);
+            totalDeleted += safeDeleteInNewTransaction("teacher_profiles", "id", teacherProfileId);
             log.info("  ✅ Deleted teacher profile");
         }
 
         // ============================================================
-        // COMMON USER DATA CLEANUP
+        // COMMON USER DATA CLEANUP - Each in separate nested transaction
         // ============================================================
         log.info("🔧 Cleaning up common user data...");
 
-        totalDeleted += safeDelete("chat_messages", "sender_id", userId, "core");
-        totalDeleted += safeDelete("notifications", "user_id", userId, "core");
-        totalDeleted += safeDelete("announcement_target_users", "user_id", userId, "core");
-        totalDeleted += safeDelete("user_roles", "user_id", userId, "core");
+        totalDeleted += safeDeleteInNewTransaction("chat_messages", "sender_id", userId, "core");
+        totalDeleted += safeDeleteInNewTransaction("notifications", "user_id", userId, "core");
+        totalDeleted += safeDeleteInNewTransaction("announcement_target_users", "user_id", userId, "core");
+        totalDeleted += safeDeleteInNewTransaction("user_roles", "user_id", userId, "core");
 
         // ============================================================
         // FINALLY DELETE THE USER
@@ -159,7 +159,7 @@ public class UserService {
         
         // Now fetch a fresh copy of the user and delete it
         User freshUser = userRepository.findById(userId)
-            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+            .orElseThrow(() -> new ResourceNotFoundException("User not found after cleanup: " + userId));
         
         userRepository.delete(freshUser);
         entityManager.flush(); // Force the delete to happen now
@@ -169,13 +169,17 @@ public class UserService {
     }
 
     /**
-     * Safe delete method - checks if column exists first, then deletes
+     * ✅ Execute deletion in separate transaction to prevent abort cascade
+     * REQUIRES_NEW = This runs in its own transaction, isolated from parent
+     * If this fails, only this transaction is aborted, parent continues
      */
-    private int safeDelete(String tableName, String columnName, Long id) {
-        return safeDelete(tableName, columnName, id, "academic");
+    @org.springframework.transaction.annotation.Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int safeDeleteInNewTransaction(String tableName, String columnName, Long id) {
+        return safeDeleteInNewTransaction(tableName, columnName, id, "academic");
     }
 
-    private int safeDelete(String tableName, String columnName, Long id, String schema) {
+    @org.springframework.transaction.annotation.Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int safeDeleteInNewTransaction(String tableName, String columnName, Long id, String schema) {
         try {
             // First, verify the column exists
             String checkSql = """
@@ -189,47 +193,24 @@ public class UserService {
             Integer columnExists = jdbcTemplate.queryForObject(checkSql, Integer.class, schema, tableName, columnName);
             
             if (columnExists == null || columnExists == 0) {
-                log.warn("  ⚠️ Column {}.{}.{} does not exist - skipping", schema, tableName, columnName);
+                log.debug("  ⚠️ Column {}.{}.{} does not exist - skipping", schema, tableName, columnName);
                 return 0;
             }
             
             // Column exists, proceed with deletion
             String sql = String.format("DELETE FROM %s.%s WHERE %s = ?", schema, tableName, columnName);
             int deleted = jdbcTemplate.update(sql, id);
+            
             if (deleted > 0) {
                 log.info("  ✅ Deleted {} records from {}.{}", deleted, schema, tableName);
             }
+            
             return deleted;
+            
         } catch (Exception e) {
             log.warn("  ⚠️ Could not delete from {}.{}: {}", schema, tableName, e.getMessage());
+            // This transaction will rollback, but main transaction continues
             return 0;
-        }
-    }
-
-    /**
-     * Try primary column name, fall back to alternate if first fails
-     */
-    private int safeDeleteWithFallback(String tableName, String primaryColumn, String fallbackColumn, Long id) {
-        try {
-            String sql = String.format("DELETE FROM academic.%s WHERE %s = ?", tableName, primaryColumn);
-            int deleted = jdbcTemplate.update(sql, id);
-            if (deleted > 0) {
-                log.info("  ✅ Deleted {} records from academic.{}", deleted, tableName);
-            }
-            return deleted;
-        } catch (Exception e) {
-            // Try fallback column
-            try {
-                String sql = String.format("DELETE FROM academic.%s WHERE %s = ?", tableName, fallbackColumn);
-                int deleted = jdbcTemplate.update(sql, id);
-                if (deleted > 0) {
-                    log.info("  ✅ Deleted {} records from academic.{} (using {})", deleted, tableName, fallbackColumn);
-                }
-                return deleted;
-            } catch (Exception e2) {
-                log.warn("  ⚠️ Could not delete from academic.{}: {}", tableName, e2.getMessage());
-                return 0;
-            }
         }
     }
 
