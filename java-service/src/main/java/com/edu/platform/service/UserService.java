@@ -6,13 +6,14 @@ import com.edu.platform.model.User;
 import com.edu.platform.model.enums.StudentType;
 import com.edu.platform.repository.UserRepository;
 
-import jakarta.transaction.Transactional;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -173,13 +174,14 @@ public class UserService {
      * REQUIRES_NEW = This runs in its own transaction, isolated from parent
      * If this fails, only this transaction is aborted, parent continues
      */
-    @org.springframework.transaction.annotation.Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int safeDeleteInNewTransaction(String tableName, String columnName, Long id) {
-        return safeDeleteInNewTransaction(tableName, columnName, id, "academic");
-    }
 
-    @org.springframework.transaction.annotation.Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int safeDeleteInNewTransaction(String tableName, String columnName, Long id, String schema) {
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public int safeDeleteInNewTransaction(String tableName, String columnName, Long id) {
+	    return safeDeleteInNewTransaction(tableName, columnName, id, "academic");
+	}
+	
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public int safeDeleteInNewTransaction(String tableName, String columnName, Long id, String schema) {
         try {
             // First, verify the column exists
             String checkSql = """
