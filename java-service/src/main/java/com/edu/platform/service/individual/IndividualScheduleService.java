@@ -148,16 +148,16 @@ public class IndividualScheduleService {
                 student, startDate, endDate, "INDIVIDUAL");
         
         // If no schedules exist, generate them
-        if (schedules.isEmpty()) {
-            log.info("⚙️ No schedules found for range {} to {}, generating...", 
-                     startDate, endDate);
-            scheduleGenerator.generateForDateRange(student, startDate, endDate);
+     // if (schedules.isEmpty()) {
+     //       log.info("⚙️ No schedules found for range {} to {}, generating...", 
+     //              startDate, endDate);
+     //        scheduleGenerator.generateForDateRange(student, startDate, endDate);
             
-            // Fetch the newly generated schedules
-            schedules = scheduleRepository
-                .findByStudentProfileAndScheduledDateBetweenAndScheduleSourceOrderByScheduledDateAscPeriodNumberAsc(
-                    student, startDate, endDate, "INDIVIDUAL");
-        }
+           // Fetch the newly generated schedules
+     // schedules = scheduleRepository
+     //          .findByStudentProfileAndScheduledDateBetweenAndScheduleSourceOrderByScheduledDateAscPeriodNumberAsc(
+     //             student, startDate, endDate, "INDIVIDUAL");
+     //   }
         
         // ✅ FETCH ALL PROGRESS RECORDS FOR THIS DATE RANGE AT ONCE
         List<StudentLessonProgress> progressRecords = progressRepository
