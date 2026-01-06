@@ -42,13 +42,21 @@ jwt:
 # 🌐 Server Configuration
 server:
   port: 8080
-  address: 0.0.0.0  # Bind to all network interfaces for Railway
+  address: 0.0.0.0
   servlet:
     context-path: /api/v1
 
 # 📱 Application Configuration
 app:
   backend-base-url: ${APP_BACKEND_BASE_URL:http://localhost:8080/api/v1}
+
+# ☁️ AWS S3 Configuration
+aws:
+  s3:
+    bucket-name: ${AWS_S3_BUCKET_NAME:haybee-edu-lessons}
+    region: ${AWS_S3_REGION:us-east-1}
+  access-key-id: ${AWS_ACCESS_KEY_ID}
+  secret-access-key: ${AWS_SECRET_ACCESS_KEY}
 
 # 🎥 Zoom Configuration
 zoom:
@@ -94,31 +102,20 @@ python-service:
 # ✅ SPRINT 5: INDIVIDUAL STUDENT ASSESSMENT WINDOWS
 # ============================================================
 
-# Assessment Window Settings
 individual:
   assessment:
-    # Time before period start when assessment becomes available
     pre-window:
       minutes: 30
-    
-    # Grace period after period end (hours)
     grace-period:
       hours: 2
-    
-    # Late submission tolerance (minutes) after grace period ends
     late-submission:
       tolerance:
         minutes: 5
-    
-    # Strict deadline enforcement
     strict-deadline:
       enabled: true
-    
-    # Cross-day submission (disabled for strict per-period windows)
     cross-day-submission:
       enabled: false
 
-  # Time Windows (from Sprint 1)
   schedule:
     weekday:
       start: "16:00"
@@ -129,34 +126,25 @@ individual:
     sunday:
       enabled: false
 
-  # Background Tasks Configuration
   tasks:
-    # Assessment Window Opener Task
     assessment-opener:
       enabled: true
       interval-minutes: 10
       batch-size: 100
-    
-    # Grace Period Expiry Task
     grace-expiry:
       enabled: true
       interval-minutes: 15
       batch-size: 100
-    
-    # Weekly Generation Task
     weekly-generation:
       enabled: true
 
-  # Notification Settings
   assessment-available:
     notify:
       student: true
-  
   assessment-expired:
     notify:
       student: true
       teacher: true
-  
   assessment-completed:
     notify:
       teacher: true
@@ -169,7 +157,6 @@ logging:
     org.springframework.security: INFO
     org.hibernate.SQL: WARN
     com.edu.platform: DEBUG
-    # Sprint 5 specific logging
     com.edu.platform.service.individual.AssessmentWindowCalculator: DEBUG
     com.edu.platform.service.individual.AssessmentAccessibilityService: DEBUG
     com.edu.platform.service.individual.GracePeriodExpiryService: DEBUG
