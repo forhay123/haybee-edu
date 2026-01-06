@@ -34,17 +34,24 @@ const SubjectSelectionModal: React.FC<SubjectSelectionModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
 
-  // ✅ FIXED: Fetch only INDIVIDUAL type classes
-  const { data: classes = [], isLoading: loadingClasses } = useQuery({
-    queryKey: ['available-classes-individual'],
+  // ✅ FIXED: Fetch all classes and filter INDIVIDUAL type client-side
+  const { data: allClasses = [], isLoading: loadingClasses } = useQuery({
+    queryKey: ['available-classes'],
     queryFn: async () => {
-      const response = await axios.get('/classes', {
-        params: { studentType: 'INDIVIDUAL' }
-      });
+      const response = await axios.get('/classes');
       return response.data as ClassOption[];
     },
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
+
+  // ✅ Filter to show only INDIVIDUAL type classes
+  const classes = useMemo(() => {
+    return allClasses.filter(classOption => {
+      // Check if class name contains "Individual" or if it's explicitly marked
+      // This matches classes like "SSS1 Science Individual", "JSS2 Individual", etc.
+      return classOption.name.toLowerCase().includes('individual');
+    });
+  }, [allClasses]);
 
   // Fetch subjects based on selected class
   const { data: subjects = [], isLoading: loadingSubjects } = useQuery({
