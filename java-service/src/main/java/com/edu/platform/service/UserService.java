@@ -7,6 +7,8 @@ import com.edu.platform.model.enums.StudentType;
 import com.edu.platform.repository.UserRepository;
 
 import jakarta.transaction.Transactional;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,6 +27,9 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final JdbcTemplate jdbcTemplate;
+    
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public Optional<User> findById(Long id) {
         return userRepository.findById(id);
@@ -146,7 +151,19 @@ public class UserService {
         // ============================================================
         // FINALLY DELETE THE USER
         // ============================================================
-        userRepository.delete(user);
+        
+        // CRITICAL: Flush and clear Hibernate session before deleting User entity
+        // This prevents StaleObjectStateException since we deleted student_profile via JDBC
+        entityManager.flush();
+        entityManager.clear();
+        
+        // Now fetch a fresh copy of the user and delete it
+        User freshUser = userRepository.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        
+        userRepository.delete(freshUser);
+        entityManager.flush(); // Force the delete to happen now
+        
         log.info("✅ User {} deleted successfully", userId);
         log.info("📊 Total records cleaned: {}", totalDeleted);
     }
