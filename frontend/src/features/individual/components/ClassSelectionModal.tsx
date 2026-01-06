@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, Search, Check, AlertCircle, Loader2, GraduationCap } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from '../../../../api/axios';
+import axios from '../../../api/axios';
 import { toast } from 'react-hot-toast';
 
 interface ClassOption {
