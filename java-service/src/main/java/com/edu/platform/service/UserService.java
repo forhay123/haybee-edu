@@ -1,9 +1,12 @@
 package com.edu.platform.service;
 
 import com.edu.platform.dto.user.UserDto;
+import com.edu.platform.exception.ResourceNotFoundException;
 import com.edu.platform.model.User;
 import com.edu.platform.model.enums.StudentType;
 import com.edu.platform.repository.UserRepository;
+
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -11,7 +14,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 
+
+@Slf4j 
 /**
  * Provides user-related CRUD, lookup, and mapping logic.
  */
@@ -60,5 +66,17 @@ public class UserService {
                 .enabled(user.isEnabled())
                 .roles(roles)
                 .build();
+    }
+    
+    /**
+     * Delete a user by ID
+     */
+    @Transactional
+    public void deleteUser(Long id) {
+        User user = userRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
+        
+        userRepository.delete(user);
+        log.info("✅ User {} deleted", id);
     }
 }

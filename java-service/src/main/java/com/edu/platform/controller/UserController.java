@@ -21,7 +21,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j  // Add this annotation to the class
 @RestController
 @RequestMapping("/users")
 @RequiredArgsConstructor
@@ -208,5 +212,47 @@ public class UserController {
         );
         
         return ResponseEntity.ok(stats);
+    }
+    
+    
+    /**
+     * ✅ Admin-only: Delete a user
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}")
+    @Transactional
+    public ResponseEntity<Map<String, String>> deleteUser(@PathVariable Long id) {
+        log.info("🗑️ Admin: Deleting user {}", id);
+        
+        try {
+            User user = userService.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
+            
+            // Prevent deleting yourself
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName().equals(user.getEmail())) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "success", "false",
+                    "message", "You cannot delete your own account"
+                ));
+            }
+            
+            // Delete the user
+            userService.deleteUser(id);
+            
+            log.info("✅ User {} deleted successfully", id);
+            
+            return ResponseEntity.ok(Map.of(
+                "success", "true",
+                "message", "User deleted successfully"
+            ));
+            
+        } catch (Exception e) {
+            log.error("❌ Failed to delete user {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of(
+                "success", "false",
+                "message", "Failed to delete user: " + e.getMessage()
+            ));
+        }
     }
 }
