@@ -12,6 +12,8 @@ import com.edu.platform.repository.SubjectRepository;
 import com.edu.platform.repository.individual.IndividualTimetableRepository;
 import com.edu.platform.repository.progress.StudentLessonProgressRepository;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -48,6 +50,9 @@ public class IndividualScheduleService {
 
     private final JdbcTemplate jdbcTemplate;
     
+    
+    @PersistenceContext
+    private EntityManager entityManager;
     
     /**
      * Get schedule for a specific date
@@ -536,63 +541,69 @@ public class IndividualScheduleService {
      * ✅ FIXED: Delete schedules using SQL to handle self-referencing FK properly
      * Handles previous_period_progress_id FK constraint
      */
-    @Transactional
-    private int deleteStudentSchedulesForWeekSQL(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
-        log.info("🗑️ Deleting schedules for student {} from {} to {}", studentId, weekStart, weekEnd);
-        
-        try {
-            // Step 1: Unlink previous_period_progress_id references FIRST
-            String unlinkSelfRefSql = """
-                UPDATE academic.student_lesson_progress
-                SET previous_period_progress_id = NULL
-                WHERE student_profile_id = ?
-                  AND scheduled_date BETWEEN ? AND ?
-                  AND previous_period_progress_id IS NOT NULL
-                """;
-            
-            int unlinked = jdbcTemplate.update(unlinkSelfRefSql, studentId, weekStart, weekEnd);
-            if (unlinked > 0) {
-                log.info("  ✅ Unlinked {} previous period progress references", unlinked);
-            }
-            
-            // Step 2: Preserve progress with submissions by unlinking from schedule
-            String preserveProgressSql = """
-                UPDATE academic.student_lesson_progress p
-                SET daily_schedule_id = NULL
-                WHERE p.student_profile_id = ?
-                  AND p.scheduled_date BETWEEN ? AND ?
-                  AND p.assessment_submission_id IS NOT NULL
-                """;
-            int preserved = jdbcTemplate.update(preserveProgressSql, studentId, weekStart, weekEnd);
-            log.info("  ✅ Preserved {} progress records with submissions", preserved);
-            
-            // Step 3: Delete progress without submissions
-            String deleteProgressSql = """
-                DELETE FROM academic.student_lesson_progress p
-                WHERE p.student_profile_id = ?
-                  AND p.scheduled_date BETWEEN ? AND ?
-                  AND p.assessment_submission_id IS NULL
-                """;
-            int progressDeleted = jdbcTemplate.update(deleteProgressSql, studentId, weekStart, weekEnd);
-            log.info("  ✅ Deleted {} progress records without submissions", progressDeleted);
-            
-            // Step 4: Delete schedules
-            String deleteSchedulesSql = """
-                DELETE FROM academic.daily_schedules
-                WHERE student_id = ?
-                  AND scheduled_date BETWEEN ? AND ?
-                  AND schedule_source = 'INDIVIDUAL'
-                """;
-            int schedulesDeleted = jdbcTemplate.update(deleteSchedulesSql, studentId, weekStart, weekEnd);
-            log.info("  ✅ Deleted {} schedules", schedulesDeleted);
-            
-            return schedulesDeleted;
-            
-        } catch (Exception e) {
-            log.error("❌ Failed to delete schedules: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to delete schedules: " + e.getMessage(), e);
-        }
-    }
+
+	@Transactional
+	private int deleteStudentSchedulesForWeekSQL(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	    log.info("🗑️ Deleting schedules for student {} from {} to {}", studentId, weekStart, weekEnd);
+	
+	    try {
+	        // Step 1: Unlink previous_period_progress_id references FIRST
+	        String unlinkSelfRefSql = """
+	            UPDATE academic.student_lesson_progress
+	            SET previous_period_progress_id = NULL
+	            WHERE student_profile_id = ?
+	              AND scheduled_date BETWEEN ? AND ?
+	              AND previous_period_progress_id IS NOT NULL
+	            """;
+	
+	        int unlinked = jdbcTemplate.update(unlinkSelfRefSql, studentId, weekStart, weekEnd);
+	        if (unlinked > 0) {
+	            log.info("  ✅ Unlinked {} previous period progress references", unlinked);
+	        }
+	
+	        // Step 2: Preserve progress with submissions by unlinking from schedule
+	        String preserveProgressSql = """
+	            UPDATE academic.student_lesson_progress p
+	            SET daily_schedule_id = NULL
+	            WHERE p.student_profile_id = ?
+	              AND p.scheduled_date BETWEEN ? AND ?
+	              AND p.assessment_submission_id IS NOT NULL
+	            """;
+	        int preserved = jdbcTemplate.update(preserveProgressSql, studentId, weekStart, weekEnd);
+	        log.info("  ✅ Preserved {} progress records with submissions", preserved);
+	
+	        // Step 3: Delete progress without submissions
+	        String deleteProgressSql = """
+	            DELETE FROM academic.student_lesson_progress p
+	            WHERE p.student_profile_id = ?
+	              AND p.scheduled_date BETWEEN ? AND ?
+	              AND p.assessment_submission_id IS NULL
+	            """;
+	        int progressDeleted = jdbcTemplate.update(deleteProgressSql, studentId, weekStart, weekEnd);
+	        log.info("  ✅ Deleted {} progress records without submissions", progressDeleted);
+	
+	        // Step 4: Delete schedules
+	        String deleteSchedulesSql = """
+	            DELETE FROM academic.daily_schedules
+	            WHERE student_id = ?
+	              AND scheduled_date BETWEEN ? AND ?
+	              AND schedule_source = 'INDIVIDUAL'
+	            """;
+	        int schedulesDeleted = jdbcTemplate.update(deleteSchedulesSql, studentId, weekStart, weekEnd);
+	        log.info("  ✅ Deleted {} schedules", schedulesDeleted);
+	
+	        // ✅ CRITICAL FIX: Clear EntityManager cache after SQL deletion
+	        entityManager.flush();
+	        entityManager.clear();
+	        log.info("  ✅ Cleared EntityManager cache to prevent stale entity issues");
+	
+	        return schedulesDeleted;
+	
+	    } catch (Exception e) {
+	        log.error("❌ Failed to delete schedules: {}", e.getMessage(), e);
+	        throw new RuntimeException("Failed to delete schedules: " + e.getMessage(), e);
+	    }
+	}
     
 
     /**
