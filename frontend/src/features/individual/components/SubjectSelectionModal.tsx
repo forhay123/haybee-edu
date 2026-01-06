@@ -34,11 +34,13 @@ const SubjectSelectionModal: React.FC<SubjectSelectionModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
 
-  // Fetch available classes
+  // ✅ FIXED: Fetch only INDIVIDUAL type classes
   const { data: classes = [], isLoading: loadingClasses } = useQuery({
-    queryKey: ['available-classes'],
+    queryKey: ['available-classes-individual'],
     queryFn: async () => {
-      const response = await axios.get('/classes');
+      const response = await axios.get('/classes', {
+        params: { studentType: 'INDIVIDUAL' }
+      });
       return response.data as ClassOption[];
     },
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
