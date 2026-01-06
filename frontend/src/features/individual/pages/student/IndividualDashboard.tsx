@@ -1,5 +1,5 @@
-// ✅ COMPLETE: IndividualDashboard.tsx
-// Supports: Upload timetable OR Manual subject selection
+// ✅ FIXED: IndividualDashboard.tsx
+// Consistent flow: Class Selection → Setup Choice → Upload/Manual Selection
 
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -46,7 +46,7 @@ import TimetableSetupChoice from "../../components/TimetableSetupChoice";
 import SubjectSelectionModal from "../../components/SubjectSelectionModal";
 
 type Tab = "schedule" | "liveSessions" | "uploads";
-type SetupMode = "choice" | "upload" | "manual"; // ✅ NEW: Track which mode user chose
+type SetupMode = "choice" | "upload" | "manual";
 
 const getDayDisplayName = (day: string): string => {
   const days: Record<string, string> = {
@@ -68,7 +68,7 @@ const IndividualDashboard: React.FC = () => {
   const [showWeeklyScheduleModal, setShowWeeklyScheduleModal] = useState(false);
   const uploadsTabRef = React.useRef<HTMLDivElement>(null);
 
-  // ✅ NEW: Track setup mode
+  // ✅ NEW: Track setup mode - now always starts with choice
   const [setupMode, setSetupMode] = useState<SetupMode>("choice");
   const [showSubjectModal, setShowSubjectModal] = useState(false);
 
@@ -103,6 +103,9 @@ const IndividualDashboard: React.FC = () => {
   const hasTimetable = overview?.timetables && overview.timetables.length > 0;
   const hasCompletedTimetable = !!latestTimetable;
   const isNewStudent = !hasProcessingItems && !overviewLoading && overview && !hasTimetable;
+
+  // ✅ Check if profile has class assigned (classId must exist)
+  const hasClassAssigned = !!profile?.classId;
 
   // ✅ FIXED: Fetch CURRENT WEEK's generated schedules (only if completed timetable exists)
   const { data: weekSchedules = [], refetch: refetchWeek } = useQuery({
@@ -369,9 +372,28 @@ const IndividualDashboard: React.FC = () => {
     );
   }
 
-  // ✅ NEW STUDENT VIEW: Show choice screen or upload section
+  // ✅ CRITICAL CHECK: If student doesn't have a class assigned, show error
+  if (!hasClassAssigned) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 max-w-md text-center">
+          <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-yellow-900 mb-3">Class Not Assigned</h2>
+          <p className="text-yellow-800 mb-4">
+            Your profile doesn't have a class assigned yet. Please contact an administrator to assign you to a class before you can start using your learning portal.
+          </p>
+          <div className="bg-yellow-100 rounded-lg p-4 text-sm text-yellow-900">
+            <p className="font-semibold mb-2">Why do I need a class?</p>
+            <p>Your class determines which subjects are available to you and helps us generate your personalized schedule.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ NEW STUDENT VIEW: Show choice screen ONLY (consistent across all devices)
   if (isNewStudent) {
-    // Show setup choice screen
+    // Always show setup choice screen first
     if (setupMode === "choice") {
       return (
         <>
