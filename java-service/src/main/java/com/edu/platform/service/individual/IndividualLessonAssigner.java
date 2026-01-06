@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 /**
  * ✅ FIXED: Service for assigning lesson topics to INDIVIDUAL student schedules
  * Properly sets missing_lesson_topic flag based on topic availability
+ * NOW SAVES schedules after assignment
  */
 @Service
 @Slf4j
@@ -33,7 +34,7 @@ public class IndividualLessonAssigner {
 
     /**
      * ✅ FIXED: Assign lesson topic to a schedule based on term week
-     * Now properly sets missing_lesson_topic flag
+     * Now properly sets missing_lesson_topic flag AND saves the schedule
      */
     @Transactional
     public LessonTopic assignLessonTopicForWeek(DailySchedule schedule, 
@@ -57,8 +58,8 @@ public class IndividualLessonAssigner {
             schedule.setScheduleStatus(ScheduleStatus.IN_PROGRESS);
             schedule.setLessonAssignmentMethod("PENDING_MANUAL");
             
-            // Don't save here - let the caller save to avoid double-save
-            // dailyScheduleRepository.save(schedule);
+            // ✅ FIX: Save here!
+            dailyScheduleRepository.save(schedule);
             
             return null;
         }
@@ -73,8 +74,8 @@ public class IndividualLessonAssigner {
         schedule.setScheduleStatus(ScheduleStatus.READY);
         schedule.setLessonAssignmentMethod("AUTO_WEEKLY_ROTATION");
         
-        // Don't save here - let the caller save
-        // dailyScheduleRepository.save(schedule);
+        // ✅ FIX: Save here!
+        dailyScheduleRepository.save(schedule);
 
         return topic;
     }
@@ -191,6 +192,7 @@ public class IndividualLessonAssigner {
     /**
      * ✅ FIXED: Bulk assign lesson topics to all IN_PROGRESS schedules for a week
      * Properly handles the missing_lesson_topic flag
+     * Note: assignLessonTopicForWeek now saves, so we don't need to save again
      */
     @Transactional
     public int bulkAssignTopicsForWeek(Integer weekNumber, Term term) {
@@ -226,17 +228,15 @@ public class IndividualLessonAssigner {
                 continue;
             }
 
-            // Try to assign topic
+            // Try to assign topic (this method now saves internally)
             LessonTopic assignedTopic = assignLessonTopicForWeek(schedule, subject, weekNumber, term);
             
             if (assignedTopic != null) {
-                // ✅ Topic was assigned: flag is already set to FALSE by assignLessonTopicForWeek
-                dailyScheduleRepository.save(schedule);
+                // ✅ Topic was assigned and saved by assignLessonTopicForWeek
                 assignedCount++;
                 log.debug("✅ Assigned topic to schedule {}", schedule.getId());
             } else {
-                // ⚠️ Still no topic: flag remains TRUE
-                dailyScheduleRepository.save(schedule);
+                // ⚠️ Still no topic, but schedule was saved with missing flag
                 stillMissingCount++;
                 log.debug("⚠️  Schedule {} still has no topic", schedule.getId());
             }

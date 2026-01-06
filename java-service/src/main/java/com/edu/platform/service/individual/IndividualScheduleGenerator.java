@@ -548,57 +548,52 @@ public class IndividualScheduleGenerator {
     /**
      * Create schedule - let exceptions propagate for proper transaction handling
      */
-    private DailySchedule createStandardizedSchedule(
-            StudentProfile student,
-            Subject subject,
-            LocalDate date,
-            TimeSlot slot,
-            Integer weekNumber,
-            Term term,
-            IndividualStudentTimetable timetable) {
-        
-        // ✅ NEW: Calculate assessment windows at schedule creation
-        LocalDateTime windowStart = LocalDateTime.of(date, slot.getStartTime());
-        LocalDateTime windowEnd = LocalDateTime.of(date, slot.getEndTime());
-        LocalDateTime graceEnd = windowEnd.plusMinutes(15);
-        
-        DailySchedule schedule = DailySchedule.builder()
-            .studentProfile(student)
-            .scheduledDate(date)
-            .dayOfWeek(date.getDayOfWeek().name())
-            .periodNumber(slot.getPeriodNumber())
-            .startTime(slot.getStartTime())
-            .endTime(slot.getEndTime())
-            .subject(subject)
-            .scheduleSource("INDIVIDUAL")
-            .individualTimetableId(timetable.getId())
-            .completed(false)
-            .lessonContentAccessible(true)
-            // ✅ NEW: Set assessment windows at creation
-            .assessmentWindowStart(windowStart)
-            .assessmentWindowEnd(windowEnd)
-            .graceEndDatetime(graceEnd)
-            .build();
-
-        LessonTopic lessonTopic = lessonAssigner.assignLessonTopicForWeek(
-            schedule, subject, weekNumber, term
-        );
-
-        if (lessonTopic == null) {
-            schedule.setMissingLessonTopic(true);
-            schedule.setLessonAssignmentMethod("PENDING_MANUAL");
-            schedule.setScheduleStatus(com.edu.platform.model.enums.ScheduleStatus.IN_PROGRESS);
-            schedule = dailyScheduleRepository.save(schedule);
-        } else {
-            schedule.setMissingLessonTopic(false);
-            schedule.setLessonAssignmentMethod("AUTO_WEEKLY_ROTATION");
-            schedule.setScheduleStatus(com.edu.platform.model.enums.ScheduleStatus.READY);
-            schedule = dailyScheduleRepository.save(schedule);
-            createProgressRecord(schedule, student, subject, lessonTopic, date, slot);
-        }
-
-        return schedule;
-    }
+	 // Update createStandardizedSchedule method around line 724
+	
+	 private DailySchedule createStandardizedSchedule(
+	         StudentProfile student,
+	         Subject subject,
+	         LocalDate date,
+	         TimeSlot slot,
+	         Integer weekNumber,
+	         Term term,
+	         IndividualStudentTimetable timetable) {
+	     
+	     // ✅ NEW: Calculate assessment windows at schedule creation
+	     LocalDateTime windowStart = LocalDateTime.of(date, slot.getStartTime());
+	     LocalDateTime windowEnd = LocalDateTime.of(date, slot.getEndTime());
+	     LocalDateTime graceEnd = windowEnd.plusMinutes(15);
+	     
+	     DailySchedule schedule = DailySchedule.builder()
+	         .studentProfile(student)
+	         .scheduledDate(date)
+	         .dayOfWeek(date.getDayOfWeek().name())
+	         .periodNumber(slot.getPeriodNumber())
+	         .startTime(slot.getStartTime())
+	         .endTime(slot.getEndTime())
+	         .subject(subject)
+	         .scheduleSource("INDIVIDUAL")
+	         .individualTimetableId(timetable.getId())
+	         .completed(false)
+	         .lessonContentAccessible(true)
+	         .assessmentWindowStart(windowStart)
+	         .assessmentWindowEnd(windowEnd)
+	         .graceEndDatetime(graceEnd)
+	         .build();
+	
+	     // ✅ FIXED: assignLessonTopicForWeek now saves the schedule itself!
+	     // We don't need to save again here
+	     LessonTopic lessonTopic = lessonAssigner.assignLessonTopicForWeek(
+	         schedule, subject, weekNumber, term
+	     );
+	
+	     // Create progress record if topic was assigned
+	     if (lessonTopic != null) {
+	         createProgressRecord(schedule, student, subject, lessonTopic, date, slot);
+	     }
+	
+	     return schedule;  // Already saved by assignLessonTopicForWeek
+	 }
 
     /**
      * Create or update progress record, preserving existing submissions
