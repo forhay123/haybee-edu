@@ -94,6 +94,32 @@ export default function LessonContentView() {
   const { data: weeklySchedule } = useWeekSchedule(termStartDate, !!profile?.id);
 
   // ============================================================
+  // HELPER FUNCTION TO CONVERT PDF URLS
+  // ============================================================
+  /**
+   * Extract filename from full URL and construct correct API path
+   * 
+   * Input:  "https://haybee-edu-production.up.railway.app/api/v1/lesson-topics/uploads/lessons/1767431428360_file.pdf"
+   * Output: "/lesson-topics/uploads/lessons/1767431428360_file.pdf"
+   */
+  const getPdfUrl = (fileUrl: string | undefined | null): string => {
+    if (!fileUrl) return '';
+    
+    console.log('🔍 Original fileUrl:', fileUrl);
+    
+    // Extract just the filename from the full URL
+    if (fileUrl.includes('/uploads/lessons/')) {
+      const filename = fileUrl.split('/uploads/lessons/')[1];
+      const cleanUrl = `/lesson-topics/uploads/lessons/${filename}`;
+      console.log('✅ Converted to:', cleanUrl);
+      return cleanUrl;
+    }
+    
+    console.log('⚠️ Returning original URL (no conversion needed):', fileUrl);
+    return fileUrl;
+  };
+
+  // ============================================================
   // FETCH SCHEDULE DATA - NO REMAPPING
   // ============================================================
   useEffect(() => {
@@ -613,7 +639,7 @@ export default function LessonContentView() {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => window.open(lessonContent.fileUrl, '_blank')}
+                            onClick={() => window.open(getPdfUrl(lessonContent.fileUrl), '_blank')}
                           >
                             <Download className="h-4 w-4 mr-2" />
                             Open PDF
@@ -622,7 +648,7 @@ export default function LessonContentView() {
                         
                         <div className="aspect-[8.5/11] bg-gray-100 rounded-lg overflow-hidden border">
                           <iframe
-                            src={lessonContent.fileUrl}
+                            src={getPdfUrl(lessonContent.fileUrl)}
                             className="w-full h-full"
                             title="Lesson Material PDF"
                           />
@@ -721,7 +747,7 @@ export default function LessonContentView() {
                               <Button 
                                 variant="outline" 
                                 size="sm"
-                                onClick={() => window.open(resource.url, '_blank')}
+                                onClick={() => window.open(getPdfUrl(resource.url), '_blank')}
                               >
                                 <Download className="h-4 w-4 mr-2" />
                                 Download
@@ -822,4 +848,3 @@ export default function LessonContentView() {
     </div>
   );
 }
-                              

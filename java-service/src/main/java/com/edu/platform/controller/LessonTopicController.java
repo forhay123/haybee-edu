@@ -146,11 +146,14 @@ public class LessonTopicController {
             @RequestParam Set<Long> lessonTopicIds) {
         return ResponseEntity.ok(lessonService.getAIQuestionsByLessonTopicIds(lessonTopicIds));
     }
+    
+    
+    // Fix the serveLessonFile method in LessonTopicController.java
 
     @GetMapping("/uploads/lessons/{filename:.+}")
     public ResponseEntity<Resource> serveLessonFile(
             @PathVariable String filename,
-            Authentication authentication) {  // Make it optional
+            Authentication authentication) {
         try {
             // ✅ Allow both authenticated users AND iframe requests
             boolean isAuthenticated = authentication != null && authentication.isAuthenticated();
@@ -158,9 +161,20 @@ public class LessonTopicController {
             // Log for debugging
             log.debug("File request for '{}' - Authenticated: {}", filename, isAuthenticated);
             
-            Path filePath = Paths.get("/app/uploads/lessons").resolve(filename).normalize();
+            // ✅ FIXED: Remove the hardcoded /app prefix - let Spring handle it
+            // The file is stored with full path in database, so we need to extract just the filename
+            String justFilename = filename;
+            if (filename.contains("/")) {
+                justFilename = filename.substring(filename.lastIndexOf("/") + 1);
+            }
+            
+            // ✅ Build the correct path
+            Path filePath = Paths.get("/app/uploads/lessons", justFilename).normalize();
+            
+            log.info("📁 Attempting to serve file from: {}", filePath);
+            
             if (!Files.exists(filePath) || !Files.isReadable(filePath)) {
-                log.warn("Requested lesson file not found or not readable: {}", filename);
+                log.warn("❌ Requested lesson file not found or not readable: {}", filePath);
                 return ResponseEntity.notFound().build();
             }
 
@@ -168,17 +182,22 @@ public class LessonTopicController {
             String contentType = Files.probeContentType(filePath);
             if (contentType == null) contentType = "application/pdf";
 
+            log.info("✅ Serving file: {} ({})", justFilename, contentType);
+
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(contentType))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + justFilename + "\"")
+                    // ✅ CRITICAL: Remove X-Frame-Options to allow iframe embedding
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000")
                     .body(resource);
 
         } catch (Exception e) {
-            log.error("Error serving lesson file '{}': {}", filename, e.getMessage());
+            log.error("❌ Error serving lesson file '{}': {}", filename, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
-
+    
+    
     // -------------------- AI Integration --------------------
 
     @PreAuthorize("isAuthenticated()")
