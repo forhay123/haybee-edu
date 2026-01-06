@@ -158,37 +158,57 @@ public class LessonTopicController {
             // ✅ Allow both authenticated users AND iframe requests
             boolean isAuthenticated = authentication != null && authentication.isAuthenticated();
             
-            // Log for debugging
-            log.debug("File request for '{}' - Authenticated: {}", filename, isAuthenticated);
+            log.debug("📁 File request for '{}' - Authenticated: {}", filename, isAuthenticated);
             
-            // ✅ FIXED: Remove the hardcoded /app prefix - let Spring handle it
-            // The file is stored with full path in database, so we need to extract just the filename
+            // ✅ Extract just the filename if a full path was passed
             String justFilename = filename;
             if (filename.contains("/")) {
                 justFilename = filename.substring(filename.lastIndexOf("/") + 1);
             }
             
-            // ✅ Build the correct path
-            Path filePath = Paths.get("/app/uploads/lessons", justFilename).normalize();
+            // ✅ Build the file path - uploads are in /app/uploads/lessons/
+            Path uploadDir = Paths.get("/app/uploads/lessons");
+            Path filePath = uploadDir.resolve(justFilename).normalize();
             
-            log.info("📁 Attempting to serve file from: {}", filePath);
+            // ✅ Security check: prevent directory traversal
+            if (!filePath.startsWith(uploadDir)) {
+                log.warn("⚠️ Security: Attempted directory traversal for file: {}", filename);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
             
-            if (!Files.exists(filePath) || !Files.isReadable(filePath)) {
-                log.warn("❌ Requested lesson file not found or not readable: {}", filePath);
+            log.info("📂 Resolved file path: {}", filePath);
+            
+            // ✅ Check if file exists and is readable
+            if (!Files.exists(filePath)) {
+                log.warn("❌ File not found: {}", filePath);
                 return ResponseEntity.notFound().build();
+            }
+            
+            if (!Files.isReadable(filePath)) {
+                log.warn("❌ File not readable: {}", filePath);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
 
             Resource resource = new UrlResource(filePath.toUri());
+            
+            // ✅ Detect content type
             String contentType = Files.probeContentType(filePath);
-            if (contentType == null) contentType = "application/pdf";
+            if (contentType == null) {
+                contentType = "application/pdf";
+            }
 
-            log.info("✅ Serving file: {} ({})", justFilename, contentType);
+            log.info("✅ Serving file: {} ({}) - Size: {} bytes", 
+                    justFilename, contentType, Files.size(filePath));
 
+            // ✅ Return file with proper headers for iframe display
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(contentType))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + justFilename + "\"")
-                    // ✅ CRITICAL: Remove X-Frame-Options to allow iframe embedding
+                    // ✅ "inline" allows browser to display PDF in iframe
+                    .header(HttpHeaders.CONTENT_DISPOSITION, 
+                            "inline; filename=\"" + justFilename + "\"")
+                    // ✅ Allow caching for better performance
                     .header(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000")
+                    // ✅ CRITICAL: No X-Frame-Options header (allows iframe embedding)
                     .body(resource);
 
         } catch (Exception e) {
