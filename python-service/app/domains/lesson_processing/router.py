@@ -5,6 +5,7 @@ from sqlalchemy import text
 import shutil, uuid, os
 import logging
 import requests
+import tempfile
 from app.core.database import get_db
 from app.domains.lesson_processing.service import LessonAIService
 from app.domains.lesson_processing.schemas import LessonAIResultCreate, LessonAIResultResponse
@@ -15,69 +16,95 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["AI Lesson Processing"])
 
 # ==========================================================
-# Directory setup for uploaded lessons
+# ✅ NEW: S3 File Downloader
 # ==========================================================
 
-UPLOAD_DIR = Path(settings.PDF_FOLDER or "/app/uploads/lessons")
-UPLOAD_DIR.mkdir(exist_ok=True, parents=True)
+def download_file_from_s3(s3_url: str) -> str:
+    """
+    Download a file from S3 URL to a temporary local file.
+    
+    Args:
+        s3_url: Full S3 URL (e.g., https://bucket.s3.region.amazonaws.com/lessons/file.pdf)
+    
+    Returns:
+        Local file path where the file was saved
+    """
+    try:
+        logger.info(f"📥 Downloading file from S3: {s3_url}")
+        
+        # Download the file from S3
+        response = requests.get(s3_url, timeout=60)
+        response.raise_for_status()
+        
+        # Extract file extension from URL
+        file_extension = Path(s3_url).suffix or ".pdf"
+        
+        # Create a temporary file
+        temp_file = tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=file_extension,
+            dir="/tmp"
+        )
+        
+        # Write content to temp file
+        temp_file.write(response.content)
+        temp_file.close()
+        
+        logger.info(f"✅ Downloaded {len(response.content)} bytes to {temp_file.name}")
+        return temp_file.name
+        
+    except requests.exceptions.Timeout:
+        logger.error(f"❌ Timeout downloading file from S3: {s3_url}")
+        raise HTTPException(status_code=504, detail="S3 download timeout")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"❌ Failed to download file from S3: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to download file from S3: {str(e)}")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error downloading from S3: {e}")
+        raise HTTPException(status_code=500, detail=f"Error downloading file: {str(e)}")
 
 # ==========================================================
-# Utility: Save uploaded file
+# ✅ UPDATED: Background Task with S3 Support
 # ==========================================================
 
-def save_upload_file(file: UploadFile) -> str:
-    """Save an uploaded file and return its local file path."""
-    ext = Path(file.filename).suffix.lower()
-    if ext not in [".pdf", ".txt"]:
-        raise HTTPException(status_code=400, detail="Only PDF or TXT files are supported")
-
-    filename = f"{uuid.uuid4().hex}{ext}"
-    file_path = UPLOAD_DIR / filename
-
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    return str(file_path)
-
-# ==========================================================
-# Background Task: Delegate lesson processing to service
-# ==========================================================
-
-
-def process_lesson_in_background(db: Session, lesson_id: int, local_file_path: str):
+def process_lesson_in_background(db: Session, lesson_id: int, file_url: str):
     """
     Background task that processes lesson and triggers Java assessment creation.
+    
+    ✅ UPDATED: Now downloads files from S3 instead of reading from local filesystem
+    
+    Args:
+        db: Database session
+        lesson_id: ai.lesson_ai_results.id
+        file_url: S3 URL of the uploaded file
     """
     service = LessonAIService(db)
+    local_file_path = None
+    
     try:
-        # Process the lesson - returns LessonAIResult SQLAlchemy object
+        # ✅ Download file from S3 to temporary local file
+        logger.info(f"🔄 Processing lesson {lesson_id} with S3 file: {file_url}")
+        local_file_path = download_file_from_s3(file_url)
+        
+        # Process the lesson with the local file
         result = service.process_lesson(lesson_id=lesson_id, local_file_path=local_file_path)
         
-        # ✅ FIX: Access SQLAlchemy model attributes directly
+        # Trigger Java assessment creation if successful
         if result and result.status == "done":
             try:
                 lesson_topic_id = result.lesson_topic_id
                 
-                # ✅ Use settings from config
                 java_backend_url = settings.JAVA_SERVICE_URL or "http://java-backend:8080"
                 java_webhook_url = f"{java_backend_url}/api/v1/integration/assessments/create/{lesson_topic_id}"
                 
                 logger.info(f"🎯 Triggering assessment creation for lesson {lesson_topic_id}")
                 logger.info(f"   Calling: {java_webhook_url}")
                 
-                # Build headers with system token
-                headers = {
-                    "Content-Type": "application/json"
-                }
-                
-                # ✅ Use SYSTEM_TOKEN from settings
+                headers = {"Content-Type": "application/json"}
                 if settings.SYSTEM_TOKEN:
                     headers["Authorization"] = f"Bearer {settings.SYSTEM_TOKEN}"
                     logger.info("   Using system token for authentication")
-                else:
-                    logger.warning("   No SYSTEM_TOKEN configured - request may fail")
                 
-                # Call Java to create assessment (using POST, not sending body since it's in path)
                 webhook_response = requests.post(
                     java_webhook_url,
                     headers=headers,
@@ -95,73 +122,36 @@ def process_lesson_in_background(db: Session, lesson_id: int, local_file_path: s
                     else:
                         message = webhook_data.get("message", "Unknown error")
                         logger.warning(f"⚠️ Assessment creation returned success=false: {message}")
-                        
-                        # Check if assessment already exists - this is OK
                         if "already exists" in message.lower():
                             logger.info("   Assessment already exists - this is fine")
-                        
                 elif webhook_response.status_code == 400:
                     logger.warning(f"⚠️ Assessment creation failed: {webhook_response.text}")
                 else:
-                    logger.warning(f"⚠️ Assessment creation webhook returned status {webhook_response.status_code}")
-                    logger.warning(f"   Response: {webhook_response.text}")
+                    logger.warning(f"⚠️ Assessment webhook returned status {webhook_response.status_code}")
                     
             except requests.exceptions.Timeout:
-                logger.warning(f"⚠️ Assessment creation webhook timed out (may still succeed in background)")
+                logger.warning(f"⚠️ Assessment creation webhook timed out")
             except requests.exceptions.ConnectionError as e:
-                logger.warning(f"⚠️ Cannot connect to Java backend for assessment creation: {e}")
-                logger.warning(f"   Tried URL: {java_webhook_url}")
-                logger.warning("   Tip: Check JAVA_SERVICE_URL in your .env file")
+                logger.warning(f"⚠️ Cannot connect to Java backend: {e}")
             except Exception as webhook_error:
                 logger.warning(f"⚠️ Failed to trigger assessment creation: {webhook_error}")
-                logger.exception("Full webhook error:")  # Add full traceback for debugging
-                # Don't fail the entire process if webhook fails
         
         logger.info(f"✅ Lesson processing completed for lesson {lesson_id}")
         
     except Exception as e:
-        logger.error(f"[BackgroundTaskError] Failed to process lesson {lesson_id}: {e}")
-        logger.exception("Full error traceback:")  # Add full traceback
-        print(f"[BackgroundTaskError] Failed to process lesson {lesson_id}: {e}")
+        logger.error(f"❌ Failed to process lesson {lesson_id}: {e}")
+        logger.exception("Full error traceback:")
+    finally:
+        # ✅ Clean up temporary file
+        if local_file_path and os.path.exists(local_file_path):
+            try:
+                os.unlink(local_file_path)
+                logger.info(f"🗑️ Cleaned up temporary file: {local_file_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to delete temp file: {e}")
 
 # ==========================================================
-# API Endpoint: Sync Lesson from Java
-# ==========================================================
-
-@router.post("/lessons/sync")
-async def sync_lesson_from_java(
-    lesson_topic_id: int = Form(...),
-    subject_id: int = Form(...),
-    week_number: int = Form(...),
-    db: Session = Depends(get_db),
-):
-    """
-    ✅ Called by the Java service before /ai/process-lesson.
-    Ensures the lesson_topic_id exists in academic.lesson_topics.
-    Prevents FK errors and verifies readiness for AI processing.
-    """
-    query = text("SELECT id FROM academic.lesson_topics WHERE id = :id")
-    result = db.execute(query, {"id": lesson_topic_id}).fetchone()
-
-    if not result:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Lesson topic {lesson_topic_id} not found in academic.lesson_topics"
-        )
-
-    # Optionally: ensure no duplicate AI record exists yet
-    existing_check = text("""
-        SELECT id FROM ai.lesson_ai_results WHERE lesson_topic_id = :lesson_topic_id
-    """)
-    existing = db.execute(existing_check, {"lesson_topic_id": lesson_topic_id}).fetchone()
-
-    if existing:
-        return {"status": "exists", "lesson_topic_id": lesson_topic_id}
-
-    return {"status": "ok", "lesson_topic_id": lesson_topic_id}
-
-# ==========================================================
-# API Endpoint: Upload & Trigger Lesson Processing
+# ✅ UPDATED: Process Lesson Endpoint - No File Upload
 # ==========================================================
 
 @router.post("/process-lesson", response_model=LessonAIResultResponse)
@@ -170,17 +160,24 @@ async def process_lesson_endpoint(
     lesson_topic_id: int = Form(...),
     subject_id: int = Form(...),
     week_number: int = Form(...),
-    file: UploadFile = None,
+    file_url: str = Form(...),  # ✅ NEW: Receive S3 URL instead of file upload
     db: Session = Depends(get_db),
 ):
     """
-    Upload a lesson file and trigger background AI processing.
-    ✅ Java guarantees the lesson exists, so no retry needed here.
+    Trigger background AI processing for a lesson.
+    
+    ✅ UPDATED: Now receives S3 URL instead of file upload
+    
+    Args:
+        lesson_topic_id: academic.lesson_topics.id
+        subject_id: The subject ID
+        week_number: Week number
+        file_url: S3 URL of the uploaded file
     """
-    if not file:
-        raise HTTPException(status_code=400, detail="File is required.")
+    if not file_url:
+        raise HTTPException(status_code=400, detail="File URL is required.")
 
-    # Step 1: Verify lesson exists (single check - Java guarantees it)
+    # Step 1: Verify lesson exists
     query = text("SELECT id FROM academic.lesson_topics WHERE id = :id")
     result = db.execute(query, {"id": lesson_topic_id}).fetchone()
     
@@ -188,7 +185,7 @@ async def process_lesson_endpoint(
         logger.error(f"❌ Lesson {lesson_topic_id} not found in academic.lesson_topics")
         raise HTTPException(
             status_code=404,
-            detail=f"Lesson topic {lesson_topic_id} not found in academic.lesson_topics"
+            detail=f"Lesson topic {lesson_topic_id} not found"
         )
 
     logger.info(f"✅ Lesson {lesson_topic_id} verified in academic.lesson_topics")
@@ -206,27 +203,20 @@ async def process_lesson_endpoint(
         db.execute(delete_query, {"lesson_id": existing.id})
         db.commit()
 
-    # Step 3: Save file locally
-    local_path = save_upload_file(file)
-
-    # Step 4: Build accessible URL for frontend
-    BASE_URL = settings.SERVER_URL or "http://localhost:8000"
-    file_url = f"{BASE_URL}/static/{Path(local_path).name}"
-
-    # Step 5: Create or update DB record
+    # Step 3: Create DB record (file_url is already an S3 URL)
     service = LessonAIService(db)
     lesson_create = LessonAIResultCreate(
         lesson_topic_id=lesson_topic_id,
         subject_id=subject_id,
         week_number=week_number,
-        file_url=file_url,
+        file_url=file_url,  # ✅ Store S3 URL directly
     )
     lesson = service.create_lesson_record(lesson_create)
 
-    # Step 6: Trigger background AI task
-    background_tasks.add_task(process_lesson_in_background, db, lesson.id, local_path)
+    # Step 4: Trigger background AI task with S3 URL
+    background_tasks.add_task(process_lesson_in_background, db, lesson.id, file_url)
 
-    logger.info(f"🚀 Lesson {lesson_topic_id} queued for AI processing")
+    logger.info(f"🚀 Lesson {lesson_topic_id} queued for AI processing from S3")
     return lesson
 
 # ==========================================================
@@ -241,19 +231,8 @@ async def get_lesson_status(
     """
     Get AI processing status for a lesson.
     Called by Java service to check progress.
-    
-    Args:
-        lesson_topic_id: The academic.lesson_topics.id
-    
-    Returns:
-        {
-            "status": "pending" | "processing" | "done" | "failed",
-            "progress": 0-100,
-            "questionCount": number of questions generated
-        }
     """
     try:
-        # Query the lesson_ai_results table
         query = text("""
             SELECT 
                 lar.status, 
@@ -381,7 +360,7 @@ async def get_ai_result_by_topic(
         )
 
 # ==========================================================
-# API Endpoint: Regenerate AI for Lesson
+# ✅ UPDATED: Regenerate AI for Lesson - with S3 Support
 # ==========================================================
 
 @router.post("/regenerate/{lesson_topic_id}")
@@ -392,7 +371,8 @@ async def regenerate_lesson_ai(
 ):
     """
     Regenerate AI processing for an existing lesson.
-    Deletes old questions and re-runs the pipeline.
+    
+    ✅ UPDATED: Now works with S3 URLs
     """
     try:
         # Find existing lesson AI result
@@ -423,20 +403,17 @@ async def regenerate_lesson_ai(
         # Reset status
         update_query = text("""
             UPDATE ai.lesson_ai_results
-            SET status = 'pending', progress = 0, error_message = NULL
+            SET status = 'pending', progress = 0
             WHERE id = :id
         """)
         db.execute(update_query, {"id": result.id})
         db.commit()
         
-        # Extract file path from URL
+        # ✅ Use S3 URL directly
         file_url = result.file_url
         if file_url:
-            filename = file_url.split("/")[-1]
-            local_path = str(UPLOAD_DIR / filename)
-            
-            # Trigger background processing
-            background_tasks.add_task(process_lesson_in_background, db, result.id, local_path)
+            # Trigger background processing with S3 URL
+            background_tasks.add_task(process_lesson_in_background, db, result.id, file_url)
         
         return {
             "status": "success",
@@ -452,3 +429,38 @@ async def regenerate_lesson_ai(
             status_code=500,
             detail=f"Failed to regenerate AI: {str(e)}"
         )
+
+# ==========================================================
+# API Endpoint: Sync Lesson from Java
+# ==========================================================
+
+@router.post("/lessons/sync")
+async def sync_lesson_from_java(
+    lesson_topic_id: int = Form(...),
+    subject_id: int = Form(...),
+    week_number: int = Form(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Called by Java service before /ai/process-lesson.
+    Ensures the lesson_topic_id exists in academic.lesson_topics.
+    """
+    query = text("SELECT id FROM academic.lesson_topics WHERE id = :id")
+    result = db.execute(query, {"id": lesson_topic_id}).fetchone()
+
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Lesson topic {lesson_topic_id} not found in academic.lesson_topics"
+        )
+
+    # Check if AI record already exists
+    existing_check = text("""
+        SELECT id FROM ai.lesson_ai_results WHERE lesson_topic_id = :lesson_topic_id
+    """)
+    existing = db.execute(existing_check, {"lesson_topic_id": lesson_topic_id}).fetchone()
+
+    if existing:
+        return {"status": "exists", "lesson_topic_id": lesson_topic_id}
+
+    return {"status": "ok", "lesson_topic_id": lesson_topic_id}

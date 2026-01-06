@@ -8,8 +8,6 @@ import com.edu.platform.service.IntegrationService;
 import com.edu.platform.service.LessonTopicService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -17,9 +15,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -85,7 +80,7 @@ public class LessonTopicController {
     }
 
     /**
-     * ✅ NEW: Get lessons for a student by their profile ID
+     * Get lessons for a student by their profile ID
      * GET /api/v1/lesson-topics/by-student/{studentProfileId}
      */
     @PreAuthorize("isAuthenticated()")
@@ -110,7 +105,7 @@ public class LessonTopicController {
     }
 
     /**
-     * ✅ NEW: Get lessons for a student filtered by subject
+     * Get lessons for a student filtered by subject
      * GET /api/v1/lesson-topics/by-student/{studentProfileId}/subject/{subjectId}
      */
     @PreAuthorize("isAuthenticated()")
@@ -146,77 +141,10 @@ public class LessonTopicController {
             @RequestParam Set<Long> lessonTopicIds) {
         return ResponseEntity.ok(lessonService.getAIQuestionsByLessonTopicIds(lessonTopicIds));
     }
-    
-    
-    // Fix the serveLessonFile method in LessonTopicController.java
 
-    @GetMapping("/uploads/lessons/{filename:.+}")
-    public ResponseEntity<Resource> serveLessonFile(
-            @PathVariable String filename,
-            Authentication authentication) {
-        try {
-            // ✅ Allow both authenticated users AND iframe requests
-            boolean isAuthenticated = authentication != null && authentication.isAuthenticated();
-            
-            log.debug("📁 File request for '{}' - Authenticated: {}", filename, isAuthenticated);
-            
-            // ✅ Extract just the filename if a full path was passed
-            String justFilename = filename;
-            if (filename.contains("/")) {
-                justFilename = filename.substring(filename.lastIndexOf("/") + 1);
-            }
-            
-            // ✅ Build the file path - uploads are in /app/uploads/lessons/
-            Path uploadDir = Paths.get("/app/uploads/lessons");
-            Path filePath = uploadDir.resolve(justFilename).normalize();
-            
-            // ✅ Security check: prevent directory traversal
-            if (!filePath.startsWith(uploadDir)) {
-                log.warn("⚠️ Security: Attempted directory traversal for file: {}", filename);
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-            }
-            
-            log.info("📂 Resolved file path: {}", filePath);
-            
-            // ✅ Check if file exists and is readable
-            if (!Files.exists(filePath)) {
-                log.warn("❌ File not found: {}", filePath);
-                return ResponseEntity.notFound().build();
-            }
-            
-            if (!Files.isReadable(filePath)) {
-                log.warn("❌ File not readable: {}", filePath);
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-            }
-
-            Resource resource = new UrlResource(filePath.toUri());
-            
-            // ✅ Detect content type
-            String contentType = Files.probeContentType(filePath);
-            if (contentType == null) {
-                contentType = "application/pdf";
-            }
-
-            log.info("✅ Serving file: {} ({}) - Size: {} bytes", 
-                    justFilename, contentType, Files.size(filePath));
-
-            // ✅ Return file with proper headers for iframe display
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(contentType))
-                    // ✅ "inline" allows browser to display PDF in iframe
-                    .header(HttpHeaders.CONTENT_DISPOSITION, 
-                            "inline; filename=\"" + justFilename + "\"")
-                    // ✅ Allow caching for better performance
-                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000")
-                    // ✅ CRITICAL: No X-Frame-Options header (allows iframe embedding)
-                    .body(resource);
-
-        } catch (Exception e) {
-            log.error("❌ Error serving lesson file '{}': {}", filename, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-    
+    // ✅ REMOVED: serveLessonFile endpoint
+    // Files are now served directly from S3 URLs
+    // No backend proxying needed - S3 handles file serving
     
     // -------------------- AI Integration --------------------
 

@@ -20,7 +20,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -37,8 +36,9 @@ public class LessonTopicService {
     private final TeacherProfileRepository teacherProfileRepository;
     private final UserRepository userRepository;
     private final StudentProfileRepository studentProfileRepository;
-
-    private final String uploadDir = "/app/uploads/lessons/";
+    
+    // ✅ S3 Storage Service
+    private final S3StorageService s3StorageService;
 
     @Value("${app.backend-base-url:http://localhost:8080/api/v1}")
     private String backendBaseUrl;
@@ -131,10 +131,16 @@ public class LessonTopicService {
             lesson.setTerm(term);
         }
 
+        // ✅ Upload file to S3 instead of local filesystem
         if (file != null && !file.isEmpty()) {
-            String storedFileName = saveUploadedFile(file);
-            String publicUrl = backendBaseUrl + "/lesson-topics/uploads/lessons/" + storedFileName;
-            lesson.setFileUrl(publicUrl);
+            try {
+                String s3Url = s3StorageService.uploadFile(file, "lessons");
+                lesson.setFileUrl(s3Url);
+                log.info("✅ File uploaded to S3: {}", s3Url);
+            } catch (IOException e) {
+                log.error("❌ Failed to upload file to S3: {}", e.getMessage());
+                throw new RuntimeException("Failed to upload file", e);
+            }
         }
 
         // Save and flush to get ID
@@ -164,42 +170,22 @@ public class LessonTopicService {
         return savedLesson;
     }
 
-    private String saveUploadedFile(MultipartFile file) {
-        try {
-            Path dirPath = Paths.get(uploadDir);
-            if (!Files.exists(dirPath)) Files.createDirectories(dirPath);
-
-            String originalFileName = Optional.ofNullable(file.getOriginalFilename()).orElse("file");
-            String sanitizedFileName = originalFileName.replaceAll("[^a-zA-Z0-9._-]", "_");
-            String storedFileName = System.currentTimeMillis() + "_" + sanitizedFileName;
-
-            Path savedFilePath = dirPath.resolve(storedFileName);
-            file.transferTo(savedFilePath.toFile());
-
-            return storedFileName;
-        } catch (IOException e) {
-            log.error("Failed to save uploaded file: {}", e.getMessage());
-            throw new RuntimeException("Failed to save uploaded file", e);
-        }
-    }
-
     @Async
     public void triggerPythonAIAsync(Long lessonId, String fileUrl) {
         try {
             LessonTopic lesson = lessonRepository.findById(lessonId)
                     .orElseThrow(() -> new RuntimeException("Lesson not found: " + lessonId));
             
-            String filename = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
-            String fullFilePath = uploadDir + filename;
-            
             log.info("🚀 Triggering AI processing for lesson {} (subject={}, week={})", 
                     lessonId, lesson.getSubject().getId(), lesson.getWeekNumber());
             
+            // ✅ Pass S3 URL directly to Python service
+            // Your Python service will need to download from S3
             integrationService.processLessonWithPython(
                     lessonId,
                     lesson.getSubject().getId(),
                     lesson.getWeekNumber(),
-                    fullFilePath
+                    fileUrl  // Pass S3 URL instead of local path
             );
             
             log.info("✅ AI processing request sent for lesson {}", lessonId);
@@ -285,20 +271,19 @@ public class LessonTopicService {
 
         validateTeacherSubjectAccess(teacherEmail, lesson.getSubject().getId());
 
+        // ✅ Delete file from S3
         if (lesson.getFileUrl() != null && !lesson.getFileUrl().isBlank()) {
             try {
-                String filename = Paths.get(lesson.getFileUrl()).getFileName().toString();
-                Path filePath = Paths.get(uploadDir).resolve(filename);
-                if (Files.exists(filePath)) Files.delete(filePath);
-                log.info("Deleted file {} for lesson {}", filename, id);
-            } catch (IOException e) {
-                log.error("Failed to delete lesson file {}: {}", id, e.getMessage());
+                s3StorageService.deleteFile(lesson.getFileUrl());
+                log.info("✅ Deleted file from S3 for lesson {}", id);
+            } catch (Exception e) {
+                log.error("❌ Failed to delete file from S3 for lesson {}: {}", id, e.getMessage());
             }
         }
 
         integrationService.deleteAIResultsForLesson(id);
         lessonRepository.deleteById(id);
-        log.info("Deleted lesson with id {}", id);
+        log.info("✅ Deleted lesson with id {}", id);
     }
 
     // -------------------- Fetch Lessons --------------------
@@ -339,23 +324,13 @@ public class LessonTopicService {
     }
 
     /**
-     * 🎯 SIMPLIFIED: Get lessons for a student by their class's subjects
-     * 
-     * Works for ALL student types:
-     * - SCHOOL: classLevel.subjects + isAspirantMaterial = false
-     * - HOME: classLevel.subjects + isAspirantMaterial = false
-     * - ASPIRANT: classLevel.subjects + isAspirantMaterial = true
-     * - INDIVIDUAL: classLevel.subjects + isAspirantMaterial = false
-     *   (where classLevel.studentType = INDIVIDUAL, e.g., "SSS1 Art")
+     * Get lessons for a student by their profile ID
      */
     public List<LessonTopicDto> getLessonsForStudent(Long studentProfileId) {
-
-        // Check student exists
         StudentProfile student = studentProfileRepository.findById(studentProfileId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Student not found: " + studentProfileId));
 
-        // Get subjects from student's class (works for all types)
         if (student.getClassLevel() == null) {
             log.warn("⚠️ Student {} ({}) has no class assigned", 
                     studentProfileId, student.getStudentType());
@@ -378,29 +353,22 @@ public class LessonTopicService {
                 student.getClassLevel().getName(),
                 subjectIds);
 
-        // Query lessons based on subject IDs and student type
         return getLessonsForStudent(subjectIds, student.getStudentType().name());
     }
 
     /**
-     * 🎯 SIMPLIFIED: Get lessons for a student filtered by subject
-     * 
-     * Works for ALL student types with single method
+     * Get lessons for a student filtered by subject
      */
     public List<LessonTopicDto> getLessonsForStudentAndSubject(Long studentProfileId, Long subjectId) {
-
-        // Fetch student
         StudentProfile student = studentProfileRepository.findById(studentProfileId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Student not found: " + studentProfileId));
 
-        // Single subject filter
         Set<Long> singleSubjectId = Collections.singleton(subjectId);
         
         log.info("📌 Fetching lessons for {} student {} in subject {}", 
                 student.getStudentType(), studentProfileId, subjectId);
 
-        // Query based on student type (same logic for all)
         List<LessonTopic> lessons = "ASPIRANT".equalsIgnoreCase(student.getStudentType().name())
                 ? lessonRepository.findBySubjectIdInAndIsAspirantMaterialTrue(singleSubjectId)
                 : lessonRepository.findBySubjectIdInAndIsAspirantMaterialFalse(singleSubjectId);
@@ -408,7 +376,6 @@ public class LessonTopicService {
         log.info("✅ Found {} lessons for {} student in subject {}", 
                 lessons.size(), student.getStudentType(), subjectId);
 
-        // Convert to DTOs and sort
         return lessons.stream()
                 .map(this::convertToDto)
                 .sorted(Comparator

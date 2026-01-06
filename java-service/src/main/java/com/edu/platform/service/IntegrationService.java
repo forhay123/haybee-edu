@@ -8,7 +8,6 @@ import com.edu.platform.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
@@ -19,15 +18,11 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
-import java.io.File;
 import java.util.*;
 
 /**
  * Handles integration between the Java backend and the Python AI service.
- * - Syncs lessons to ensure valid topic IDs exist
- * - Uploads lesson files for AI processing
- * - Retrieves status and results from the Python AI microservice
- * - ✅ AUTO-CREATES assessments when AI processing completes
+ * ✅ UPDATED: Now works with S3 URLs instead of local file paths
  */
 @Slf4j
 @Service
@@ -39,9 +34,6 @@ public class IntegrationService {
     private final LessonAIQuestionService aiQuestionService;
     private final UserRepository userRepository;
 
-    // ==========================================================
-    // 🧠 Python AI Service Configuration
-    // ==========================================================
     @Value("${python.service.url:http://python-service:8000}")
     private String pythonServiceUrl;
 
@@ -107,44 +99,49 @@ public class IntegrationService {
     }
 
     // ==========================================================
-    // 2️⃣ Upload Lesson to Python AI (Async)
+    // ✅ 2️⃣ UPDATED: Send S3 URL to Python AI (Async)
     // ==========================================================
 
     @Async
-    public void processLessonWithPython(Long lessonTopicId, Long subjectId, int weekNumber, String filePath) {
+    public void processLessonWithPython(Long lessonTopicId, Long subjectId, int weekNumber, String s3Url) {
         try {
+            // Sync lesson metadata first
             boolean synced = syncLessonWithPython(lessonTopicId, subjectId, weekNumber);
             if (!synced) {
                 log.error("❌ Aborting AI upload — sync failed for lesson {}", lessonTopicId);
                 return;
             }
 
-            File file = new File(filePath);
-            if (!file.exists()) {
-                throw new RuntimeException("File not found for Python processing: " + filePath);
-            }
+            log.info("📤 Sending S3 URL to Python AI service for lesson {}", lessonTopicId);
+            log.info("   S3 URL: {}", s3Url);
 
-            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-            body.add("lesson_topic_id", lessonTopicId);
-            body.add("subject_id", subjectId);
-            body.add("week_number", weekNumber);
-            body.add("file", new FileSystemResource(file));
+            // ✅ Send S3 URL instead of file upload
+            MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+            body.add("lesson_topic_id", lessonTopicId.toString());
+            body.add("subject_id", subjectId.toString());
+            body.add("week_number", String.valueOf(weekNumber));
+            body.add("file_url", s3Url);  // ✅ Send S3 URL
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
             headers.setBearerAuth(systemToken);
 
-            HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
+            HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
             ResponseEntity<String> response = restTemplate.postForEntity(getAiProcessUrl(), request, String.class);
 
-            log.info("✅ Sent lesson file to Python AI (lessonTopicId={}): Status {}",
-                    lessonTopicId, response.getStatusCode());
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("✅ Python AI processing started for lesson {} (status: {})", 
+                        lessonTopicId, response.getStatusCode());
+            } else {
+                log.warn("⚠️ Python AI returned unexpected status: {}", response.getStatusCode());
+            }
 
         } catch (HttpStatusCodeException e) {
             log.error("❌ Python AI returned error for lesson {} → {}",
                     lessonTopicId, e.getResponseBodyAsString());
         } catch (Exception e) {
-            log.error("❌ Failed to send file to Python AI for lesson {}: {}", lessonTopicId, e.getMessage(), e);
+            log.error("❌ Failed to send S3 URL to Python AI for lesson {}: {}", 
+                    lessonTopicId, e.getMessage(), e);
         }
     }
 
@@ -235,13 +232,9 @@ public class IntegrationService {
     }
 
     // ==========================================================
-    // ✅ 7️⃣ NEW: Auto-Create Assessment Methods
+    // ✅ 7️⃣ Auto-Create Assessment Methods
     // ==========================================================
 
-    /**
-     * ✅ Create assessments for ALL lesson topics that have AI questions but no assessment
-     * Called by: Scheduled task, Admin endpoint, Python webhook
-     */
     @Transactional
     public Map<String, Object> createMissingAssessmentsForAllLessons() {
         log.info("🔍 Checking for lesson topics with questions but no assessment...");
@@ -306,10 +299,6 @@ public class IntegrationService {
         }
     }
 
-    /**
-     * ✅ Create assessment for a SPECIFIC lesson topic
-     * Called by: Admin endpoint, Python webhook for specific topic
-     */
     @Transactional
     public Map<String, Object> createAssessmentForLesson(Long lessonTopicId) {
         log.info("🎯 Creating assessment for lesson topic {}", lessonTopicId);
@@ -354,7 +343,6 @@ public class IntegrationService {
                 );
             }
             
-            // Run the full function and filter for our topic
             Map<String, Object> fullResult = createMissingAssessmentsForAllLessons();
             
             @SuppressWarnings("unchecked")
@@ -400,9 +388,6 @@ public class IntegrationService {
         }
     }
 
-    /**
-     * ✅ Webhook handler called by Python AI service after processing completes
-     */
     public void onAIProcessingComplete(Long lessonTopicId) {
         log.info("🎯 AI processing completed for lesson {}, triggering assessment creation", lessonTopicId);
         
@@ -415,9 +400,6 @@ public class IntegrationService {
         createAssessmentForLesson(lessonTopicId);
     }
 
-    /**
-     * ✅ Helper: Get system admin user
-     */
     private User getSystemAdminUser() {
         return userRepository.findAll().stream()
             .filter(u -> u.getRoles().stream()
@@ -429,10 +411,6 @@ public class IntegrationService {
             });
     }
 
-    /**
-     * ✅ Public method to manually trigger assessment creation
-     * Can be called from a controller endpoint or scheduled job
-     */
     public void triggerAssessmentCreationForLesson(Long lessonTopicId) {
         log.info("🔧 Manually triggering assessment creation for lesson {}", lessonTopicId);
         onAIProcessingComplete(lessonTopicId);
