@@ -68,8 +68,8 @@ public class S3StorageService {
             metadata.setContentType(file.getContentType());
             
             // Upload to S3
-            PutObjectRequest putRequest = new PutObjectRequest(bucketName, s3Key, inputStream, metadata)
-                    .withCannedAcl(CannedAccessControlList.PublicRead); // Make publicly readable
+         // ✅ NO ACL - bucket policy handles access
+            PutObjectRequest putRequest = new PutObjectRequest(bucketName, s3Key, inputStream, metadata);
             
             s3Client.putObject(putRequest);
             
