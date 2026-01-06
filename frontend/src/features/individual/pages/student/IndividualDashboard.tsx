@@ -1,5 +1,5 @@
 // ✅ FIXED: IndividualDashboard.tsx
-// Proper flow: Setup Choice → Class Selection (if needed) → Upload/Manual Selection
+// Consistent flow: Class Selection → Setup Choice → Upload/Manual Selection
 
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -41,12 +41,13 @@ import { useLiveSessions } from "../../../live/hooks/useLiveSessions";
 import { useGetStudentSubjects } from "../../../subjects/hooks/useSubjects";
 import ProfilePendingScreen from "../../components/student/ProfilePendingScreen";
 
+// ✅ NEW IMPORTS - Including ClassSelectionModal
 import TimetableSetupChoice from "../../components/TimetableSetupChoice";
 import SubjectSelectionModal from "../../components/SubjectSelectionModal";
 import ClassSelectionModal from "../../components/ClassSelectionModal";
 
 type Tab = "schedule" | "liveSessions" | "uploads";
-type SetupMode = "choice" | "upload" | "manual" | "needsClassForUpload" | "needsClassForManual";
+type SetupMode = "choice" | "upload" | "manual";
 
 const getDayDisplayName = (day: string): string => {
   const days: Record<string, string> = {
@@ -68,11 +69,11 @@ const IndividualDashboard: React.FC = () => {
   const [showWeeklyScheduleModal, setShowWeeklyScheduleModal] = useState(false);
   const uploadsTabRef = React.useRef<HTMLDivElement>(null);
 
-  // ✅ NEW: Enhanced setup mode tracking
+  // ✅ NEW: Track setup mode and modals
   const [setupMode, setSetupMode] = useState<SetupMode>("choice");
   const [showSubjectModal, setShowSubjectModal] = useState(false);
 
-  const { data: profile, isLoading: loadingProfile, error: profileError, refetch: refetchProfile } =
+  const { data: profile, isLoading: loadingProfile, error: profileError } =
     useMyProfile({ enabled: true });
 
   const { user } = useAuth();
@@ -99,12 +100,15 @@ const IndividualDashboard: React.FC = () => {
     (t) => t.processingStatus === "COMPLETED"
   );
 
+  // ✅ Check if student has ANY timetable (including processing ones)
   const hasTimetable = overview?.timetables && overview.timetables.length > 0;
   const hasCompletedTimetable = !!latestTimetable;
   const isNewStudent = !hasProcessingItems && !overviewLoading && overview && !hasTimetable;
+
+  // ✅ Check if profile has class assigned (classId must exist)
   const hasClassAssigned = !!profile?.classId;
 
-  // ✅ Fetch schedules (only if completed timetable exists)
+  // ✅ FIXED: Fetch CURRENT WEEK's generated schedules (only if completed timetable exists)
   const { data: weekSchedules = [], refetch: refetchWeek } = useQuery({
     queryKey: ['week-generated-schedule', profile?.id],
     queryFn: async () => {
@@ -133,6 +137,7 @@ const IndividualDashboard: React.FC = () => {
     refetchInterval: 30000,
   });
 
+  // ✅ FIXED: Fetch TODAY's generated schedule (only if completed timetable exists)
   const { data: todayGeneratedSchedule = [], refetch: refetchToday } = useQuery({
     queryKey: ['today-generated-schedule', profile?.id],
     queryFn: async () => {
@@ -149,6 +154,7 @@ const IndividualDashboard: React.FC = () => {
     refetchInterval: 30000,
   });
 
+  // ✅ FIXED: Fetch TOMORROW's generated schedule (only if completed timetable exists)
   const { data: tomorrowGeneratedSchedule = [] } = useQuery({
     queryKey: ['tomorrow-generated-schedule', profile?.id],
     queryFn: async () => {
@@ -166,18 +172,21 @@ const IndividualDashboard: React.FC = () => {
     refetchInterval: 30000,
   });
 
-  // Calculate stats (unchanged)
+  // ✅ Calculate stats
   const weeklyStats = useMemo(() => {
     const subjectDistribution: Record<string, number> = {};
+    
     weekSchedules.forEach((schedule: any) => {
       const subject = schedule.subjectName;
       subjectDistribution[subject] = (subjectDistribution[subject] || 0) + 1;
     });
+
     return { subjectDistribution };
   }, [weekSchedules]);
 
   const nextClass = useMemo(() => {
     const now = new Date();
+    
     const futurePeriods = weekSchedules.filter((schedule: any) => {
       const scheduleDate = new Date(schedule.scheduledDate);
       const [hours, minutes] = schedule.startTime.split(':');
@@ -194,6 +203,7 @@ const IndividualDashboard: React.FC = () => {
     });
 
     const next = sorted[0];
+    
     return {
       subjectName: next.subjectName,
       day: next.dayOfWeek,
@@ -205,7 +215,11 @@ const IndividualDashboard: React.FC = () => {
 
   const todaySchedule = useMemo(() => {
     if (!todayGeneratedSchedule || todayGeneratedSchedule.length === 0) return null;
-    const sortedPeriods = [...todayGeneratedSchedule].sort((a, b) => a.periodNumber - b.periodNumber);
+    
+    const sortedPeriods = [...todayGeneratedSchedule].sort((a, b) => 
+      a.periodNumber - b.periodNumber
+    );
+
     return {
       day: new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
       periods: sortedPeriods.map((schedule: any) => ({
@@ -222,9 +236,14 @@ const IndividualDashboard: React.FC = () => {
 
   const tomorrowSchedule = useMemo(() => {
     if (!tomorrowGeneratedSchedule || tomorrowGeneratedSchedule.length === 0) return null;
-    const sortedPeriods = [...tomorrowGeneratedSchedule].sort((a, b) => a.periodNumber - b.periodNumber);
+    
+    const sortedPeriods = [...tomorrowGeneratedSchedule].sort((a, b) => 
+      a.periodNumber - b.periodNumber
+    );
+
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
+
     return {
       day: tomorrow.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
       periods: sortedPeriods.map((schedule: any) => ({
@@ -241,9 +260,11 @@ const IndividualDashboard: React.FC = () => {
 
   const weeklyScheduleDisplay = useMemo(() => {
     const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    
     return days.map(dayName => {
       const daySchedules = weekSchedules.filter((s: any) => s.dayOfWeek === dayName);
       const sortedPeriods = daySchedules.sort((a: any, b: any) => a.periodNumber - b.periodNumber);
+      
       return {
         day: dayName,
         periods: sortedPeriods.map((schedule: any) => ({
@@ -300,57 +321,34 @@ const IndividualDashboard: React.FC = () => {
   const { data: recentNotifications = [] } = useRecentNotifications(true);
   const topNotifications = recentNotifications.slice(0, 5);
 
-  // ✅ NEW: Enhanced handlers with class selection logic
-  const handleClassSelected = async () => {
-    await refetchProfile();
-    
-    // After class is selected, proceed to the next step based on what they chose
-    if (setupMode === "needsClassForUpload") {
-      setSetupMode("upload");
-    } else if (setupMode === "needsClassForManual") {
-      setShowSubjectModal(true);
-      setSetupMode("manual"); // Update mode so we know we're in manual flow
-    }
+  // ✅ NEW: Handlers for setup flow
+  const handleClassSelected = () => {
+    // Profile will be refetched automatically by query invalidation in ClassSelectionModal
+    // This will trigger a re-render and move to the next step
   };
 
   const handleChooseUpload = () => {
-    if (!hasClassAssigned) {
-      // Need to select class first
-      setSetupMode("needsClassForUpload");
-    } else {
-      // Already has class, go straight to upload
-      setSetupMode("upload");
-    }
+    setSetupMode("upload");
   };
 
   const handleChooseManual = () => {
-    if (!hasClassAssigned) {
-      // Need to select class first
-      setSetupMode("needsClassForManual");
-    } else {
-      // Already has class, go straight to subject selection
-      setShowSubjectModal(true);
-      setSetupMode("manual");
-    }
+    setShowSubjectModal(true);
   };
 
   const handleManualSuccess = () => {
+    // Refresh overview to see new timetable
     refetchOverview();
     refetchWeek();
     refetchToday();
     setShowSubjectModal(false);
-    setSetupMode("choice");
-  };
-
-  const handleBackToChoice = () => {
-    setSetupMode("choice");
-    setShowSubjectModal(false);
+    setSetupMode("choice"); // Reset to choice for consistency
   };
 
   // ============================================
-  // CONDITIONAL RENDERING
+  // CONDITIONAL RENDERING - PRIORITY ORDER
   // ============================================
 
+  // 1. Loading state
   if (loadingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -362,6 +360,7 @@ const IndividualDashboard: React.FC = () => {
     );
   }
 
+  // 2. Profile error handling
   if (profileError || !profile) {
     const isProfileNotFound =
       profileError?.message?.toLowerCase().includes('not found') ||
@@ -384,25 +383,23 @@ const IndividualDashboard: React.FC = () => {
     );
   }
 
-  // ✅ NEW STUDENT SETUP FLOW
-  if (isNewStudent) {
-    // Show class selection modal if needed (for either upload or manual)
-    if (setupMode === "needsClassForUpload" || setupMode === "needsClassForManual") {
-      return (
-        <>
-          <ClassSelectionModal
-            studentProfileId={profile.id!}
-            onClose={() => {
-              // Allow going back to choice screen
-              setSetupMode("choice");
-            }}
-            onSuccess={handleClassSelected}
-          />
-        </>
-      );
-    }
+  // ✅ 3. STEP 1: CLASS SELECTION (if no class assigned)
+  if (!hasClassAssigned) {
+    return (
+      <ClassSelectionModal
+        studentProfileId={profile.id!}
+        onClose={() => {
+          // Class selection is mandatory, so we don't allow closing
+          // User must select a class to proceed
+        }}
+        onSuccess={handleClassSelected}
+      />
+    );
+  }
 
-    // Show setup choice screen
+  // ✅ 4. STEP 2 & 3: NEW STUDENT SETUP (if no timetable exists)
+  if (isNewStudent) {
+    // STEP 2: Show setup choice screen
     if (setupMode === "choice") {
       return (
         <>
@@ -411,14 +408,11 @@ const IndividualDashboard: React.FC = () => {
             onChooseManual={handleChooseManual}
           />
 
-          {/* Subject Selection Modal (shown after class selection for manual path) */}
-          {showSubjectModal && hasClassAssigned && (
+          {/* STEP 3B: Subject Selection Modal (if user chose manual) */}
+          {showSubjectModal && (
             <SubjectSelectionModal
               studentProfileId={profile.id!}
-              onClose={() => {
-                setShowSubjectModal(false);
-                setSetupMode("choice");
-              }}
+              onClose={() => setShowSubjectModal(false)}
               onSuccess={handleManualSuccess}
             />
           )}
@@ -426,18 +420,20 @@ const IndividualDashboard: React.FC = () => {
       );
     }
 
-    // Show upload section (after class selection for upload path)
-    if (setupMode === "upload" && hasClassAssigned) {
+    // STEP 3A: Show upload section (if user chose upload)
+    if (setupMode === "upload") {
       return (
         <div className="space-y-6 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Back button */}
           <button
-            onClick={handleBackToChoice}
+            onClick={() => setSetupMode("choice")}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
           >
             <ArrowRight className="w-4 h-4 rotate-180" />
             <span>Back to setup options</span>
           </button>
 
+          {/* NEW STUDENT BANNER */}
           <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-xl shadow-lg p-8 text-white overflow-hidden relative">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
             <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/10 rounded-full -ml-20 -mb-20"></div>
@@ -478,6 +474,7 @@ const IndividualDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* UPLOAD SECTION */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
               <div className="flex items-center gap-3">
@@ -497,6 +494,7 @@ const IndividualDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* HELP SECTION */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
             <div className="flex items-start gap-3">
               <AlertCircle className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -515,12 +513,6 @@ const IndividualDashboard: React.FC = () => {
           </div>
         </div>
       );
-    }
-
-    // Show manual selection (after class selection - this is now handled by the modal above)
-    // If we're here in manual mode but modal isn't showing, go back to choice
-    if (setupMode === "manual" && !showSubjectModal) {
-      setSetupMode("choice");
     }
   }
 
