@@ -493,6 +493,7 @@ export interface TeacherDashboardStats {
 // STUDENT HEALTH & MAINTENANCE TYPES
 // ============================================================
 
+
 /**
  * Student health check data for maintenance operations
  */
@@ -501,12 +502,18 @@ export interface StudentHealthData {
   studentId: number;
   orphanedProgress: number;
   schedulesWithoutProgress: number;
-  schedulesWithoutLessonTopics: number; // ✅ NEW: Critical field!
+  schedulesWithoutLessonTopics: number;
   missingAssessments: number;
   missingWindows: number;
   needsRepair: boolean;
   isHealthy: boolean;
   totalIssues: number;
+  
+  // ✅ NEW: Schedule generation status fields
+  schedulesNeedGeneration: boolean;  // True if student needs schedules generated
+  hasSchedules: boolean;              // True if student has existing schedules
+  totalSchedules?: number;            // Total number of schedules for this student
+  scheduleGenerationReason?: string;  // Why schedules need generation (e.g., "No schedules found", "Timetable updated")
 }
 
 // ============================================================
