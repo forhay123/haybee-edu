@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
  * - POST /create - Create virtual timetable from selected subjects
  */
 @RestController
-@RequestMapping("/api/v1/individual/manual-selection")
+@RequestMapping("/individual/manual-selection")
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "Manual Subject Selection", description = "Create timetables by selecting subjects manually")

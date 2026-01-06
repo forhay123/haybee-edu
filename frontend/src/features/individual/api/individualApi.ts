@@ -13,8 +13,9 @@ import {
   IndividualDailyScheduleDto,
   TimetableSystemStatsDto,
   BulkOperationResultDto,
-  ManualTimetableCreationRequest,     // ← ADD THIS
+  ManualTimetableCreationRequest,
   ManualTimetableCreationResponse,
+  SubjectOption,  // ← ADDED
 } from "../types/individualTypes";
 
 const BASE_URL = "/individual";
@@ -376,11 +377,18 @@ export const manualSubjectApi = {
    * Get available subjects for a student based on their class/department
    * 
    * @param studentProfileId - Student's profile ID
+   * @param classId - Optional class ID override
    * @returns List of subjects available for selection
    */
-  getAvailableSubjects: async (studentProfileId: number): Promise<SubjectOption[]> => {
+  getAvailableSubjects: async (
+    studentProfileId: number,
+    classId?: number
+  ): Promise<SubjectOption[]> => {
     const res = await axios.get(
-      `${BASE_URL}/manual-selection/student/${studentProfileId}/available-subjects`
+      `${BASE_URL}/manual-selection/student/${studentProfileId}/available-subjects`,
+      {
+        params: classId ? { classId } : undefined
+      }
     );
     return res.data;
   },
@@ -500,4 +508,3 @@ export const scheduleApi = {
     return res.data;
   },
 };
-
