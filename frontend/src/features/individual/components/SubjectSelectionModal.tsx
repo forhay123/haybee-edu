@@ -1,9 +1,19 @@
 // frontend/src/features/individual/components/SubjectSelectionModal.tsx
 
 import React, { useState, useMemo } from 'react';
-import { X, Search, Check, AlertCircle, Loader2, BookOpen } from 'lucide-react';
+import { X, Search, Check, AlertCircle, Loader2, BookOpen, GraduationCap } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import axios from '../../../api/axios';
 import { useAvailableSubjects, useCreateManualTimetable, useSubjectValidation } from '../hooks/useManualSubjectSelection';
 import { SubjectOption } from '../types/individualTypes';
+
+interface ClassOption {
+  id: number;
+  name: string;
+  grade?: string;
+  departmentId: number;
+  departmentName?: string;
+}
 
 interface SubjectSelectionModalProps {
   studentProfileId: number;
@@ -22,8 +32,32 @@ const SubjectSelectionModal: React.FC<SubjectSelectionModalProps> = ({
 }) => {
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
 
-  const { data: subjects = [], isLoading: loadingSubjects } = useAvailableSubjects(studentProfileId);
+  // Fetch available classes
+  const { data: classes = [], isLoading: loadingClasses } = useQuery({
+    queryKey: ['available-classes'],
+    queryFn: async () => {
+      const response = await axios.get('/classes');
+      return response.data as ClassOption[];
+    },
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+
+  // Fetch subjects based on selected class
+  const { data: subjects = [], isLoading: loadingSubjects } = useQuery({
+    queryKey: ['manual-subjects', studentProfileId, selectedClassId],
+    queryFn: async () => {
+      if (!selectedClassId) return [];
+      const response = await axios.get(
+        `/individual/manual-selection/student/${studentProfileId}/available-subjects`,
+        { params: { classId: selectedClassId } }
+      );
+      return response.data as SubjectOption[];
+    },
+    enabled: !!selectedClassId,
+  });
+
   const createMutation = useCreateManualTimetable();
   const { MIN_SUBJECTS, MAX_SUBJECTS, validateSelection } = useSubjectValidation();
 
@@ -37,20 +71,6 @@ const SubjectSelectionModal: React.FC<SubjectSelectionModalProps> = ({
         s.code?.toLowerCase().includes(query)
     );
   }, [subjects, searchQuery]);
-
-  // Group subjects by type (Core vs Elective) if needed
-  const { coreSubjects, electiveSubjects } = useMemo(() => {
-    const core: SubjectOption[] = [];
-    const elective: SubjectOption[] = [];
-
-    filteredSubjects.forEach((subject) => {
-      // You can add logic here to determine if a subject is core or elective
-      // For now, we'll just group them all as elective
-      elective.push(subject);
-    });
-
-    return { coreSubjects: core, electiveSubjects: elective };
-  }, [filteredSubjects]);
 
   const toggleSubject = (subjectId: number) => {
     setSelectedSubjectIds((prev) => {
@@ -114,45 +134,88 @@ const SubjectSelectionModal: React.FC<SubjectSelectionModalProps> = ({
             </button>
           </div>
 
-          {/* Selection Counter */}
-          <div className="flex items-center gap-4 mt-4">
-            <div className="flex-1 bg-gray-100 rounded-lg p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">
-                  Selected: <span className="text-indigo-600 font-bold">{selectedSubjectIds.length}</span> / {MAX_SUBJECTS}
-                </span>
-                <div className="flex gap-1">
-                  {Array.from({ length: MAX_SUBJECTS }).map((_, i) => (
-                    <div
-                      key={i}
-                      className={`w-2 h-6 rounded-full transition-colors ${
-                        i < selectedSubjectIds.length
-                          ? 'bg-indigo-600'
-                          : 'bg-gray-300'
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
+          {/* Class Selection Dropdown */}
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Your Class
+            </label>
+            <div className="relative">
+              <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <select
+                value={selectedClassId || ''}
+                onChange={(e) => {
+                  setSelectedClassId(e.target.value ? Number(e.target.value) : null);
+                  setSelectedSubjectIds([]); // Reset selections when class changes
+                }}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent appearance-none bg-white"
+                disabled={loadingClasses}
+              >
+                <option value="">
+                  {loadingClasses ? 'Loading classes...' : 'Choose your class...'}
+                </option>
+                {classes.map((classOption) => (
+                  <option key={classOption.id} value={classOption.id}>
+                    {classOption.name}
+                    {classOption.departmentName && ` - ${classOption.departmentName}`}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
+          {/* Selection Counter */}
+          {selectedClassId && (
+            <div className="flex items-center gap-4 mt-4">
+              <div className="flex-1 bg-gray-100 rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">
+                    Selected: <span className="text-indigo-600 font-bold">{selectedSubjectIds.length}</span> / {MAX_SUBJECTS}
+                  </span>
+                  <div className="flex gap-1">
+                    {Array.from({ length: MAX_SUBJECTS }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`w-2 h-6 rounded-full transition-colors ${
+                          i < selectedSubjectIds.length
+                            ? 'bg-indigo-600'
+                            : 'bg-gray-300'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Search Bar */}
-          <div className="mt-4 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search subjects..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-          </div>
+          {selectedClassId && (
+            <div className="mt-4 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search subjects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
+          )}
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {loadingSubjects ? (
+          {!selectedClassId ? (
+            <div className="text-center py-12">
+              <GraduationCap className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Select Your Class First
+              </h3>
+              <p className="text-gray-600">
+                Choose your class from the dropdown above to see available subjects
+              </p>
+            </div>
+          ) : loadingSubjects ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
               <span className="ml-3 text-gray-600">Loading subjects...</span>
@@ -166,7 +229,7 @@ const SubjectSelectionModal: React.FC<SubjectSelectionModalProps> = ({
               <p className="text-gray-600">
                 {searchQuery
                   ? 'Try a different search term'
-                  : 'No subjects are available for your class'}
+                  : 'No subjects are available for this class'}
               </p>
             </div>
           ) : (
