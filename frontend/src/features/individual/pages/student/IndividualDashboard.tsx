@@ -73,7 +73,7 @@ const IndividualDashboard: React.FC = () => {
   const [setupMode, setSetupMode] = useState<SetupMode>("choice");
   const [showSubjectModal, setShowSubjectModal] = useState(false);
 
-  const { data: profile, isLoading: loadingProfile, error: profileError } =
+  const { data: profile, isLoading: loadingProfile, error: profileError, refetch: refetchProfile } =
     useMyProfile({ enabled: true });
 
   const { user } = useAuth();
@@ -322,9 +322,10 @@ const IndividualDashboard: React.FC = () => {
   const topNotifications = recentNotifications.slice(0, 5);
 
   // ✅ NEW: Handlers for setup flow
-  const handleClassSelected = () => {
+  const handleClassSelected = async () => {
     // Profile will be refetched automatically by query invalidation in ClassSelectionModal
     // This will trigger a re-render and move to the next step
+    await refetchProfile();
   };
 
   const handleChooseUpload = () => {

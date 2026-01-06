@@ -17,7 +17,7 @@ interface ClassOption {
 interface ClassSelectionModalProps {
   studentProfileId: number;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<void>;
 }
 
 /**
@@ -51,11 +51,18 @@ const ClassSelectionModal: React.FC<ClassSelectionModalProps> = ({
       });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('✅ Class assigned successfully!');
-      queryClient.invalidateQueries({ queryKey: ['my-profile'] });
-      queryClient.invalidateQueries({ queryKey: ['student-profile', studentProfileId] });
-      onSuccess();
+      
+      // Invalidate queries to refetch profile data
+      await queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+      await queryClient.invalidateQueries({ queryKey: ['student-profile', studentProfileId] });
+      
+      // Wait a bit for the queries to refetch
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Call onSuccess callback (can be async)
+      await Promise.resolve(onSuccess());
     },
     onError: (error: any) => {
       const message =
