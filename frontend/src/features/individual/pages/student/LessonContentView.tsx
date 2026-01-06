@@ -94,29 +94,17 @@ export default function LessonContentView() {
   const { data: weeklySchedule } = useWeekSchedule(termStartDate, !!profile?.id);
 
   // ============================================================
-  // HELPER FUNCTION TO CONVERT PDF URLS
+  // HELPER FUNCTION - FIXED: USE DATABASE URL DIRECTLY
   // ============================================================
   /**
-   * Extract filename from full URL and construct correct API path
-   * 
-   * Input:  "https://haybee-edu-production.up.railway.app/api/v1/lesson-topics/uploads/lessons/1767431428360_file.pdf"
-   * Output: "/lesson-topics/uploads/lessons/1767431428360_file.pdf"
+   * Return the PDF URL from the database directly - no conversion needed!
+   * The database already stores the full correct URL
    */
   const getPdfUrl = (fileUrl: string | undefined | null): string => {
     if (!fileUrl) return '';
     
-    console.log('🔍 Original fileUrl:', fileUrl);
-    
-    // Extract just the filename from the full URL
-    if (fileUrl.includes('/uploads/lessons/')) {
-      const filename = fileUrl.split('/uploads/lessons/')[1];
-      const cleanUrl = `/lesson-topics/uploads/lessons/${filename}`;
-      console.log('✅ Converted to:', cleanUrl);
-      return cleanUrl;
-    }
-    
-    console.log('⚠️ Returning original URL (no conversion needed):', fileUrl);
-    return fileUrl;
+    console.log('📄 Using database URL directly:', fileUrl);
+    return fileUrl; // Database URL is already correct!
   };
 
   // ============================================================
@@ -136,7 +124,6 @@ export default function LessonContentView() {
       console.log('📍 Assessment Window:', schedule.assessmentWindowStart, 'to', schedule.assessmentWindowEnd);
       console.log('📍 Current Time:', new Date().toISOString());
       
-      // ✅ NO REMAPPING - Use database times directly
       setScheduleData(schedule);
       
       if (schedule.lessonTopicId) {
