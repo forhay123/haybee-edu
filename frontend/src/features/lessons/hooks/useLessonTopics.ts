@@ -53,11 +53,21 @@ export const useLessonTopic = (id: number) => {
  * Usage:
  * const { data: lessons, isLoading } = useStudentLessonsByProfileId(studentProfileId);
  */
-export const useStudentLessonsByProfileId = (studentProfileId?: number) => {
-  return useQuery<LessonTopicDto[], Error>({
-    queryKey: ["student-lessons-by-profile", studentProfileId],
-    queryFn: () => lessonTopicsApi.getStudentLessonsByProfileId(studentProfileId!),
-    enabled: !!studentProfileId,
+/**
+ * ✅ Fetch lessons for a student by their profile ID
+ * Works for all student types (SCHOOL, HOME, ASPIRANT, INDIVIDUAL)
+ */
+export const useStudentLessonsByProfileId = (studentProfileId: number | undefined) => {
+  return useQuery({
+    queryKey: ["student-lessons", studentProfileId],
+    queryFn: () => {
+      if (!studentProfileId) {
+        throw new Error("Student profile ID is required");
+      }
+      return lessonTopicsApi.getStudentLessonsByProfileId(studentProfileId);
+    },
+    enabled: !!studentProfileId, // Only run if we have a profile ID
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 };
 
