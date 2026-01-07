@@ -63,20 +63,11 @@ const LessonTopicCard: React.FC<LessonTopicCardProps> = ({
     };
   }, [aiStatus, topic.id, accessToken, refreshAccessToken, onRegenerated, effectiveViewMode]);
 
-  const handleViewMaterial = async () => {
+  const handleViewMaterial = () => {
     if (!topic.fileUrl) return alert("No file available for this lesson");
-    try {
-      const token = accessToken || (await refreshAccessToken());
-      const response = await api.get(topic.fileUrl, {
-        responseType: "blob",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const blob = new Blob([response.data], { type: response.headers["content-type"] });
-      window.open(URL.createObjectURL(blob), "_blank");
-    } catch (err: any) {
-      console.error("Failed to open lesson file", err);
-      alert("Failed to open lesson file. Ensure you're logged in and network is accessible.");
-    }
+    
+    // ✅ S3 URLs are public - just open them directly
+    window.open(topic.fileUrl, "_blank");
   };
 
   const handleDelete = async () => {
