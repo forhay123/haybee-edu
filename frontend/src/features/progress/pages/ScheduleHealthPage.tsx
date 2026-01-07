@@ -1,17 +1,23 @@
-// frontend/src/features/progress/pages/ScheduleHealthPage.tsx
+import React, { useState } from 'react';
+import { useAllStudentsHealth, useHealthSummary, useFixStudentSchedules, useFixAllStudents } from '../hooks/useScheduleHealth';
+import ScheduleHealthTable from '../components/ScheduleHealthTable';
 
-import React from 'react';
-import { useAllStudentsHealth, useHealthSummary, useFixAllStudents } from '../hooks/useScheduleHealth';
-import { ScheduleHealthTable } from '../components/ScheduleHealthTable';
-
-export const ScheduleHealthPage: React.FC = () => {
+export default function ScheduleHealthPage() {
   const { data: students, isLoading, refetch } = useAllStudentsHealth();
   const { data: summary } = useHealthSummary();
+  const fixStudent = useFixStudentSchedules();
   const fixAll = useFixAllStudents();
+  const [forceRegenAll, setForceRegenAll] = useState(false);
+
+  const handleFixStudent = async (studentId: number, forceRegenerate: boolean) => {
+    await fixStudent.mutateAsync({ studentId, forceRegenerate });
+    refetch();
+  };
 
   const handleFixAll = async () => {
-    if (confirm('Fix schedules for all students with issues? This may take a while.')) {
-      await fixAll.mutateAsync();
+    const action = forceRegenAll ? 'sync assessments for' : 'generate schedules for';
+    if (confirm(`${action} all students with issues? This may take a while.`)) {
+      await fixAll.mutateAsync(forceRegenAll);
       refetch();
     }
   };
@@ -66,25 +72,36 @@ export const ScheduleHealthPage: React.FC = () => {
           </button>
         </div>
 
-        <button
-          onClick={handleFixAll}
-          disabled={fixAll.isPending || !summary || summary.needsAttention === 0}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {fixAll.isPending ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              Fixing...
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Fix All Issues
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={forceRegenAll}
+              onChange={(e) => setForceRegenAll(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Force sync assessments for all
+          </label>
+          <button
+            onClick={handleFixAll}
+            disabled={fixAll.isPending || !summary || summary.needsAttention === 0}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {fixAll.isPending ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Processing...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {forceRegenAll ? 'Sync All' : 'Fix All Issues'}
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Health Table */}
@@ -92,6 +109,8 @@ export const ScheduleHealthPage: React.FC = () => {
         <ScheduleHealthTable 
           students={students || []} 
           isLoading={isLoading}
+          onFix={handleFixStudent}
+          isFixing={fixStudent.isPending}
         />
       </div>
 
@@ -99,15 +118,18 @@ export const ScheduleHealthPage: React.FC = () => {
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="font-semibold text-blue-900 mb-2">Understanding Health Status:</h3>
         <ul className="space-y-1 text-sm text-blue-800">
-          <li>✅ <strong>Healthy:</strong> All schedules generated correctly</li>
+          <li>✅ <strong>Healthy:</strong> All schedules generated with correct assessments</li>
           <li>⚠️ <strong>Missing Daily:</strong> Weekly schedules exist but daily schedules not generated - Click "Generate"</li>
-          <li>⚠️ <strong>Partial:</strong> Some daily schedules missing - Click "Regenerate"</li>
+          <li>⚠️ <strong>Partial:</strong> Some daily schedules missing assessments - Click "🔄 Sync Assessments"</li>
           <li>❌ <strong>No Schedules:</strong> No weekly schedules configured - Set up weekly schedules first</li>
           <li>ℹ️ <strong>Individual:</strong> Uses individual timetable system (managed separately)</li>
         </ul>
+        <div className="mt-3 pt-3 border-t border-blue-200">
+          <p className="text-sm text-blue-800">
+            <strong>💡 Tip:</strong> Use "🔄 Sync Assessments" button to update existing schedules with assessment references and time windows without creating duplicates.
+          </p>
+        </div>
       </div>
     </div>
   );
-};
-
-export default ScheduleHealthPage;
+}

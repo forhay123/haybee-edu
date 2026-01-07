@@ -49,8 +49,10 @@ public class ScheduleHealthController {
     @PostMapping("/students/{studentId}/fix")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     @Operation(summary = "Fix schedule issues for a student")
-    public ResponseEntity<Map<String, Object>> fixStudentSchedules(@PathVariable Long studentId) {
-        log.info("POST /schedule-health/students/{}/fix", studentId);
+    public ResponseEntity<Map<String, Object>> fixStudentSchedules(
+            @PathVariable Long studentId,
+            @RequestParam(defaultValue = "false") boolean forceRegenerate) {
+        log.info("POST /schedule-health/students/{}/fix (forceRegenerate={})", studentId, forceRegenerate);
         
         try {
             ScheduleHealthDto health = scheduleHealthService.getStudentHealthStatus(studentId);
@@ -62,14 +64,23 @@ public class ScheduleHealthController {
                 ));
             }
             
-            int count = weeklyScheduleService.generateDailySchedulesForStudent(studentId);
+            int count;
+            
+            // ✅ CRITICAL FIX: Use regeneration mode when schedules exist
+            if (forceRegenerate || health.getCanRegenerate()) {
+                log.info("🔄 Regenerating schedules (will update existing ones)");
+                count = weeklyScheduleService.regenerateDailySchedulesForStudent(studentId);
+            } else {
+                log.info("➕ Generating new schedules");
+                count = weeklyScheduleService.generateDailySchedulesForStudent(studentId);
+            }
             
             ScheduleHealthDto updatedHealth = scheduleHealthService.getStudentHealthStatus(studentId);
             
             return ResponseEntity.ok(Map.of(
                 "status", "success",
                 "message", "Schedules fixed successfully",
-                "schedulesCreated", count,
+                "schedulesProcessed", count,
                 "healthStatus", updatedHealth.getHealthStatus().name(),
                 "studentId", studentId
             ));
@@ -124,8 +135,9 @@ public class ScheduleHealthController {
     @PostMapping("/fix-all")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Fix schedules for all students with issues")
-    public ResponseEntity<Map<String, Object>> fixAllStudents() {
-        log.info("POST /schedule-health/fix-all - Fixing all students");
+    public ResponseEntity<Map<String, Object>> fixAllStudents(
+            @RequestParam(defaultValue = "false") boolean forceRegenerate) {
+        log.info("POST /schedule-health/fix-all (forceRegenerate={})", forceRegenerate);
         
         List<ScheduleHealthDto> allHealth = scheduleHealthService.getAllStudentsHealthStatus();
         
@@ -140,7 +152,17 @@ public class ScheduleHealthController {
         
         for (Long studentId : fixableStudents) {
             try {
-                weeklyScheduleService.generateDailySchedulesForStudent(studentId);
+                ScheduleHealthDto health = allHealth.stream()
+                    .filter(h -> h.getStudentId().equals(studentId))
+                    .findFirst()
+                    .orElseThrow();
+                
+                if (forceRegenerate || health.getCanRegenerate()) {
+                    weeklyScheduleService.regenerateDailySchedulesForStudent(studentId);
+                } else {
+                    weeklyScheduleService.generateDailySchedulesForStudent(studentId);
+                }
+                
                 successCount++;
             } catch (Exception e) {
                 failCount++;

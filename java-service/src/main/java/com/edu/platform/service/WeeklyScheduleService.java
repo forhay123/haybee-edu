@@ -614,4 +614,113 @@ public class WeeklyScheduleService {
         log.info("✅ Regenerated {} daily schedules with assessments for class {}", totalGenerated, classId);
         return totalGenerated;
     }
+    
+    
+    /**
+     * ✅ NEW METHOD: Regenerate daily schedules for a student
+     * This UPDATES existing schedules with missing assessment references and time windows
+     */
+    @Transactional
+    @CacheEvict(value = {"dailySchedules", "studentDailyProgress"}, allEntries = true)
+    public int regenerateDailySchedulesForStudent(Long studentId) {
+        log.info("🔄 REGENERATING daily schedules for student {} (will update existing)", studentId);
+        
+        StudentProfile student = studentProfileRepository.findById(studentId)
+                .orElseThrow(() -> new EntityNotFoundException("Student not found: " + studentId));
+        
+        Term activeTerm = termService.getActiveTerm()
+                .orElseThrow(() -> new IllegalStateException("No active term configured"));
+        
+        ClassEntity studentClass = student.getClassLevel();
+        if (studentClass == null) {
+            log.warn("⚠️ Student {} has no class assigned", studentId);
+            return 0;
+        }
+        
+        List<WeeklySchedule> weeklySchedules = weeklyScheduleRepository
+            .findByClassEntityId(studentClass.getId());
+        
+        if (weeklySchedules.isEmpty()) {
+            log.warn("⚠️ No weekly schedules found for class {}", studentClass.getName());
+            return 0;
+        }
+        
+        int updatedCount = 0;
+        int createdCount = 0;
+        
+        for (WeeklySchedule weeklySchedule : weeklySchedules) {
+            try {
+                if (weeklySchedule.getWeekNumber() < 1 || 
+                    weeklySchedule.getWeekNumber() > activeTerm.getWeekCount()) {
+                    continue;
+                }
+                
+                LocalDate targetDate = calculateDateForWeekAndDay(
+                    activeTerm, 
+                    weeklySchedule.getWeekNumber(), 
+                    weeklySchedule.getDayOfWeek()
+                );
+                
+                if (!activeTerm.containsDate(targetDate)) {
+                    continue;
+                }
+                
+                // ✅ CRITICAL: Find existing schedule OR create new one
+                DailySchedule schedule = dailyScheduleRepository
+                    .findByStudentProfileAndScheduledDateAndPeriodNumber(
+                        student, targetDate, weeklySchedule.getPeriodNumber()
+                    )
+                    .orElse(null);
+                
+                if (schedule == null) {
+                    // Create new schedule
+                    schedule = new DailySchedule();
+                    schedule.setStudentProfile(student);
+                    schedule.setSubject(weeklySchedule.getSubject());
+                    schedule.setLessonTopic(weeklySchedule.getLessonTopic());
+                    schedule.setScheduledDate(targetDate);
+                    schedule.setPeriodNumber(weeklySchedule.getPeriodNumber());
+                    schedule.setStartTime(weeklySchedule.getStartTime());
+                    schedule.setEndTime(weeklySchedule.getEndTime());
+                    schedule.setPriority(weeklySchedule.getPriority());
+                    schedule.setWeight(weeklySchedule.getWeight());
+                    schedule.setScheduleSource("CLASS");
+                    createdCount++;
+                } else {
+                    // Update existing schedule
+                    log.debug("🔄 Updating existing schedule ID {} for student {} on {}", 
+                             schedule.getId(), studentId, targetDate);
+                    updatedCount++;
+                }
+                
+                // ✅ ALWAYS sync assessment from weekly schedule
+                schedule.setAssessment(weeklySchedule.getAssessment());
+                
+                // ✅ ALWAYS recalculate time windows
+                if (weeklySchedule.getStartTime() != null && weeklySchedule.getEndTime() != null) {
+                    LocalDateTime windowStart = LocalDateTime.of(targetDate, weeklySchedule.getStartTime());
+                    LocalDateTime windowEnd = LocalDateTime.of(targetDate, weeklySchedule.getEndTime());
+                    
+                    schedule.setAssessmentWindowStart(windowStart);
+                    schedule.setAssessmentWindowEnd(windowEnd);
+                    
+                    log.debug("✅ Synced assessment {} with window: {} to {}", 
+                             weeklySchedule.getAssessment() != null ? weeklySchedule.getAssessment().getId() : "null",
+                             windowStart, windowEnd);
+                } else {
+                    log.warn("⚠️ WeeklySchedule {} has no start/end times", weeklySchedule.getId());
+                }
+                
+                dailyScheduleRepository.save(schedule);
+                
+            } catch (Exception e) {
+                log.error("❌ Failed to regenerate from weekly schedule {}: {}", 
+                    weeklySchedule.getId(), e.getMessage());
+            }
+        }
+        
+        log.info("✅ Regenerated {} schedules for student {} ({} updated, {} created)", 
+                 updatedCount + createdCount, studentId, updatedCount, createdCount);
+        return updatedCount + createdCount;
+    }
 }

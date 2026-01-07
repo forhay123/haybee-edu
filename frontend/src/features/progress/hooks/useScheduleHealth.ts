@@ -44,9 +44,11 @@ export const useFixStudentSchedules = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (studentId: number) => scheduleHealthApi.fixStudentSchedules(studentId),
-    onSuccess: (data, studentId) => {
-      toast.success(`✅ Schedules fixed for student ${studentId}`);
+    mutationFn: ({ studentId, forceRegenerate }: { studentId: number; forceRegenerate: boolean }) => 
+      scheduleHealthApi.fixStudentSchedules(studentId, forceRegenerate),
+    onSuccess: (data, { studentId, forceRegenerate }) => {
+      const action = forceRegenerate ? 'synced assessments for' : 'generated schedules for';
+      toast.success(`✅ Successfully ${action} student ${studentId} (${data.schedulesProcessed} schedules)`);
       queryClient.invalidateQueries({ queryKey: ['schedule-health'] });
     },
     onError: (error: any) => {
@@ -62,7 +64,7 @@ export const useFixAllStudents = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: scheduleHealthApi.fixAllStudents,
+    mutationFn: (forceRegenerate: boolean = false) => scheduleHealthApi.fixAllStudents(forceRegenerate),
     onSuccess: (data) => {
       toast.success(`✅ Fixed ${data.successCount} students`);
       if (data.failCount > 0) {

@@ -36,7 +36,7 @@ export interface HealthSummary {
 export interface FixResponse {
   status: string;
   message: string;
-  schedulesCreated?: number;
+  schedulesProcessed?: number;
   healthStatus?: string;
   studentId?: number;
 }
@@ -60,9 +60,15 @@ export const scheduleHealthApi = {
 
   /**
    * Fix schedule issues for a student
+   * @param studentId - The student ID
+   * @param forceRegenerate - If true, updates existing schedules with assessment data
    */
-  fixStudentSchedules: async (studentId: number): Promise<FixResponse> => {
-    const response = await axios.post(`/schedule-health/students/${studentId}/fix`);
+  fixStudentSchedules: async (studentId: number, forceRegenerate: boolean = false): Promise<FixResponse> => {
+    const response = await axios.post(
+      `/schedule-health/students/${studentId}/fix`,
+      null,
+      { params: { forceRegenerate } }
+    );
     return response.data;
   },
 
@@ -76,9 +82,14 @@ export const scheduleHealthApi = {
 
   /**
    * Fix all students with issues (admin only)
+   * @param forceRegenerate - If true, updates existing schedules
    */
-  fixAllStudents: async (): Promise<any> => {
-    const response = await axios.post('/schedule-health/fix-all');
+  fixAllStudents: async (forceRegenerate: boolean = false): Promise<any> => {
+    const response = await axios.post(
+      '/schedule-health/fix-all',
+      null,
+      { params: { forceRegenerate } }
+    );
     return response.data;
   }
 };

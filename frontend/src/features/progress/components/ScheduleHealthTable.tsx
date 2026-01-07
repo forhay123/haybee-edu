@@ -1,18 +1,31 @@
-// frontend/src/features/progress/components/ScheduleHealthTable.tsx
-
 import React, { useMemo, useState } from 'react';
-import { ScheduleHealthDto } from '../api/scheduleHealthApi';
-import { useFixStudentSchedules } from '../hooks/useScheduleHealth';
+
+interface ScheduleHealthDto {
+  studentId: number;
+  studentName: string;
+  email: string;
+  className?: string;
+  studentTypeDisplay: string;
+  weeklySchedulesCount: number;
+  dailySchedulesCount: number;
+  expectedDailySchedules: number;
+  healthStatus: 'HEALTHY' | 'MISSING_DAILY' | 'NO_SCHEDULES' | 'PARTIAL' | 'INDIVIDUAL_STUDENT';
+  statusMessage: string;
+  canGenerate: boolean;
+  canRegenerate: boolean;
+  actionRequired?: string;
+}
 
 interface Props {
   students: ScheduleHealthDto[];
   isLoading: boolean;
+  onFix: (studentId: number, forceRegenerate: boolean) => Promise<void>;
+  isFixing: boolean;
 }
 
-export const ScheduleHealthTable: React.FC<Props> = ({ students, isLoading }) => {
+export default function ScheduleHealthTable({ students, isLoading, onFix, isFixing }: Props) {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
-  const fixStudent = useFixStudentSchedules();
 
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
@@ -25,9 +38,10 @@ export const ScheduleHealthTable: React.FC<Props> = ({ students, isLoading }) =>
     });
   }, [students, statusFilter, searchTerm]);
 
-  const handleFix = async (studentId: number) => {
-    if (confirm(`Generate schedules for student ${studentId}?`)) {
-      await fixStudent.mutateAsync(studentId);
+  const handleFix = async (studentId: number, forceRegenerate: boolean) => {
+    const action = forceRegenerate ? 'Regenerate' : 'Generate';
+    if (confirm(`${action} schedules for student ${studentId}?`)) {
+      await onFix(studentId, forceRegenerate);
     }
   };
 
@@ -117,8 +131,8 @@ export const ScheduleHealthTable: React.FC<Props> = ({ students, isLoading }) =>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   {student.canGenerate && (
                     <button
-                      onClick={() => handleFix(student.studentId)}
-                      disabled={fixStudent.isPending}
+                      onClick={() => handleFix(student.studentId, false)}
+                      disabled={isFixing}
                       className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                     >
                       Generate
@@ -126,11 +140,12 @@ export const ScheduleHealthTable: React.FC<Props> = ({ students, isLoading }) =>
                   )}
                   {student.canRegenerate && (
                     <button
-                      onClick={() => handleFix(student.studentId)}
-                      disabled={fixStudent.isPending}
+                      onClick={() => handleFix(student.studentId, true)}
+                      disabled={isFixing}
                       className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
+                      title="Update existing schedules with assessment data"
                     >
-                      Regenerate
+                      🔄 Sync Assessments
                     </button>
                   )}
                   {!student.canGenerate && !student.canRegenerate && (
@@ -147,4 +162,4 @@ export const ScheduleHealthTable: React.FC<Props> = ({ students, isLoading }) =>
       </div>
     </div>
   );
-};
+}
