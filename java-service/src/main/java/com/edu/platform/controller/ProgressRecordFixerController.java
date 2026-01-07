@@ -17,6 +17,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.edu.platform.model.LessonTopic;
+import com.edu.platform.model.Subject;
+import com.edu.platform.model.WeeklySchedule;
+import com.edu.platform.model.assessment.Assessment;
+import com.edu.platform.service.assessment.AutoAssessmentService;
+import com.edu.platform.repository.LessonTopicRepository;
+import com.edu.platform.repository.SubjectRepository;
+import com.edu.platform.exception.InsufficientQuestionsException;
+
 /**
  * ✅ EMERGENCY FIX: Link progress records to schedules after regeneration
  * 
@@ -35,7 +44,10 @@ public class ProgressRecordFixerController {
     private final JdbcTemplate jdbcTemplate;
     private final IndividualScheduleService individualScheduleService;
     
-    
+
+    private final AutoAssessmentService autoAssessmentService;  // ✅ ADD
+    private final LessonTopicRepository lessonTopicRepository;  // ✅ ADD
+    private final SubjectRepository subjectRepository;          // ✅ ADD
 
 	
 	/**
@@ -1962,6 +1974,7 @@ public class ProgressRecordFixerController {
 	        
 	        // Initialize counters
 	        int totalTopicsAssigned = 0;
+	        int totalAssessmentsCreated = 0;
 	        int totalOrphanedLinked = 0;
 	        int totalSchedulesLinked = 0;
 	        int totalProgressLinked = 0;
@@ -1981,18 +1994,19 @@ public class ProgressRecordFixerController {
 	            
 	            log.info("📝 Processing week: {} to {}", weekStart, weekEnd);
 	            
-	            // ============================================================
-	            // STEP -1: Assign Lesson Topics to Schedules (Student-Specific) ✅ NEW
-	            // ============================================================
+	            // Step -1: Assign lesson topics
 	            Map<String, Integer> stepMinus1 = studentStepMinus1_assignLessonTopics(studentId, weekStart, weekEnd);
 	            int topicsAssigned = stepMinus1.get("topicsAssigned");
 	            log.info("  ✅ Step -1: Assigned {} lesson topics to schedules", topicsAssigned);
-
 	            totalTopicsAssigned += topicsAssigned;
 	            
-	            // ============================================================
-	            // STEP 0: Clear Period 2+ Assessments (Student-Specific)
-	            // ============================================================
+	            // ✅ Step -0.5: Create assessments for existing topics
+	            Map<String, Integer> stepMinus0_5 = stepMinus0_5_createMissingAssessments(studentId, weekStart, weekEnd);
+	            int assessmentsCreated = stepMinus0_5.get("assessmentsCreated");
+	            log.info("  ✅ Step -0.5: Created {} assessments", assessmentsCreated);
+	            totalAssessmentsCreated += assessmentsCreated;  // ✅ NOW THIS WORKS
+	            
+	            // Step 0: Clear Period 2+ assessments
 	            int step0 = studentStep0_clearPeriod2Plus(studentId, weekStart, weekEnd);
 	            totalAssessmentsCleared += step0;
 	            log.info("  ✅ Step 0: Cleared {} Period 2+ assessments", step0);
@@ -2059,6 +2073,7 @@ public class ProgressRecordFixerController {
 	        result.put("endTime", LocalDateTime.now().toString());
 
 	        result.put("stepMinus1_topicsAssigned", totalTopicsAssigned);
+	        result.put("stepMinus0_5_assessmentsCreated", totalAssessmentsCreated);  // ✅ ADD T
 	        result.put("step0_assessmentsCleared", totalAssessmentsCleared);
 	        result.put("step1_orphanedLinked", totalOrphanedLinked);
 	        result.put("step2_schedulesLinked", totalSchedulesLinked);
@@ -2102,6 +2117,97 @@ public class ProgressRecordFixerController {
 	    }
 	}
 
+	
+	
+	/**
+	 * ✅ NEW: Step -0.5 - Create missing assessments for existing lesson topics
+	 * This runs AFTER topic assignment but handles cases where topics already exist
+	 */
+	private Map<String, Integer> stepMinus0_5_createMissingAssessments(
+	        Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	    
+	    Map<String, Integer> result = new HashMap<>();
+	    
+	    try {
+	        log.info("  📝 Step -0.5: Creating missing assessments for existing topics...");
+	        
+	        // Find all schedules with topics but no assessments
+	        String findSchedulesSql = """
+	            SELECT DISTINCT ds.lesson_topic_id, ds.subject_id
+	            FROM academic.daily_schedules ds
+	            WHERE ds.student_id = ?
+	              AND ds.scheduled_date BETWEEN ? AND ?
+	              AND ds.lesson_topic_id IS NOT NULL
+	              AND NOT EXISTS (
+	                  SELECT 1 FROM academic.assessments a
+	                  WHERE a.lesson_topic_id = ds.lesson_topic_id
+	                    AND a.type = 'LESSON_TOPIC_ASSESSMENT'
+	              )
+	            """;
+	        
+	        List<Map<String, Object>> topicsNeedingAssessments = jdbcTemplate.queryForList(
+	            findSchedulesSql, studentId, weekStart, weekEnd
+	        );
+	        
+	        if (topicsNeedingAssessments.isEmpty()) {
+	            log.info("  ✅ No missing assessments to create");
+	            result.put("assessmentsCreated", 0);
+	            return result;
+	        }
+	        
+	        log.info("  📊 Found {} topics needing assessments", topicsNeedingAssessments.size());
+	        
+	        int created = 0;
+	        int failed = 0;
+	        
+	        for (Map<String, Object> row : topicsNeedingAssessments) {
+	            Long topicId = ((Number) row.get("lesson_topic_id")).longValue();
+	            Long subjectId = ((Number) row.get("subject_id")).longValue();
+	            
+	            try {
+	                // Get entities
+	                LessonTopic lessonTopic = lessonTopicRepository.findById(topicId)
+	                    .orElseThrow(() -> new RuntimeException("Topic not found: " + topicId));
+	                
+	                Subject subject = subjectRepository.findById(subjectId)
+	                    .orElseThrow(() -> new RuntimeException("Subject not found: " + subjectId));
+	                
+	                // Create temporary WeeklySchedule for assessment service
+	                WeeklySchedule tempSchedule = new WeeklySchedule();
+	                tempSchedule.setLessonTopic(lessonTopic);
+	                tempSchedule.setSubject(subject);
+	                
+	                // Create assessment
+	                Assessment assessment = autoAssessmentService.createMandatoryAssessment(tempSchedule);
+	                
+	                log.info("  ✅ Created assessment {} for topic '{}'", 
+	                        assessment.getId(), lessonTopic.getTitle());
+	                created++;
+	                
+	            } catch (InsufficientQuestionsException e) {
+	                log.warn("  ⚠️ Insufficient questions for topic {}: {}", topicId, e.getMessage());
+	                failed++;
+	            } catch (Exception e) {
+	                log.error("  ❌ Failed to create assessment for topic {}: {}", topicId, e.getMessage());
+	                failed++;
+	            }
+	        }
+	        
+	        result.put("assessmentsCreated", created);
+	        result.put("assessmentsFailed", failed);
+	        
+	        log.info("  ✅ Step -0.5 Complete: Created {} assessments, {} failed", created, failed);
+	        return result;
+	        
+	    } catch (Exception e) {
+	        log.error("Step -0.5 failed: {}", e.getMessage(), e);
+	        result.put("assessmentsCreated", 0);
+	        result.put("assessmentsFailed", -1);
+	        return result;
+	    }
+	}
+	
+	
 	// ============================================================
 	// STUDENT-SPECIFIC STEP IMPLEMENTATIONS
 	// ============================================================
