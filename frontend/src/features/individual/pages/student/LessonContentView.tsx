@@ -263,13 +263,40 @@ export default function LessonContentView() {
   // ============================================================
   // CALCULATE TIME-BASED AVAILABILITY
   // ============================================================
+
+// ============================================================
+// ✅ TIMEZONE UTILITY (copy from AssessmentStartPage)
+// ============================================================
+  const parseUTCTimestamp = (timestamp: string | null | undefined): Date | null => {
+    if (!timestamp) return null;
+    
+    try {
+      // If already has timezone indicator, use as-is
+      if (timestamp.endsWith('Z') || timestamp.includes('+') || timestamp.includes('-', 10)) {
+        return new Date(timestamp);
+      }
+      
+      // Replace space with 'T' (ISO format) and add 'Z' to indicate UTC
+      return new Date(timestamp.replace(' ', 'T') + 'Z');
+    } catch (error) {
+      console.error('Failed to parse timestamp:', timestamp, error);
+      return null;
+    }
+  };
+
+
   const now = new Date();
-  const assessmentStart = new Date(scheduleData.assessmentWindowStart);
-  const assessmentEnd = new Date(scheduleData.assessmentWindowEnd);
-  
+  const assessmentStart = parseUTCTimestamp(scheduleData.assessmentWindowStart);
+  const assessmentEnd = parseUTCTimestamp(scheduleData.assessmentWindowEnd);
+
+  if (!assessmentStart || !assessmentEnd) {
+    console.error('❌ Failed to parse assessment window times');
+    // Handle error appropriately
+  }
+
   const isAssessmentAvailable = currentStatus === 'AVAILABLE';
   const isCompleted = scheduleData.completed;
-  const isUpcoming = now < assessmentStart;
+  const isUpcoming = assessmentStart ? now < assessmentStart : false;
   const isMissed = currentStatus === 'MISSED';
 
   console.log('🔍 Status Check:', {
