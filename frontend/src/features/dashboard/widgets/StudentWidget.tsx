@@ -185,17 +185,17 @@ const StudentWidget: React.FC = () => {
 
   // ✅ Calculate summary statistics from DAILY schedules
   const totalLessons = history.length;
-  const completedLessons = history.filter((l: any) => l.completed).length;
+  const completedLessons = history.filter((l: any) => l.status === 'COMPLETED').length; // ✅ FIXED
   const completionRate = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
 
   const totalWeight = history.reduce((sum: number, l: any) => sum + (l.weight || 1), 0);
   const completedWeight = history
-    .filter((l: any) => l.completed)
+    .filter((l: any) => l.status === 'COMPLETED') // ✅ FIXED
     .reduce((sum: number, l: any) => sum + (l.weight || 1), 0);
   const weightedRate = totalWeight > 0 ? (completedWeight / totalWeight) * 100 : 0;
 
   const criticalLessons = history.filter((l: any) => l.priority === 1);
-  const completedCritical = criticalLessons.filter((l: any) => l.completed).length;
+  const completedCritical = criticalLessons.filter((l: any) => l.status === 'COMPLETED').length; // ✅ FIXED
   const criticalRate = criticalLessons.length > 0 
     ? (completedCritical / criticalLessons.length) * 100 
     : 0;

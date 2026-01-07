@@ -202,6 +202,7 @@ const links: Record<Role, NavSection[]> = {
       hideForIndividual: true,
       links: [
         { name: "Dashboard", path: "/dashboard", icon: "🏠" },
+        { name: "My Profile", path: "/student-profiles/student", icon: "🧑‍🎓" },
       ],
     },
     {
@@ -210,9 +211,9 @@ const links: Record<Role, NavSection[]> = {
       showForIndividual: true,
       links: [
         { name: "Dashboard", path: "/individual/dashboard", icon: "🏠" },
+        { name: "My Profile", path: "/student-profiles/student", icon: "🧑‍🎓" },
         { name: "Upload Timetable", path: "/individual/uploads", icon: "📤" },
         { name: "My Assessments", path: "/individual/week-schedule", icon: "📝" },
-        { name: "Progress History", path: "/individual/progress-history", icon: "📈" },
         { name: "My Results", path: "/assessments/results", icon: "📊" },
         { name: "Result Details", path: "/student/assessment-results", icon: "📈" },
         { name: "Notifications", path: "/notifications", icon: "🔔" },
@@ -220,7 +221,6 @@ const links: Record<Role, NavSection[]> = {
         { name: "Announcements", path: "/announcements", icon: "📢" },
         { name: "Lesson Topics", path: "/lesson-topics/student", icon: "🗂️" },
         { name: "AI Questions", path: "/ai-questions", icon: "🤖" },
-        { name: "Student Profile", path: "/student-profiles/student", icon: "🧑‍🎓" },
       ],
     },
     {
@@ -228,15 +228,10 @@ const links: Record<Role, NavSection[]> = {
       collapsible: true,
       hideForIndividual: true,
       links: [
-        { name: "Notifications", path: "/notifications", icon: "🔔" },
-        { name: "Messages", path: "/chat", icon: "💬" },
-        { name: "Announcements", path: "/announcements", icon: "📢" },
-        { name: "My Subjects", path: "/subjects/student", icon: "📖" },
         { name: "Subject Lessons", path: "/subjects/student", icon: "📚" },
         { name: "Lesson Topics", path: "/lesson-topics/student", icon: "🗂️" },
         { name: "AI Questions", path: "/ai-questions", icon: "🤖" },
-        { name: "Enrollments", path: "/enrollments/student", icon: "🎓" },
-        { name: "Student Profile", path: "/student-profiles/student", icon: "🧑‍🎓" },
+        { name: "Result Details", path: "/student/assessment-results", icon: "📈" },
       ],
     },
     {

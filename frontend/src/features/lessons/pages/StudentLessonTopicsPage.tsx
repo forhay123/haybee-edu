@@ -1,6 +1,6 @@
 // src/features/lessons/pages/StudentLessonTopicsPage.tsx
 import React, { useMemo } from "react";
-import { useStudentLessons } from "../hooks/useLessonTopics";
+import { useStudentLessonsByProfileId } from "../hooks/useLessonTopics"; // ✅ Use the new hook
 import { useAuth } from "../../auth/useAuth";
 import { useStudentProfiles } from "../../studentProfiles/hooks/useStudentProfiles";
 import { useGetEnrolledSubjects } from "../../subjects/api/subjectsApi";
@@ -32,24 +32,27 @@ const StudentLessonTopicsPage: React.FC = () => {
     return enrolledSubjects.map((s) => s.id);
   }, [enrolledSubjects]);
 
-  const studentType = profile?.studentType || "SCHOOL";
-
-  // ✅ Fetch lessons
-  const { data: lessons, isLoading, isError, error } = useStudentLessons(
-    subjectIds,
-    studentType
+  // ✅ Fetch lessons using the NEW hook with profile ID
+  const { data: lessons, isLoading, isError, error } = useStudentLessonsByProfileId(
+    profile?.id // Pass the student profile ID, not subject IDs
   );
+
+  // ✅ Filter lessons to only show enrolled subjects
+  const filteredLessons = useMemo(() => {
+    if (!lessons || subjectIds.length === 0) return [];
+    return lessons.filter((lesson) => subjectIds.includes(lesson.subjectId));
+  }, [lessons, subjectIds]);
 
   // ✅ Group lessons by subject
   const groupedLessons = useMemo(() => {
-    if (!lessons) return {};
-    return lessons.reduce((acc, lesson) => {
+    if (!filteredLessons.length) return {};
+    return filteredLessons.reduce((acc, lesson) => {
       const subjectName = lesson.subjectName || `Subject ${lesson.subjectId}`;
       if (!acc[subjectName]) acc[subjectName] = [];
       acc[subjectName].push(lesson);
       return acc;
-    }, {} as Record<string, typeof lessons>);
-  }, [lessons]);
+    }, {} as Record<string, typeof filteredLessons>);
+  }, [filteredLessons]);
 
   // ---- Conditional renders ----
   if (!user) {
