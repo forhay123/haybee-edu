@@ -122,50 +122,17 @@ export function DailyScheduleCard({
       return;
     }
 
-    const status = calculateScheduleStatus(schedule);
-    
-    const now = new Date();
-    const assessmentStart = schedule.assessmentWindowStart ? new Date(schedule.assessmentWindowStart) : null;
-    const assessmentEnd = schedule.assessmentWindowEnd ? new Date(schedule.assessmentWindowEnd) : null;
-    
     console.log('═══════════════════════════════════════════════════');
-    console.log('📍 NAVIGATION DEBUG INFO');
+    console.log('📍 NAVIGATION - Always going to lesson view first');
     console.log('═══════════════════════════════════════════════════');
     console.log('Subject:', schedule.subjectName);
     console.log('Progress ID:', progressId);
-    console.log('Calculated Status:', status);
-    console.log('Completed At:', schedule.completedAt);
-    console.log('---------------------------------------------------');
-    console.log('Current Time:', now.toISOString());
-    console.log('Assessment Start:', assessmentStart?.toISOString() || 'N/A');
-    console.log('Assessment End:', assessmentEnd?.toISOString() || 'N/A');
+    console.log('Status:', schedule.status);
     console.log('═══════════════════════════════════════════════════');
     
-    let manualStatus: string;
-    if (schedule.completedAt) {
-      manualStatus = 'COMPLETED';
-    } else if (assessmentStart && assessmentEnd && now >= assessmentStart && now <= assessmentEnd) {
-      manualStatus = 'AVAILABLE';
-    } else if (assessmentEnd && now > assessmentEnd) {
-      manualStatus = 'MISSED';
-    } else {
-      manualStatus = 'UPCOMING';
-    }
-    
-    const finalStatus = manualStatus !== status ? manualStatus : status;
-    
-    if (finalStatus === 'COMPLETED') {
-      navigate(`/student/individual/lesson/view/${progressId}`);
-    } 
-    else if (finalStatus === 'AVAILABLE') {
-      navigate(`/student/individual/assessment/start/${progressId}`);
-    } 
-    else if (finalStatus === 'MISSED') {
-      navigate(`/student/individual/lesson/view/${progressId}`);
-    } 
-    else {
-      navigate(`/student/individual/lesson/view/${progressId}`);
-    }
+    // ALWAYS route to lesson view page
+    // The lesson view page will handle showing the "Start Assessment" button when appropriate
+    navigate(`/student/individual/lesson/view/${progressId}`);
   };
 
   const getStatusIcon = (calculatedStatus: CalculatedStatus) => {
