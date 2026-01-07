@@ -239,12 +239,23 @@ const StudentWidget: React.FC = () => {
 
   // ✅ Filter today's lessons from weekly schedule
   const dailyLessons = useMemo(() => {
-    if (!classWeeklySchedule) return [];
+    if (!classWeeklySchedule || !Array.isArray(classWeeklySchedule)) return [];
     const today = format(new Date(), 'yyyy-MM-dd');
+    
     // Filter weekly schedule by today's date
     return classWeeklySchedule.filter((s: any) => {
-      const scheduleDate = format(new Date(s.scheduledDate || s.scheduled_date), 'yyyy-MM-dd');
-      return scheduleDate === today;
+      if (!s) return false;
+      
+      const rawDate = s.scheduledDate || s.scheduled_date;
+      if (!rawDate) return false;
+      
+      try {
+        const scheduleDate = format(new Date(rawDate), 'yyyy-MM-dd');
+        return scheduleDate === today;
+      } catch (error) {
+        console.warn('Invalid date in schedule item:', rawDate, s);
+        return false;
+      }
     });
   }, [classWeeklySchedule]);
 
