@@ -1,90 +1,94 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { SubjectResponseDto } from "../api/subjectsApi";
 import { useGetDepartments } from "../../departments/api/departmentsApi";
 import { useGetClasses } from "../../classes/api/classesApi";
-import { useAuth } from "../../auth/useAuth"; // ✅ same hook style as LessonTopicCard
-import { useSelector } from "react-redux";
 import { RootState } from "../../../store/store";
+import { BookOpen, CheckCircle2, Info } from "lucide-react";
 
 interface Props {
   subject: SubjectResponseDto;
+  isSelected?: boolean;
   onDelete?: (id: number) => void;
   isDeleting?: boolean;
 }
 
-const SubjectCard: React.FC<Props> = ({ subject, onDelete, isDeleting }) => {
+const SubjectCard: React.FC<Props> = ({ subject, isSelected, onDelete, isDeleting }) => {
   const { data: departments } = useGetDepartments();
   const { data: classes } = useGetClasses();
   const navigate = useNavigate();
-  const { accessToken } = useAuth(); // included for consistency
   const user = useSelector((state: RootState) => state.auth.user);
 
-  const departmentName =
-    subject.departmentId === null
-      ? "General"
-      : departments?.find((d) => d.id === subject.departmentId)?.name || "—";
+  const isStudentOrParent = user?.roles?.includes("STUDENT") || user?.roles?.includes("PARENT");
 
-  const className =
-    subject.classId === null
-      ? "—"
-      : classes?.find((c) => c.id === subject.classId)?.name || subject.grade || "—";
+  const departmentName = subject.departmentId === null || subject.departmentId === 4
+    ? "General"
+    : departments?.find((d) => d.id === subject.departmentId)?.name || "—";
 
-  // ✅ Determine if user is student/parent
-  const isStudentOrParent =
-    user?.roles?.includes("STUDENT") || user?.roles?.includes("PARENT");
-
-  // ✅ Navigate to correct page based on user role
   const handleViewLessons = () => {
-    if (!user) {
-      alert("Please log in to view lessons.");
-      return;
-    }
-
-    if (isStudentOrParent) {
-      navigate(`/subjects/${subject.id}/lesson-topics`);
-    } else {
-      navigate(`/subjects/${subject.id}/lessons`);
-    }
+    if (!user) return alert("Please log in to view lessons.");
+    const path = isStudentOrParent ? "lesson-topics" : "lessons";
+    navigate(`/subjects/${subject.id}/${path}`);
   };
 
   return (
-    <div className="bg-card rounded-2xl shadow p-4 hover:shadow-md transition-shadow relative">
-      <h3 className="text-lg font-semibold text-foreground">{subject.name}</h3>
+    <div className={`group relative flex flex-col bg-card rounded-2xl border-2 transition-all duration-300 shadow-sm hover:shadow-md
+      ${isSelected ? "border-blue-500 bg-blue-50/30 dark:bg-blue-900/10" : "border-transparent"}`}>
+      
+      {isSelected && (
+        <div className="absolute top-3 right-3 text-blue-600 animate-in zoom-in">
+          <CheckCircle2 size={20} />
+        </div>
+      )}
 
-      <p className="text-sm text-muted-foreground mt-1">
-        <strong>Code:</strong> {subject.code}
-      </p>
-      <p className="text-sm text-muted-foreground mt-1">
-        <strong>Grade:</strong> {subject.grade}
-      </p>
-      <p className="text-sm text-muted-foreground mt-1">
-        <strong>Level:</strong> {subject.level}
-      </p>
-      <p className="text-sm text-muted-foreground mt-1">
-        <strong>Compulsory:</strong> {subject.compulsory ? "Yes" : "No"}
-      </p>
-      <p className="text-sm text-muted-foreground mt-1">
-        <strong>Department:</strong> {departmentName}
-      </p>
+      <div className="p-5 flex-1">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="px-2 py-0.5 bg-secondary text-secondary-foreground text-[10px] font-bold uppercase tracking-wider rounded">
+            {subject.code}
+          </span>
+          {subject.compulsory && (
+            <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold uppercase rounded">
+              Required
+            </span>
+          )}
+        </div>
 
-      {/* ✅ View Lessons Button */}
-      <button
-        onClick={handleViewLessons}
-        className="mt-3 w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-      >
-        📚 View Lessons
-      </button>
+        <h3 className="text-lg font-bold text-foreground group-hover:text-blue-600 transition-colors leading-tight">
+          {subject.name}
+        </h3>
+
+        <div className="mt-4 grid grid-cols-2 gap-y-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <Info size={14} className="opacity-70" />
+            <span>Grade {subject.grade}</span>
+          </div>
+          <div className="flex items-center gap-1.5 font-medium text-foreground/80">
+            <span>{subject.level}</span>
+          </div>
+          <div className="col-span-2 opacity-80 italic">
+            {departmentName}
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 pt-0">
+        <button
+          onClick={handleViewLessons}
+          className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-all font-medium text-sm shadow-sm"
+        >
+          <BookOpen size={16} />
+          View Lessons
+        </button>
+      </div>
 
       {onDelete && (
         <button
           onClick={() => onDelete(subject.id)}
           disabled={isDeleting}
-          className={`absolute top-3 right-3 text-destructive hover:opacity-80 transition ${
-            isDeleting ? "opacity-50 cursor-not-allowed" : ""
-          }`}
+          className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center text-[10px] shadow hover:scale-110 transition-transform"
         >
-          {isDeleting ? "…" : "✖"}
+          {isDeleting ? "..." : "✕"}
         </button>
       )}
     </div>
