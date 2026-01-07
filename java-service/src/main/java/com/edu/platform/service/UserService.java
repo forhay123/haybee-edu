@@ -67,6 +67,10 @@ public class UserService {
                 .phone(user.getPhone())
                 .enabled(user.isEnabled())
                 .roles(roles)
+                .userType(user.getUserType())                      // ✅ ADD THIS
+                .studentType(user.getStudentType())                // ✅ ADD THIS
+                .preferredClass(user.getPreferredClass())          // ✅ ADD THIS
+                .preferredDepartment(user.getPreferredDepartment()) // ✅ ADD THIS
                 .build();
     }
 

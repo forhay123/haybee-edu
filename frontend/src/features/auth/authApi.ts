@@ -13,6 +13,8 @@ export interface RegisterPayload {
   phone: string;
   userType: string;
   studentType?: string;
+  preferredClass?: string;      // ✅ NEW
+  preferredDepartment?: string; // ✅ NEW
 }
 
 // Update registerUser to accept the full payload

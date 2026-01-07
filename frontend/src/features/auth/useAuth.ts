@@ -20,6 +20,8 @@ interface RegisterData {
   phone: string;
   userType: string;
   studentType?: string;
+  preferredClass?: string;      // ✅ NEW
+  preferredDepartment?: string; // ✅ NEW
 }
 
 // JWT decode type
@@ -76,6 +78,8 @@ export const useAuth = () => {
       phone: data.phone,
       userType: data.userType,
       ...(data.studentType ? { studentType: data.studentType } : {}),
+      ...(data.preferredClass ? { preferredClass: data.preferredClass } : {}),           // ✅ NEW
+      ...(data.preferredDepartment ? { preferredDepartment: data.preferredDepartment } : {}), // ✅ NEW
     });
 
     const resData = response.data;
