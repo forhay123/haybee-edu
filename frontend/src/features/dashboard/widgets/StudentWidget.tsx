@@ -162,17 +162,17 @@ const StudentWidget: React.FC = () => {
     return { total, completed, available, pending, missed, completionRate };
   }, [weeklySchedule]);
 
-  // ✅ Fetch weekly schedule for CLASS students (same as ASPIRANT students)
+  // ✅ Fetch DAILY schedules for CLASS students (personalized per student)
   const fromDate = format(startOfWeek(new Date()), 'yyyy-MM-dd');
   const toDate = format(endOfWeek(new Date()), 'yyyy-MM-dd');
 
-  const { data: classWeeklySchedule = [], isLoading: loadingHistoryStats } = useQuery({
-    queryKey: ['class-weekly-schedule', profile?.id],
+  const { data: dailySchedules = [], isLoading: loadingHistoryStats } = useQuery({
+    queryKey: ['my-daily-schedules', profile?.id, fromDate, toDate],
     queryFn: async () => {
-      const res = await axiosInstance.get('/weekly-schedules', {
+      const res = await axiosInstance.get(`/schedules/student/${profile!.id}`, {
         params: {
-          from: fromDate,
-          to: toDate
+          fromDate: fromDate,
+          toDate: toDate
         }
       });
       return res.data;
@@ -180,22 +180,22 @@ const StudentWidget: React.FC = () => {
     enabled: profileLoaded && !isIndividualStudent,
   });
 
-  // Use classWeeklySchedule instead of history
-  const history = classWeeklySchedule;
+  // Use dailySchedules instead of weekly templates
+  const history = dailySchedules;
 
-  // ✅ Calculate summary statistics (for class students)
+  // ✅ Calculate summary statistics from DAILY schedules
   const totalLessons = history.length;
-  const completedLessons = history.filter(l => l.completed).length;
+  const completedLessons = history.filter((l: any) => l.completed).length;
   const completionRate = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
 
-  const totalWeight = history.reduce((sum, l) => sum + (l.weight || 1), 0);
+  const totalWeight = history.reduce((sum: number, l: any) => sum + (l.weight || 1), 0);
   const completedWeight = history
-    .filter(l => l.completed)
-    .reduce((sum, l) => sum + (l.weight || 1), 0);
+    .filter((l: any) => l.completed)
+    .reduce((sum: number, l: any) => sum + (l.weight || 1), 0);
   const weightedRate = totalWeight > 0 ? (completedWeight / totalWeight) * 100 : 0;
 
-  const criticalLessons = history.filter(l => l.priority === 1);
-  const completedCritical = criticalLessons.filter(l => l.completed).length;
+  const criticalLessons = history.filter((l: any) => l.priority === 1);
+  const completedCritical = criticalLessons.filter((l: any) => l.completed).length;
   const criticalRate = criticalLessons.length > 0 
     ? (completedCritical / criticalLessons.length) * 100 
     : 0;
@@ -237,27 +237,18 @@ const StudentWidget: React.FC = () => {
     })
     .slice(0, 4);
 
-  // ✅ Filter today's lessons from weekly schedule
-  // ✅ Filter today's lessons from weekly schedule by day of week
+  // ✅ Filter today's lessons from DAILY schedules
   const dailyLessons = useMemo(() => {
-    if (!classWeeklySchedule || !Array.isArray(classWeeklySchedule)) return [];
+    if (!dailySchedules || !Array.isArray(dailySchedules)) return [];
     
-    // Get today's day of week (MONDAY, TUESDAY, WEDNESDAY, etc.)
-    const todayDayOfWeek = format(new Date(), 'EEEE').toUpperCase();
+    const today = format(new Date(), 'yyyy-MM-dd');
     
-    console.log('🔍 Filtering schedules for:', todayDayOfWeek);
-    console.log('📋 Total schedules:', classWeeklySchedule.length);
-    
-    // Filter schedules by matching day of week
-    const filtered = classWeeklySchedule.filter((s: any) => {
-      if (!s) return false;
-      return s.dayOfWeek === todayDayOfWeek;
+    return dailySchedules.filter((s: any) => {
+      if (!s || !s.scheduledDate) return false;
+      const scheduleDate = format(new Date(s.scheduledDate), 'yyyy-MM-dd');
+      return scheduleDate === today;
     });
-    
-    console.log('✅ Filtered schedules:', filtered.length);
-    
-    return filtered;
-  }, [classWeeklySchedule]);
+  }, [dailySchedules]);
 
   const completedCount = dailyLessons.filter(l => l?.status === 'COMPLETED').length;
 

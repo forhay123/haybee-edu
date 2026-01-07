@@ -633,6 +633,16 @@ public interface DailyScheduleRepository extends JpaRepository<DailySchedule, Lo
         @Param("source") String source
     );
     
+    /**
+     * ✅ Find schedules by student and date range (ordered)
+     */
+    @EntityGraph(attributePaths = {"studentProfile", "subject", "lessonTopic"})
+    List<DailySchedule> findByStudentProfileAndScheduledDateBetweenOrderByScheduledDateAscPeriodNumberAsc(
+            StudentProfile studentProfile,
+            LocalDate startDate,
+            LocalDate endDate
+    );
+    
 
 	/**
 	 * Find schedules by lesson topic ID and student profile ID
