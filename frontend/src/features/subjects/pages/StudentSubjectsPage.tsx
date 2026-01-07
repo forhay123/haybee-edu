@@ -117,3 +117,5 @@ const StudentSubjectsPage: React.FC = () => {
     </div>
   );
 };
+
+export default StudentSubjectsPage;
