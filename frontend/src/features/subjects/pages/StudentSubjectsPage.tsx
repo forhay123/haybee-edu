@@ -1,138 +1,119 @@
-import React, { useMemo } from "react";
-import SubjectCard from "../components/SubjectCard";
-import AspirantSubjectSelector from "../components/AspirantSubjectSelector";
-import { useGetStudentSubjects, useGetEnrolledSubjects, SubjectResponseDto } from "../api/subjectsApi";
+import React, { useState, useMemo } from "react";
 import { useAuth } from "../../auth/useAuth";
 import { useStudentProfiles } from "../../studentProfiles/hooks/useStudentProfiles";
-import { useGetDepartments } from "../../departments/api/departmentsApi";
-import { Sparkles, LayoutGrid, Target } from "lucide-react";
-
-// Helper components and functions omitted for brevity (getUserIdFromAuth, etc.)
+import { useGetStudentSubjects, useGetEnrolledSubjects } from "../api/subjectsApi";
+import SubjectCard from "../components/SubjectCard";
+import AspirantSubjectSelector from "../components/AspirantSubjectSelector";
+import { BookOpen, CheckCircle, PlusCircle, Layout } from "lucide-react";
 
 const StudentSubjectsPage: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<"mine" | "browse">("mine");
   const { user } = useAuth();
   const { studentProfilesQuery } = useStudentProfiles();
-  const userId = user?.id; // Assuming hook provides this directly
 
+  // Profile Logic
   const profile = useMemo(() => {
-    if (!userId || !studentProfilesQuery.data) return undefined;
-    return studentProfilesQuery.data.find(p => p.userId === Number(userId));
-  }, [studentProfilesQuery.data, userId]);
+    return studentProfilesQuery.data?.find(p => p.userId === Number(user?.id));
+  }, [studentProfilesQuery.data, user]);
 
-  if (studentProfilesQuery.isLoading) return <LoadingSpinner />;
-  if (!profile) return <ErrorMessage message="No student profile found." />;
+  const isAspirant = profile?.studentType === "ASPIRANT";
+  const { data: enrolled = [] } = useGetEnrolledSubjects();
+  const { data: allSubjects = [] } = useGetStudentSubjects(profile?.classId || 0, profile?.departmentId || null, profile?.studentType || "SCHOOL");
 
-  return (
-    <StudentSubjectsContent 
-      classId={profile.classId!} 
-      departmentId={profile.departmentId ?? null} 
-      studentType={profile.studentType ?? "SCHOOL"}
-      studentName={profile.fullName}
-    />
-  );
-};
-
-const StudentSubjectsContent: React.FC<any> = ({ classId, departmentId, studentType, studentName }) => {
-  const { data: subjects, isLoading: isLoadingS, isError: isErrorS } = useGetStudentSubjects(classId, departmentId, studentType);
-  const { data: enrolled, isLoading: isLoadingE } = useGetEnrolledSubjects();
-  const { data: departments } = useGetDepartments();
-
-  const isAspirant = studentType === "ASPIRANT";
-  const currentList = isAspirant ? enrolled : subjects;
-  const total = currentList?.length || 0;
-  const requiredCount = 4; // Assuming 4 is the goal
-  const remaining = Math.max(0, requiredCount - total);
-
-  if (isLoadingS || isLoadingE) return <LoadingSpinner />;
+  const requiredCount = 4;
+  const progress = Math.min((enrolled.length / requiredCount) * 100, 100);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-8">
-      {/* Dynamic Header */}
-      <header className="relative overflow-hidden bg-white dark:bg-card border rounded-3xl p-8 shadow-sm">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 pb-24">
+      {/* 1. Slim Header */}
+      <div className="bg-white dark:bg-card border-b sticky top-0 z-20">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2 mb-2 text-blue-600 font-semibold tracking-wide uppercase text-xs">
-              <Sparkles size={14} />
-              Academic Dashboard
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">Welcome, {studentName}</h1>
-            <p className="text-muted-foreground mt-1">Managing subjects for <span className="text-foreground font-medium">{studentType}</span> track.</p>
-          </div>
-
-          {isAspirant && (
-            <div className="bg-muted/50 p-4 rounded-2xl border flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground font-medium uppercase">Selection Progress</p>
-                <p className="text-sm font-bold">
-                  {remaining > 0 ? `${remaining} Subjects Left` : "Goal Achieved!"}
-                </p>
-              </div>
-              <div className="relative w-12 h-12">
-                <svg className="w-12 h-12 transform -rotate-90">
-                  <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-secondary" />
-                  <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="transparent" 
-                    strokeDasharray={125.6} strokeDashoffset={125.6 - (125.6 * Math.min(total, requiredCount)) / requiredCount}
-                    className="text-blue-600 transition-all duration-1000" />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold">
-                  {total}/{requiredCount}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      {isAspirant ? (
-        <section className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Target className="text-blue-600" /> Your Selected Track
-            </h2>
+            <h1 className="text-xl font-bold">Curriculum</h1>
+            <p className="text-xs text-muted-foreground">{profile?.fullName}</p>
           </div>
           
-          {total === 0 ? (
-            <div className="text-center py-20 border-2 border-dashed rounded-3xl bg-muted/20">
-              <LayoutGrid size={48} className="mx-auto text-muted-foreground mb-4 opacity-20" />
-              <h3 className="text-lg font-medium">Your schedule is empty</h3>
-              <p className="text-muted-foreground mb-8">Start by selecting the subjects you wish to study this term.</p>
-              <AspirantSubjectSelector departmentId={departmentId} enrolledSubjectIds={[]} />
+          {/* Circular Progress (Mobile Friendly) */}
+          <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full">
+            <span className="text-xs font-bold">{enrolled.length}/{requiredCount}</span>
+            <div className="w-8 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} />
             </div>
-          ) : (
-            <div className="space-y-8">
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {enrolled?.map(s => <SubjectCard key={s.id} subject={s} isSelected />)}
+          </div>
+        </div>
+
+        {/* 2. Professional Tab Switcher */}
+        {isAspirant && (
+          <div className="flex max-w-4xl mx-auto px-4">
+            <button 
+              onClick={() => setActiveTab("mine")}
+              className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "mine" ? "border-blue-600 text-blue-600" : "border-transparent text-muted-foreground"}`}
+            >
+              My Subjects ({enrolled.length})
+            </button>
+            <button 
+              onClick={() => setActiveTab("browse")}
+              className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "browse" ? "border-blue-600 text-blue-600" : "border-transparent text-muted-foreground"}`}
+            >
+              Browse All
+            </button>
+          </div>
+        )}
+      </div>
+
+      <main className="max-w-4xl mx-auto p-4 space-y-4">
+        {activeTab === "mine" ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {enrolled.length > 0 ? (
+              enrolled.map(s => <SubjectCard key={s.id} subject={s} variant="compact" />)
+            ) : (
+              <div className="col-span-full py-12 text-center space-y-4">
+                <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+                  <Layout size={32} />
+                </div>
+                <p className="text-muted-foreground">Your curriculum is empty.</p>
+                <button 
+                  onClick={() => setActiveTab("browse")}
+                  className="bg-blue-600 text-white px-6 py-2 rounded-full text-sm font-medium"
+                >
+                  Start Adding Subjects
+                </button>
               </div>
-              <div className="bg-blue-600/5 border border-blue-200 dark:border-blue-800 rounded-2xl p-6">
-                <h3 className="font-bold mb-2">Adjust your curriculum</h3>
-                <p className="text-sm text-muted-foreground mb-6">You can add or remove subjects to meet your specific goals.</p>
-                <AspirantSubjectSelector departmentId={departmentId} enrolledSubjectIds={enrolled?.map(s => s.id) || []} />
+            )}
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-card rounded-2xl border p-2">
+            {/* The Selector becomes the content of the second tab */}
+            <AspirantSubjectSelector 
+              departmentId={profile?.departmentId || null} 
+              enrolledSubjectIds={enrolled.map(s => s.id)} 
+            />
+          </div>
+        )}
+      </main>
+
+      {/* 3. Mobile Floating Status Bar */}
+      {isAspirant && enrolled.length < requiredCount && (
+        <div className="fixed bottom-6 left-4 right-4 md:left-auto md:right-8 md:w-80 z-30 animate-in slide-in-from-bottom-4">
+          <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <PlusCircle className="animate-pulse" />
+              <div>
+                <p className="text-sm font-bold">Complete your profile</p>
+                <p className="text-[11px] opacity-90">Add {requiredCount - enrolled.length} more subjects</p>
               </div>
             </div>
-          )}
-        </section>
-      ) : (
-        /* Render Schools/Home standard categories as before, but with the new SubjectCard styling */
-        <div className="space-y-10">
-           {/* Categorized lists (General, Departmental, Elective) go here */}
+            {activeTab === "mine" && (
+              <button 
+                onClick={() => setActiveTab("browse")}
+                className="bg-white text-blue-600 px-3 py-1.5 rounded-lg text-xs font-bold"
+              >
+                Browse
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 };
-
-const LoadingSpinner = () => (
-  <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-600"></div>
-    <p className="text-muted-foreground animate-pulse">Synchronizing your curriculum...</p>
-  </div>
-);
-
-const ErrorMessage = ({ message }: { message: string }) => (
-  <div className="p-6 max-w-md mx-auto mt-10 text-center bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-2xl">
-    <p className="text-red-600 font-medium">{message}</p>
-  </div>
-);
-
-export default StudentSubjectsPage;
