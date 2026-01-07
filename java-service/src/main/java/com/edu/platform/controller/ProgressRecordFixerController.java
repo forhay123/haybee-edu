@@ -2649,17 +2649,15 @@ public class ProgressRecordFixerController {
 	        health.put("schedulesWithoutLessonTopics", noLessonTopics != null ? noLessonTopics : 0);
 
 	        // Check for progress without assessments (where they should exist)
+	     // ✅ FIXED: Check for progress without assessments (should have assessments for first period)
 	        String noAssessmentSql = """
 	            SELECT COUNT(*) FROM academic.student_lesson_progress p
 	            WHERE p.student_profile_id = ?
 	              AND p.lesson_topic_id IS NOT NULL
 	              AND p.assessment_id IS NULL
-	              AND EXISTS (
-	                  SELECT 1 FROM academic.assessments a
-	                  WHERE a.lesson_topic_id = p.lesson_topic_id
-	                    AND a.type = 'LESSON_TOPIC_ASSESSMENT'
-	              )
+	              AND (p.period_sequence = 1 OR p.period_sequence IS NULL)
 	            """;
+	        
 	        Integer noAssessment = jdbcTemplate.queryForObject(noAssessmentSql, Integer.class, studentId);
 	        health.put("missingAssessments", noAssessment != null ? noAssessment : 0);
 
