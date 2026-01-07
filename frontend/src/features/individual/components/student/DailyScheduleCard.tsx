@@ -102,6 +102,9 @@ export function DailyScheduleCard({
     ? Math.round((completedCount / sortedSchedules.length) * 100) 
     : 0;
 
+  // CORRECTED NAVIGATION LOGIC
+  // In DailyScheduleCard.tsx - Replace the handleScheduleClick function
+
   const handleScheduleClick = (schedule: IndividualDailyScheduleDto) => {
     console.log('🔍 Schedule clicked:', schedule);
     
@@ -124,33 +127,24 @@ export function DailyScheduleCard({
 
     const status = calculateScheduleStatus(schedule);
     
-    const now = new Date();
-    const assessmentStart = schedule.assessmentWindowStart ? new Date(schedule.assessmentWindowStart) : null;
-    const assessmentEnd = schedule.assessmentWindowEnd ? new Date(schedule.assessmentWindowEnd) : null;
-    
     console.log('═══════════════════════════════════════════════════');
     console.log('📍 NAVIGATION DEBUG INFO');
     console.log('═══════════════════════════════════════════════════');
     console.log('Subject:', schedule.subjectName);
     console.log('Progress ID:', progressId);
     console.log('Calculated Status:', status);
-    console.log('Completed At:', schedule.completedAt);
-    console.log('---------------------------------------------------');
-    console.log('Current Time:', now.toISOString());
-    console.log('Assessment Start:', assessmentStart?.toISOString() || 'N/A');
-    console.log('Assessment End:', assessmentEnd?.toISOString() || 'N/A');
+    console.log('Completed:', schedule.completed);
     console.log('═══════════════════════════════════════════════════');
     
-    // Use the calculated status from the service
-    // AVAILABLE → Assessment start page (ready to begin)
-    // Everything else → Lesson view page (study or review)
-    if (status === 'AVAILABLE') {
-      console.log('✅ Routing to ASSESSMENT START (window is open)');
-      navigate(`/student/individual/assessment/start/${progressId}`);
-    } else {
-      console.log('📖 Routing to LESSON VIEW (study/review content)');
-      navigate(`/student/individual/lesson/view/${progressId}`);
-    }
+    // ✅ CORRECT FLOW: ALWAYS go to Lesson View first
+    // The Lesson View page will show the "Start Assessment" button when appropriate
+    // This allows students to:
+    // 1. Review the content before starting
+    // 2. Start the assessment when ready (via button in Lesson View)
+    // 3. View results after completion
+    
+    console.log('📖 Routing to LESSON VIEW');
+    navigate(`/student/individual/lesson/view/${progressId}`);
   };
 
   const getStatusIcon = (calculatedStatus: CalculatedStatus) => {
