@@ -7,7 +7,7 @@ import com.edu.platform.model.*;
 import com.edu.platform.model.assessment.Assessment;
 import com.edu.platform.repository.*;
 import com.edu.platform.service.assessment.AutoAssessmentService;
-import com.edu.platform.service.schedule.WeeklyScheduleValidationService; // ✅ ADD THIS IMPORT
+import com.edu.platform.service.schedule.WeeklyScheduleValidationService;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -28,9 +28,7 @@ import java.util.List;
 @Slf4j
 public class WeeklyScheduleService {
 
-    // ✅ ADD THIS FIELD - Missing dependency injection
     private final WeeklyScheduleValidationService validationService;
-    
     private final WeeklyScheduleRepository weeklyScheduleRepository;
     private final SubjectRepository subjectRepository;
     private final ClassRepository classRepository;
@@ -67,7 +65,6 @@ public class WeeklyScheduleService {
         log.info("📅 Creating weekly schedule for class {} week {} on {} period {}", 
                  dto.classId(), dto.weekNumber(), dto.dayOfWeek(), dto.periodNumber());
 
-        // Validation
         if (dto.classId() == null || dto.subjectId() == null || 
             dto.dayOfWeek() == null || dto.periodNumber() == null || dto.weekNumber() == null) {
             throw new IllegalArgumentException(
@@ -75,7 +72,6 @@ public class WeeklyScheduleService {
             );
         }
 
-        // ✅ STEP 1: PRE-VALIDATION (Check if assessment can be created)
         ValidationResult validation = validationService.validateScheduleCanBeCreated(dto);
         
         if (!validation.isCanCreate()) {
@@ -85,7 +81,6 @@ public class WeeklyScheduleService {
         
         log.info("✅ Validation passed: {} questions available", validation.getQuestionCount());
 
-        // Load entities
         ClassEntity classEntity = classRepository.findById(dto.classId())
                 .orElseThrow(() -> new EntityNotFoundException("Class not found: " + dto.classId()));
 
@@ -104,7 +99,6 @@ public class WeeklyScheduleService {
                     .orElseThrow(() -> new EntityNotFoundException("Teacher not found: " + dto.teacherId()));
         }
 
-        // Check for duplicates
         if (weeklyScheduleRepository.existsByClassEntityIdAndWeekNumberAndDayOfWeekAndPeriodNumber(
                 classEntity.getId(), dto.weekNumber(), dto.dayOfWeek(), dto.periodNumber())) {
             throw new IllegalStateException(
@@ -113,7 +107,6 @@ public class WeeklyScheduleService {
             );
         }
 
-        // ✅ STEP 2: Build schedule (without assessment yet)
         WeeklySchedule schedule = WeeklySchedule.builder()
                 .classEntity(classEntity)
                 .subject(subject)
@@ -128,13 +121,10 @@ public class WeeklyScheduleService {
                 .weight(dto.weight() != null ? dto.weight() : 1.0)
                 .build();
 
-        // ✅ STEP 3: Create assessment with proper error handling
         Assessment assessment;
         try {
             assessment = autoAssessmentService.createMandatoryAssessment(schedule);
-            
-            // ✅ PRODUCTION-READY: Safe logging using helper method
-            int questionCount = assessment.getQuestionCount(); // Uses safe helper method
+            int questionCount = assessment.getQuestionCount();
             log.info("✅ Created assessment {} with {} questions", 
                     assessment.getId(), questionCount);
                     
@@ -146,136 +136,115 @@ public class WeeklyScheduleService {
             throw new RuntimeException("Failed to create mandatory assessment: " + e.getMessage(), e);
         }
 
-        // ✅ STEP 4: Link assessment to schedule
         schedule.setAssessment(assessment);
 
-        // ✅ STEP 5: Save schedule
         WeeklySchedule saved = weeklyScheduleRepository.save(schedule);
         log.info("✅ Created weekly schedule ID {} for week {} with {} questions", 
                 saved.getId(), saved.getWeekNumber(), assessment.getQuestionCount());
 
-        // ✅ STEP 6: Generate daily schedules WITH TIME WINDOWS
         try {
             generateDailySchedulesForWeeklyTemplate(saved);
         } catch (Exception e) {
             log.error("❌ Failed to generate daily schedules for weekly schedule {}", saved.getId(), e);
-            // Don't throw - schedule is already created, just log the error
         }
 
         return saved;
     }
-    
 
-	/**
-	 * Generate daily schedules for ONE specific week only
-	 * ✅ FIXED: Now syncs assessment and time windows
-	 */
-	@Transactional(propagation = Propagation.REQUIRES_NEW)
-	public void generateDailySchedulesForWeeklyTemplate(WeeklySchedule weeklySchedule) {
-	    log.info("🔄 Auto-generating daily schedules from weekly template ID {} for week {}", 
-	        weeklySchedule.getId(), weeklySchedule.getWeekNumber());
-	
-	    // Get active term
-	    Term activeTerm = termService.getActiveTerm()
-	            .orElseThrow(() -> new IllegalStateException("No active term configured. Please set an active term first."));
-	
-	    // Validate week number is within term
-	    if (weeklySchedule.getWeekNumber() < 1 || weeklySchedule.getWeekNumber() > activeTerm.getWeekCount()) {
-	        throw new IllegalArgumentException(
-	            String.format("Week number %d is outside term range (1-%d)", 
-	                weeklySchedule.getWeekNumber(), activeTerm.getWeekCount())
-	        );
-	    }
-	
-	    // Get students in the class
-	    List<StudentProfile> students = studentService.getStudentsByClassId(
-	            weeklySchedule.getClassEntity().getId()
-	    );
-	
-	    if (students.isEmpty()) {
-	        log.warn("⚠️ No students found in class {}", weeklySchedule.getClassEntity().getName());
-	        return;
-	    }
-	
-	    // Calculate the exact date for this week number and day of week
-	    LocalDate targetDate = calculateDateForWeekAndDay(
-	        activeTerm, 
-	        weeklySchedule.getWeekNumber(), 
-	        weeklySchedule.getDayOfWeek()
-	    );
-	
-	    log.info("📆 Target date for Week {} {}: {}", 
-	        weeklySchedule.getWeekNumber(), weeklySchedule.getDayOfWeek(), targetDate);
-	
-	    // Verify the date is within term bounds
-	    if (!activeTerm.containsDate(targetDate)) {
-	        log.warn("⚠️ Calculated date {} is outside term range {}-{}", 
-	            targetDate, activeTerm.getStartDate(), activeTerm.getEndDate());
-	        return;
-	    }
-	
-	    int generatedCount = 0;
-	    int skippedCount = 0;
-	
-	    // Create schedule for each student
-	    for (StudentProfile student : students) {
-	        // Check for duplicates first
-	        boolean exists = dailyScheduleRepository.existsByStudentProfileAndScheduledDateAndPeriodNumber(
-	            student, 
-	            targetDate, 
-	            weeklySchedule.getPeriodNumber()
-	        );
-	
-	        if (exists) {
-	            log.debug("⏭️ Skipping duplicate: Schedule already exists for student {} on {} period {}", 
-	                student.getId(), targetDate, weeklySchedule.getPeriodNumber());
-	            skippedCount++;
-	            continue;
-	        }
-	
-	        // ✅ CRITICAL FIX: Create the daily schedule with assessment and time windows
-	        DailySchedule schedule = new DailySchedule();
-	        schedule.setStudentProfile(student);
-	        schedule.setSubject(weeklySchedule.getSubject());
-	        schedule.setLessonTopic(weeklySchedule.getLessonTopic());
-	        schedule.setScheduledDate(targetDate);
-	        schedule.setPeriodNumber(weeklySchedule.getPeriodNumber());
-	        schedule.setStartTime(weeklySchedule.getStartTime());
-	        schedule.setEndTime(weeklySchedule.getEndTime());
-	        schedule.setPriority(weeklySchedule.getPriority());
-	        schedule.setWeight(weeklySchedule.getWeight());
-	        schedule.setScheduleSource("CLASS");
-	        
-	        // ✅ CRITICAL FIX: Sync assessment from weekly schedule
-	        schedule.setAssessment(weeklySchedule.getAssessment());
-	        
-	        // ✅ CRITICAL FIX: Calculate time windows based on scheduled date + period times
-	        if (weeklySchedule.getStartTime() != null && weeklySchedule.getEndTime() != null) {
-	            LocalDateTime windowStart = LocalDateTime.of(targetDate, weeklySchedule.getStartTime());
-	            LocalDateTime windowEnd = LocalDateTime.of(targetDate, weeklySchedule.getEndTime());
-	            
-	            schedule.setAssessmentWindowStart(windowStart);
-	            schedule.setAssessmentWindowEnd(windowEnd);
-	            
-	            log.debug("✅ Set assessment window for student {}: {} to {}", 
-	                     student.getId(), windowStart, windowEnd);
-	        } else {
-	            log.warn("⚠️ WeeklySchedule {} has no start/end times - assessment window not set", 
-	                    weeklySchedule.getId());
-	        }
-	
-	        dailyScheduleRepository.save(schedule);
-	        generatedCount++;
-	    }
-	
-	    log.info("✅ Generated {} daily schedules with assessments for {} students on {} (Week {}, skipped {} duplicates)", 
-	             generatedCount, students.size(), targetDate, weeklySchedule.getWeekNumber(), skippedCount);
-	}
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void generateDailySchedulesForWeeklyTemplate(WeeklySchedule weeklySchedule) {
+        log.info("🔄 Auto-generating daily schedules from weekly template ID {} for week {}", 
+            weeklySchedule.getId(), weeklySchedule.getWeekNumber());
 
+        Term activeTerm = termService.getActiveTerm()
+                .orElseThrow(() -> new IllegalStateException("No active term configured. Please set an active term first."));
 
-    /**
-     * Calculate the exact date for a given week number and day of week within a term
-     */
+        if (weeklySchedule.getWeekNumber() < 1 || weeklySchedule.getWeekNumber() > activeTerm.getWeekCount()) {
+            throw new IllegalArgumentException(
+                String.format("Week number %d is outside term range (1-%d)", 
+                    weeklySchedule.getWeekNumber(), activeTerm.getWeekCount())
+            );
+        }
+
+        List<StudentProfile> students = studentService.getStudentsByClassId(
+                weeklySchedule.getClassEntity().getId()
+        );
+
+        if (students.isEmpty()) {
+            log.warn("⚠️ No students found in class {}", weeklySchedule.getClassEntity().getName());
+            return;
+        }
+
+        LocalDate targetDate = calculateDateForWeekAndDay(
+            activeTerm, 
+            weeklySchedule.getWeekNumber(), 
+            weeklySchedule.getDayOfWeek()
+        );
+
+        log.info("📆 Target date for Week {} {}: {}", 
+            weeklySchedule.getWeekNumber(), weeklySchedule.getDayOfWeek(), targetDate);
+
+        if (!activeTerm.containsDate(targetDate)) {
+            log.warn("⚠️ Calculated date {} is outside term range {}-{}", 
+                targetDate, activeTerm.getStartDate(), activeTerm.getEndDate());
+            return;
+        }
+
+        int generatedCount = 0;
+        int skippedCount = 0;
+
+        for (StudentProfile student : students) {
+            boolean exists = dailyScheduleRepository.existsByStudentProfileAndScheduledDateAndPeriodNumber(
+                student, 
+                targetDate, 
+                weeklySchedule.getPeriodNumber()
+            );
+
+            if (exists) {
+                log.debug("⏭️ Skipping duplicate: Schedule already exists for student {} on {} period {}", 
+                    student.getId(), targetDate, weeklySchedule.getPeriodNumber());
+                skippedCount++;
+                continue;
+            }
+
+            DailySchedule schedule = new DailySchedule();
+            schedule.setStudentProfile(student);
+            schedule.setSubject(weeklySchedule.getSubject());
+            schedule.setLessonTopic(weeklySchedule.getLessonTopic());
+            schedule.setScheduledDate(targetDate);
+            schedule.setPeriodNumber(weeklySchedule.getPeriodNumber());
+            schedule.setStartTime(weeklySchedule.getStartTime());
+            schedule.setEndTime(weeklySchedule.getEndTime());
+            schedule.setPriority(weeklySchedule.getPriority());
+            schedule.setWeight(weeklySchedule.getWeight());
+            schedule.setScheduleSource("CLASS");
+            
+            // ✅ CRITICAL FIX: Sync assessment from weekly schedule
+            schedule.setAssessment(weeklySchedule.getAssessment());
+            
+            // ✅ CRITICAL FIX: Calculate time windows
+            if (weeklySchedule.getStartTime() != null && weeklySchedule.getEndTime() != null) {
+                LocalDateTime windowStart = LocalDateTime.of(targetDate, weeklySchedule.getStartTime());
+                LocalDateTime windowEnd = LocalDateTime.of(targetDate, weeklySchedule.getEndTime());
+                
+                schedule.setAssessmentWindowStart(windowStart);
+                schedule.setAssessmentWindowEnd(windowEnd);
+                
+                log.debug("✅ Set assessment window for student {}: {} to {}", 
+                         student.getId(), windowStart, windowEnd);
+            } else {
+                log.warn("⚠️ WeeklySchedule {} has no start/end times - assessment window not set", 
+                        weeklySchedule.getId());
+            }
+
+            dailyScheduleRepository.save(schedule);
+            generatedCount++;
+        }
+
+        log.info("✅ Generated {} daily schedules with assessments for {} students on {} (Week {}, skipped {} duplicates)", 
+                 generatedCount, students.size(), targetDate, weeklySchedule.getWeekNumber(), skippedCount);
+    }
+
     private LocalDate calculateDateForWeekAndDay(Term term, Integer weekNumber, DayOfWeek dayOfWeek) {
         LocalDate weekStart = term.getWeekStartDate(weekNumber);
         LocalDate targetDate = weekStart;
@@ -345,299 +314,304 @@ public class WeeklyScheduleService {
     public List<WeeklySchedule> getSchedulesByClassAndDay(Long classId, DayOfWeek dayOfWeek) {
         return weeklyScheduleRepository.findByClassEntityIdAndDayOfWeek(classId, dayOfWeek);
     }
-    
-    
 
-	/**
-	 * ✅ Generate daily schedules for ALL weeks in the current term
-	 * Call this after creating weekly schedules or when students enroll
-	 */
-	@Transactional
-	@CacheEvict(value = {"dailySchedules", "dailySchedulesByDate", "studentDailyProgress"}, 
-	            allEntries = true)
-	public int generateDailySchedulesForAllWeeks() {
-	    log.info("🔄 Generating daily schedules for ALL weeks in active term");
-	    
-	    Term activeTerm = termService.getActiveTerm()
-	            .orElseThrow(() -> new IllegalStateException(
-	                "No active term configured. Please set an active term first."));
-	    
-	    List<WeeklySchedule> allWeeklySchedules = weeklyScheduleRepository.findAll();
-	    
-	    if (allWeeklySchedules.isEmpty()) {
-	        log.warn("⚠️ No weekly schedules found");
-	        return 0;
-	    }
-	    
-	    int totalGenerated = 0;
-	    int totalSkipped = 0;
-	    
-	    for (WeeklySchedule weeklySchedule : allWeeklySchedules) {
-	        try {
-	            // Validate week number
-	            if (weeklySchedule.getWeekNumber() < 1 || 
-	                weeklySchedule.getWeekNumber() > activeTerm.getWeekCount()) {
-	                log.debug("⏭️ Skipping weekly schedule {} - Week {} outside term range (1-{})", 
-	                    weeklySchedule.getId(), 
-	                    weeklySchedule.getWeekNumber(),
-	                    activeTerm.getWeekCount());
-	                totalSkipped++;
-	                continue;
-	            }
-	            
-	            // Calculate target date
-	            LocalDate targetDate = calculateDateForWeekAndDay(
-	                activeTerm, 
-	                weeklySchedule.getWeekNumber(), 
-	                weeklySchedule.getDayOfWeek()
-	            );
-	            
-	            // Skip if date is outside term
-	            if (!activeTerm.containsDate(targetDate)) {
-	                log.debug("⏭️ Skipping - Date {} outside term bounds", targetDate);
-	                totalSkipped++;
-	                continue;
-	            }
-	            
-	            // Get students for this class
-	            List<StudentProfile> students = studentService.getStudentsByClassId(
-	                weeklySchedule.getClassEntity().getId()
-	            );
-	            
-	            if (students.isEmpty()) {
-	                log.debug("⏭️ No students in class {}", 
-	                    weeklySchedule.getClassEntity().getName());
-	                totalSkipped++;
-	                continue;
-	            }
-	            
-	            // Generate for each student
-	            int generatedForSchedule = 0;
-	            for (StudentProfile student : students) {
-	                // Check for duplicates
-	                boolean exists = dailyScheduleRepository
-	                    .existsByStudentProfileAndScheduledDateAndPeriodNumber(
-	                        student, targetDate, weeklySchedule.getPeriodNumber()
-	                    );
-	                
-	                if (exists) {
-	                    continue; // Skip duplicates
-	                }
-	                
-	                // Create daily schedule
-	                DailySchedule schedule = new DailySchedule();
-	                schedule.setStudentProfile(student);
-	                schedule.setSubject(weeklySchedule.getSubject());
-	                schedule.setLessonTopic(weeklySchedule.getLessonTopic());
-	                schedule.setScheduledDate(targetDate);
-	                schedule.setPeriodNumber(weeklySchedule.getPeriodNumber());
-	                schedule.setStartTime(weeklySchedule.getStartTime());
-	                schedule.setEndTime(weeklySchedule.getEndTime());
-	                schedule.setPriority(weeklySchedule.getPriority());
-	                schedule.setWeight(weeklySchedule.getWeight());
-	                schedule.setScheduleSource("CLASS");
-	                
-	                dailyScheduleRepository.save(schedule);
-	                generatedForSchedule++;
-	                totalGenerated++;
-	            }
-	            
-	            if (generatedForSchedule > 0) {
-	                log.info("✅ Generated {} daily schedules from weekly schedule {} (Week {}, {}, Period {})",
-	                    generatedForSchedule,
-	                    weeklySchedule.getId(),
-	                    weeklySchedule.getWeekNumber(),
-	                    weeklySchedule.getDayOfWeek(),
-	                    weeklySchedule.getPeriodNumber());
-	            }
-	            
-	        } catch (Exception e) {
-	            log.error("❌ Failed to process weekly schedule {}: {}", 
-	                weeklySchedule.getId(), e.getMessage(), e);
-	        }
-	    }
-	    
-	    log.info("✅ Generation complete: {} daily schedules created, {} skipped", 
-	        totalGenerated, totalSkipped);
-	    
-	    return totalGenerated;
-	}
-	
-	/**
-	 * ✅ Generate daily schedules for a specific student from ALL weekly schedules
-	 */
-	@Transactional
-	@CacheEvict(value = {"dailySchedules", "studentDailyProgress"}, allEntries = true)
-	public int generateDailySchedulesForStudent(Long studentId) {
-	    log.info("🔄 Generating daily schedules for student {}", studentId);
-	    
-	    // ✅ Use StudentProfileRepository directly
-	    StudentProfile student = studentProfileRepository.findById(studentId)
-	            .orElseThrow(() -> new EntityNotFoundException("Student not found: " + studentId));
-	    
-	    Term activeTerm = termService.getActiveTerm()
-	            .orElseThrow(() -> new IllegalStateException("No active term configured"));
-	    
-	    // ✅ Use getClassLevel() instead of getClassEntity()
-	    ClassEntity studentClass = student.getClassLevel();
-	    if (studentClass == null) {
-	        log.warn("⚠️ Student {} has no class assigned", studentId);
-	        return 0;
-	    }
-	    
-	    // Get all weekly schedules for student's class
-	    List<WeeklySchedule> weeklySchedules = weeklyScheduleRepository
-	        .findByClassEntityId(studentClass.getId());
-	    
-	    if (weeklySchedules.isEmpty()) {
-	        log.warn("⚠️ No weekly schedules found for class {}", studentClass.getName());
-	        return 0;
-	    }
-	    
-	    int generatedCount = 0;
-	    
-	    for (WeeklySchedule weeklySchedule : weeklySchedules) {
-	        try {
-	            // Validate week number
-	            if (weeklySchedule.getWeekNumber() < 1 || 
-	                weeklySchedule.getWeekNumber() > activeTerm.getWeekCount()) {
-	                continue;
-	            }
-	            
-	            // Calculate target date
-	            LocalDate targetDate = calculateDateForWeekAndDay(
-	                activeTerm, 
-	                weeklySchedule.getWeekNumber(), 
-	                weeklySchedule.getDayOfWeek()
-	            );
-	            
-	            // Skip if outside term
-	            if (!activeTerm.containsDate(targetDate)) {
-	                continue;
-	            }
-	            
-	            // Check for duplicates
-	            boolean exists = dailyScheduleRepository
-	                .existsByStudentProfileAndScheduledDateAndPeriodNumber(
-	                    student, targetDate, weeklySchedule.getPeriodNumber()
-	                );
-	            
-	            if (exists) {
-	                continue;
-	            }
-	            
-	            // Create daily schedule
-	            DailySchedule schedule = new DailySchedule();
-	            schedule.setStudentProfile(student);
-	            schedule.setSubject(weeklySchedule.getSubject());
-	            schedule.setLessonTopic(weeklySchedule.getLessonTopic());
-	            schedule.setScheduledDate(targetDate);
-	            schedule.setPeriodNumber(weeklySchedule.getPeriodNumber());
-	            schedule.setStartTime(weeklySchedule.getStartTime());
-	            schedule.setEndTime(weeklySchedule.getEndTime());
-	            schedule.setPriority(weeklySchedule.getPriority());
-	            schedule.setWeight(weeklySchedule.getWeight());
-	            schedule.setScheduleSource("CLASS");
-	            
-	            dailyScheduleRepository.save(schedule);
-	            generatedCount++;
-	            
-	        } catch (Exception e) {
-	            log.error("❌ Failed to generate from weekly schedule {}: {}", 
-	                weeklySchedule.getId(), e.getMessage());
-	        }
-	    }
-	    
-	    log.info("✅ Generated {} daily schedules for student {}", generatedCount, studentId);
-	    return generatedCount;
-	}
-	
-	/**
-	 * ✅ Regenerate daily schedules for a specific class
-	 */
-	@Transactional
-	@CacheEvict(value = {"dailySchedules", "dailySchedulesByDate", "studentDailyProgress"}, 
-	            allEntries = true)
-	public int regenerateDailySchedulesForClass(Long classId) {
-	    log.info("🔄 Regenerating daily schedules for class {}", classId);
-	    
-	    Term activeTerm = termService.getActiveTerm()
-	            .orElseThrow(() -> new IllegalStateException("No active term configured"));
-	    
-	    List<WeeklySchedule> classSchedules = weeklyScheduleRepository.findByClassEntityId(classId);
-	    
-	    if (classSchedules.isEmpty()) {
-	        log.warn("⚠️ No weekly schedules found for class {}", classId);
-	        return 0;
-	    }
-	    
-	    List<StudentProfile> students = studentService.getStudentsByClassId(classId);
-	    
-	    if (students.isEmpty()) {
-	        log.warn("⚠️ No students found in class {}", classId);
-	        return 0;
-	    }
-	    
-	    int totalGenerated = 0;
-	    
-	    for (WeeklySchedule weeklySchedule : classSchedules) {
-	        try {
-	            // Validate week number
-	            if (weeklySchedule.getWeekNumber() < 1 || 
-	                weeklySchedule.getWeekNumber() > activeTerm.getWeekCount()) {
-	                continue;
-	            }
-	            
-	            // Calculate target date
-	            LocalDate targetDate = calculateDateForWeekAndDay(
-	                activeTerm, 
-	                weeklySchedule.getWeekNumber(), 
-	                weeklySchedule.getDayOfWeek()
-	            );
-	            
-	            // Skip if outside term
-	            if (!activeTerm.containsDate(targetDate)) {
-	                continue;
-	            }
-	            
-	            // Generate for each student
-	            for (StudentProfile student : students) {
-	                // Check for duplicates
-	                boolean exists = dailyScheduleRepository
-	                    .existsByStudentProfileAndScheduledDateAndPeriodNumber(
-	                        student, targetDate, weeklySchedule.getPeriodNumber()
-	                    );
-	                
-	                if (exists) {
-	                    continue;
-	                }
-	                
-	                // Create daily schedule
-	                DailySchedule schedule = new DailySchedule();
-	                schedule.setStudentProfile(student);
-	                schedule.setSubject(weeklySchedule.getSubject());
-	                schedule.setLessonTopic(weeklySchedule.getLessonTopic());
-	                schedule.setScheduledDate(targetDate);
-	                schedule.setPeriodNumber(weeklySchedule.getPeriodNumber());
-	                schedule.setStartTime(weeklySchedule.getStartTime());
-	                schedule.setEndTime(weeklySchedule.getEndTime());
-	                schedule.setPriority(weeklySchedule.getPriority());
-	                schedule.setWeight(weeklySchedule.getWeight());
-	                schedule.setScheduleSource("CLASS");
-	                
-	                dailyScheduleRepository.save(schedule);
-	                totalGenerated++;
-	            }
-	            
-	        } catch (Exception e) {
-	            log.error("❌ Failed to process weekly schedule {}: {}", 
-	                weeklySchedule.getId(), e.getMessage());
-	        }
-	    }
-	    
-	    log.info("✅ Regenerated {} daily schedules for class {}", totalGenerated, classId);
-	    return totalGenerated;
-	}
-	
-	
+    @Transactional
+    @CacheEvict(value = {"dailySchedules", "dailySchedulesByDate", "studentDailyProgress"}, 
+                allEntries = true)
+    public int generateDailySchedulesForAllWeeks() {
+        log.info("🔄 Generating daily schedules for ALL weeks in active term");
+        
+        Term activeTerm = termService.getActiveTerm()
+                .orElseThrow(() -> new IllegalStateException(
+                    "No active term configured. Please set an active term first."));
+        
+        List<WeeklySchedule> allWeeklySchedules = weeklyScheduleRepository.findAll();
+        
+        if (allWeeklySchedules.isEmpty()) {
+            log.warn("⚠️ No weekly schedules found");
+            return 0;
+        }
+        
+        int totalGenerated = 0;
+        int totalSkipped = 0;
+        
+        for (WeeklySchedule weeklySchedule : allWeeklySchedules) {
+            try {
+                if (weeklySchedule.getWeekNumber() < 1 || 
+                    weeklySchedule.getWeekNumber() > activeTerm.getWeekCount()) {
+                    log.debug("⏭️ Skipping weekly schedule {} - Week {} outside term range (1-{})", 
+                        weeklySchedule.getId(), 
+                        weeklySchedule.getWeekNumber(),
+                        activeTerm.getWeekCount());
+                    totalSkipped++;
+                    continue;
+                }
+                
+                LocalDate targetDate = calculateDateForWeekAndDay(
+                    activeTerm, 
+                    weeklySchedule.getWeekNumber(), 
+                    weeklySchedule.getDayOfWeek()
+                );
+                
+                if (!activeTerm.containsDate(targetDate)) {
+                    log.debug("⏭️ Skipping - Date {} outside term bounds", targetDate);
+                    totalSkipped++;
+                    continue;
+                }
+                
+                List<StudentProfile> students = studentService.getStudentsByClassId(
+                    weeklySchedule.getClassEntity().getId()
+                );
+                
+                if (students.isEmpty()) {
+                    log.debug("⏭️ No students in class {}", 
+                        weeklySchedule.getClassEntity().getName());
+                    totalSkipped++;
+                    continue;
+                }
+                
+                int generatedForSchedule = 0;
+                for (StudentProfile student : students) {
+                    boolean exists = dailyScheduleRepository
+                        .existsByStudentProfileAndScheduledDateAndPeriodNumber(
+                            student, targetDate, weeklySchedule.getPeriodNumber()
+                        );
+                    
+                    if (exists) {
+                        continue;
+                    }
+                    
+                    DailySchedule schedule = new DailySchedule();
+                    schedule.setStudentProfile(student);
+                    schedule.setSubject(weeklySchedule.getSubject());
+                    schedule.setLessonTopic(weeklySchedule.getLessonTopic());
+                    schedule.setScheduledDate(targetDate);
+                    schedule.setPeriodNumber(weeklySchedule.getPeriodNumber());
+                    schedule.setStartTime(weeklySchedule.getStartTime());
+                    schedule.setEndTime(weeklySchedule.getEndTime());
+                    schedule.setPriority(weeklySchedule.getPriority());
+                    schedule.setWeight(weeklySchedule.getWeight());
+                    schedule.setScheduleSource("CLASS");
+                    
+                    // ✅ CRITICAL FIX: Sync assessment and time windows
+                    schedule.setAssessment(weeklySchedule.getAssessment());
+                    
+                    if (weeklySchedule.getStartTime() != null && weeklySchedule.getEndTime() != null) {
+                        schedule.setAssessmentWindowStart(LocalDateTime.of(targetDate, weeklySchedule.getStartTime()));
+                        schedule.setAssessmentWindowEnd(LocalDateTime.of(targetDate, weeklySchedule.getEndTime()));
+                    }
+                    
+                    dailyScheduleRepository.save(schedule);
+                    generatedForSchedule++;
+                    totalGenerated++;
+                }
+                
+                if (generatedForSchedule > 0) {
+                    log.info("✅ Generated {} daily schedules from weekly schedule {} (Week {}, {}, Period {})",
+                        generatedForSchedule,
+                        weeklySchedule.getId(),
+                        weeklySchedule.getWeekNumber(),
+                        weeklySchedule.getDayOfWeek(),
+                        weeklySchedule.getPeriodNumber());
+                }
+                
+            } catch (Exception e) {
+                log.error("❌ Failed to process weekly schedule {}: {}", 
+                    weeklySchedule.getId(), e.getMessage(), e);
+            }
+        }
+        
+        log.info("✅ Generation complete: {} daily schedules created, {} skipped", 
+            totalGenerated, totalSkipped);
+        
+        return totalGenerated;
+    }
+
+    /**
+     * ✅ FIXED: Generate daily schedules for a specific student with assessment sync
+     */
+    @Transactional
+    @CacheEvict(value = {"dailySchedules", "studentDailyProgress"}, allEntries = true)
+    public int generateDailySchedulesForStudent(Long studentId) {
+        log.info("🔄 Generating daily schedules for student {}", studentId);
+        
+        StudentProfile student = studentProfileRepository.findById(studentId)
+                .orElseThrow(() -> new EntityNotFoundException("Student not found: " + studentId));
+        
+        Term activeTerm = termService.getActiveTerm()
+                .orElseThrow(() -> new IllegalStateException("No active term configured"));
+        
+        ClassEntity studentClass = student.getClassLevel();
+        if (studentClass == null) {
+            log.warn("⚠️ Student {} has no class assigned", studentId);
+            return 0;
+        }
+        
+        List<WeeklySchedule> weeklySchedules = weeklyScheduleRepository
+            .findByClassEntityId(studentClass.getId());
+        
+        if (weeklySchedules.isEmpty()) {
+            log.warn("⚠️ No weekly schedules found for class {}", studentClass.getName());
+            return 0;
+        }
+        
+        int generatedCount = 0;
+        
+        for (WeeklySchedule weeklySchedule : weeklySchedules) {
+            try {
+                if (weeklySchedule.getWeekNumber() < 1 || 
+                    weeklySchedule.getWeekNumber() > activeTerm.getWeekCount()) {
+                    continue;
+                }
+                
+                LocalDate targetDate = calculateDateForWeekAndDay(
+                    activeTerm, 
+                    weeklySchedule.getWeekNumber(), 
+                    weeklySchedule.getDayOfWeek()
+                );
+                
+                if (!activeTerm.containsDate(targetDate)) {
+                    continue;
+                }
+                
+                boolean exists = dailyScheduleRepository
+                    .existsByStudentProfileAndScheduledDateAndPeriodNumber(
+                        student, targetDate, weeklySchedule.getPeriodNumber()
+                    );
+                
+                if (exists) {
+                    continue;
+                }
+                
+                DailySchedule schedule = new DailySchedule();
+                schedule.setStudentProfile(student);
+                schedule.setSubject(weeklySchedule.getSubject());
+                schedule.setLessonTopic(weeklySchedule.getLessonTopic());
+                schedule.setScheduledDate(targetDate);
+                schedule.setPeriodNumber(weeklySchedule.getPeriodNumber());
+                schedule.setStartTime(weeklySchedule.getStartTime());
+                schedule.setEndTime(weeklySchedule.getEndTime());
+                schedule.setPriority(weeklySchedule.getPriority());
+                schedule.setWeight(weeklySchedule.getWeight());
+                schedule.setScheduleSource("CLASS");
+                
+                // ✅ CRITICAL FIX: Sync assessment from weekly schedule
+                schedule.setAssessment(weeklySchedule.getAssessment());
+                
+                // ✅ CRITICAL FIX: Calculate time windows
+                if (weeklySchedule.getStartTime() != null && weeklySchedule.getEndTime() != null) {
+                    LocalDateTime windowStart = LocalDateTime.of(targetDate, weeklySchedule.getStartTime());
+                    LocalDateTime windowEnd = LocalDateTime.of(targetDate, weeklySchedule.getEndTime());
+                    
+                    schedule.setAssessmentWindowStart(windowStart);
+                    schedule.setAssessmentWindowEnd(windowEnd);
+                    
+                    log.debug("✅ Set assessment window: {} to {}", windowStart, windowEnd);
+                }
+                
+                dailyScheduleRepository.save(schedule);
+                generatedCount++;
+                
+            } catch (Exception e) {
+                log.error("❌ Failed to generate from weekly schedule {}: {}", 
+                    weeklySchedule.getId(), e.getMessage());
+            }
+        }
+        
+        log.info("✅ Generated {} daily schedules with assessments for student {}", generatedCount, studentId);
+        return generatedCount;
+    }
+
+    /**
+     * ✅ FIXED: Regenerate daily schedules for a class with assessment sync
+     */
+    @Transactional
+    @CacheEvict(value = {"dailySchedules", "dailySchedulesByDate", "studentDailyProgress"}, 
+                allEntries = true)
+    public int regenerateDailySchedulesForClass(Long classId) {
+        log.info("🔄 Regenerating daily schedules for class {}", classId);
+        
+        Term activeTerm = termService.getActiveTerm()
+                .orElseThrow(() -> new IllegalStateException("No active term configured"));
+        
+        List<WeeklySchedule> classSchedules = weeklyScheduleRepository.findByClassEntityId(classId);
+        
+        if (classSchedules.isEmpty()) {
+            log.warn("⚠️ No weekly schedules found for class {}", classId);
+            return 0;
+        }
+        
+        List<StudentProfile> students = studentService.getStudentsByClassId(classId);
+        
+        if (students.isEmpty()) {
+            log.warn("⚠️ No students found in class {}", classId);
+            return 0;
+        }
+        
+        int totalGenerated = 0;
+        
+        for (WeeklySchedule weeklySchedule : classSchedules) {
+            try {
+                if (weeklySchedule.getWeekNumber() < 1 || 
+                    weeklySchedule.getWeekNumber() > activeTerm.getWeekCount()) {
+                    continue;
+                }
+                
+                LocalDate targetDate = calculateDateForWeekAndDay(
+                    activeTerm, 
+                    weeklySchedule.getWeekNumber(), 
+                    weeklySchedule.getDayOfWeek()
+                );
+                
+                if (!activeTerm.containsDate(targetDate)) {
+                    continue;
+                }
+                
+                for (StudentProfile student : students) {
+                    boolean exists = dailyScheduleRepository
+                        .existsByStudentProfileAndScheduledDateAndPeriodNumber(
+                            student, targetDate, weeklySchedule.getPeriodNumber()
+                        );
+                    
+                    if (exists) {
+                        continue;
+                    }
+                    
+                    DailySchedule schedule = new DailySchedule();
+                    schedule.setStudentProfile(student);
+                    schedule.setSubject(weeklySchedule.getSubject());
+                    schedule.setLessonTopic(weeklySchedule.getLessonTopic());
+                    schedule.setScheduledDate(targetDate);
+                    schedule.setPeriodNumber(weeklySchedule.getPeriodNumber());
+                    schedule.setStartTime(weeklySchedule.getStartTime());
+                    schedule.setEndTime(weeklySchedule.getEndTime());
+                    schedule.setPriority(weeklySchedule.getPriority());
+                    schedule.setWeight(weeklySchedule.getWeight());
+                    schedule.setScheduleSource("CLASS");
+                    
+                    // ✅ CRITICAL FIX: Sync assessment from weekly schedule
+                    schedule.setAssessment(weeklySchedule.getAssessment());
+                    
+                    // ✅ CRITICAL FIX: Calculate time windows
+                    if (weeklySchedule.getStartTime() != null && weeklySchedule.getEndTime() != null) {
+                        LocalDateTime windowStart = LocalDateTime.of(targetDate, weeklySchedule.getStartTime());
+                        LocalDateTime windowEnd = LocalDateTime.of(targetDate, weeklySchedule.getEndTime());
+                        
+                        schedule.setAssessmentWindowStart(windowStart);
+                        schedule.setAssessmentWindowEnd(windowEnd);
+                    }
+                    
+                    dailyScheduleRepository.save(schedule);
+                    totalGenerated++;
+                }
+                
+            } catch (Exception e) {
+                log.error("❌ Failed to process weekly schedule {}: {}", 
+                    weeklySchedule.getId(), e.getMessage());
+            }
+        }
+        
+        log.info("✅ Regenerated {} daily schedules with assessments for class {}", totalGenerated, classId);
+        return totalGenerated;
+    }
 }
