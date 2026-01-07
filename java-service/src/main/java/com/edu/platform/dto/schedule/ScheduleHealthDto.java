@@ -3,7 +3,6 @@ package com.edu.platform.dto.schedule;
 import com.edu.platform.model.enums.StudentType;
 import lombok.Builder;
 import lombok.Data;
-
 import java.time.DayOfWeek;
 import java.util.List;
 
@@ -29,6 +28,10 @@ public class ScheduleHealthDto {
     private Integer dailySchedulesCount;
     private Integer expectedDailySchedules;
     
+    // ✅ NEW: Assessment sync tracking
+    private Integer schedulesWithoutAssessment;
+    private Integer schedulesWithoutTimeWindow;
+    
     // Health status
     private HealthStatus healthStatus;
     private String statusMessage;
@@ -48,10 +51,11 @@ public class ScheduleHealthDto {
      * Health status enum
      */
     public enum HealthStatus {
-        HEALTHY("✅ Healthy", "All schedules generated correctly"),
+        HEALTHY("✅ Healthy", "All schedules generated correctly with assessments"),
         MISSING_DAILY("⚠️ Missing Daily", "Weekly schedules exist but daily schedules not generated"),
         NO_SCHEDULES("❌ No Schedules", "No weekly schedules configured for this class"),
         PARTIAL("⚠️ Partial", "Some daily schedules missing"),
+        NEEDS_SYNC("🔄 Needs Sync", "Schedules exist but missing assessment references or time windows"),
         INDIVIDUAL_STUDENT("ℹ️ Individual Student", "Uses individual schedule system");
         
         private final String displayName;

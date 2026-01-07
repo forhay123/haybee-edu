@@ -66,7 +66,6 @@ public class ScheduleHealthController {
             
             int count;
             
-            // ✅ CRITICAL FIX: Use regeneration mode when schedules exist
             if (forceRegenerate || health.getCanRegenerate()) {
                 log.info("🔄 Regenerating schedules (will update existing ones)");
                 count = weeklyScheduleService.regenerateDailySchedulesForStudent(studentId);
@@ -118,16 +117,22 @@ public class ScheduleHealthController {
                 .filter(h -> h.getHealthStatus() == ScheduleHealthDto.HealthStatus.PARTIAL)
                 .count();
         
+        // ✅ NEW: Count students needing assessment sync
+        long needsSync = allHealth.stream()
+                .filter(h -> h.getHealthStatus() == ScheduleHealthDto.HealthStatus.NEEDS_SYNC)
+                .count();
+        
         Map<String, Object> summary = new HashMap<>();
         summary.put("total", allHealth.size());
         summary.put("healthy", healthy);
         summary.put("missingDaily", missingDaily);
         summary.put("noSchedules", noSchedules);
         summary.put("partial", partial);
+        summary.put("needsSync", needsSync);
         summary.put("needsAttention", allHealth.size() - healthy);
         
-        log.info("✅ Summary: {} total, {} healthy, {} need attention", 
-                allHealth.size(), healthy, allHealth.size() - healthy);
+        log.info("✅ Summary: {} total, {} healthy, {} need sync, {} need attention", 
+                allHealth.size(), healthy, needsSync, allHealth.size() - healthy);
         
         return ResponseEntity.ok(summary);
     }

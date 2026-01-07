@@ -33,7 +33,7 @@ export default function ScheduleHealthPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
           <div className="bg-white p-4 rounded-lg shadow border-l-4 border-gray-400">
             <div className="text-2xl font-bold text-gray-900">{summary.total}</div>
             <div className="text-sm text-gray-600">Total Students</div>
@@ -42,17 +42,21 @@ export default function ScheduleHealthPage() {
             <div className="text-2xl font-bold text-green-600">{summary.healthy}</div>
             <div className="text-sm text-gray-600">Healthy</div>
           </div>
+          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-purple-400">
+            <div className="text-2xl font-bold text-purple-600">{summary.needsSync || 0}</div>
+            <div className="text-sm text-gray-600">Needs Sync</div>
+          </div>
           <div className="bg-white p-4 rounded-lg shadow border-l-4 border-yellow-400">
             <div className="text-2xl font-bold text-yellow-600">{summary.missingDaily}</div>
             <div className="text-sm text-gray-600">Missing Daily</div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-400">
-            <div className="text-2xl font-bold text-red-600">{summary.noSchedules}</div>
-            <div className="text-sm text-gray-600">No Schedules</div>
-          </div>
           <div className="bg-white p-4 rounded-lg shadow border-l-4 border-orange-400">
             <div className="text-2xl font-bold text-orange-600">{summary.partial}</div>
             <div className="text-sm text-gray-600">Partial</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-400">
+            <div className="text-2xl font-bold text-red-600">{summary.noSchedules}</div>
+            <div className="text-sm text-gray-600">No Schedules</div>
           </div>
         </div>
       )}
@@ -118,15 +122,24 @@ export default function ScheduleHealthPage() {
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="font-semibold text-blue-900 mb-2">Understanding Health Status:</h3>
         <ul className="space-y-1 text-sm text-blue-800">
-          <li>✅ <strong>Healthy:</strong> All schedules generated with correct assessments</li>
-          <li>⚠️ <strong>Missing Daily:</strong> Weekly schedules exist but daily schedules not generated - Click "Generate"</li>
-          <li>⚠️ <strong>Partial:</strong> Some daily schedules missing assessments - Click "🔄 Sync Assessments"</li>
+          <li>✅ <strong>Healthy:</strong> All schedules exist with correct assessments and time windows</li>
+          <li>🔄 <strong>Needs Sync:</strong> Schedules exist but missing assessment references or time windows - Click "🔄 Sync"</li>
+          <li>⚠️ <strong>Missing Daily:</strong> Weekly schedules exist but daily schedules not generated - Click "➕ Generate"</li>
+          <li>⚠️ <strong>Partial:</strong> Some daily schedules missing - Click "🔄 Sync" to complete</li>
           <li>❌ <strong>No Schedules:</strong> No weekly schedules configured - Set up weekly schedules first</li>
           <li>ℹ️ <strong>Individual:</strong> Uses individual timetable system (managed separately)</li>
         </ul>
         <div className="mt-3 pt-3 border-t border-blue-200">
           <p className="text-sm text-blue-800">
-            <strong>💡 Tip:</strong> Use "🔄 Sync Assessments" button to update existing schedules with assessment references and time windows without creating duplicates.
+            <strong>💡 Key Feature:</strong> The "Sync Status" column shows exactly which schedules need attention:
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-blue-800 ml-4">
+            <li>• <strong>Missing assessment:</strong> Schedule has no linked assessment</li>
+            <li>• <strong>Missing time window:</strong> Assessment window times not set</li>
+            <li>• <strong>✓ Synced:</strong> Everything is correctly configured</li>
+          </ul>
+          <p className="text-sm text-blue-800 mt-2">
+            Only click the "🔄 Sync" button when you see issues in the Sync Status column. If it says "✓ Synced", no action is needed!
           </p>
         </div>
       </div>

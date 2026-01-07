@@ -9,7 +9,9 @@ interface ScheduleHealthDto {
   weeklySchedulesCount: number;
   dailySchedulesCount: number;
   expectedDailySchedules: number;
-  healthStatus: 'HEALTHY' | 'MISSING_DAILY' | 'NO_SCHEDULES' | 'PARTIAL' | 'INDIVIDUAL_STUDENT';
+  schedulesWithoutAssessment?: number;
+  schedulesWithoutTimeWindow?: number;
+  healthStatus: 'HEALTHY' | 'MISSING_DAILY' | 'NO_SCHEDULES' | 'PARTIAL' | 'NEEDS_SYNC' | 'INDIVIDUAL_STUDENT';
   statusMessage: string;
   canGenerate: boolean;
   canRegenerate: boolean;
@@ -39,8 +41,8 @@ export default function ScheduleHealthTable({ students, isLoading, onFix, isFixi
   }, [students, statusFilter, searchTerm]);
 
   const handleFix = async (studentId: number, forceRegenerate: boolean) => {
-    const action = forceRegenerate ? 'Regenerate' : 'Generate';
-    if (confirm(`${action} schedules for student ${studentId}?`)) {
+    const action = forceRegenerate ? 'Sync assessments for' : 'Generate schedules for';
+    if (confirm(`${action} student ${studentId}?`)) {
       await onFix(studentId, forceRegenerate);
     }
   };
@@ -53,6 +55,8 @@ export default function ScheduleHealthTable({ students, isLoading, onFix, isFixi
         return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">⚠️ Missing Daily</span>;
       case 'PARTIAL':
         return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">⚠️ Partial</span>;
+      case 'NEEDS_SYNC':
+        return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">🔄 Needs Sync</span>;
       case 'NO_SCHEDULES':
         return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">❌ No Schedules</span>;
       case 'INDIVIDUAL_STUDENT':
@@ -88,6 +92,7 @@ export default function ScheduleHealthTable({ students, isLoading, onFix, isFixi
         >
           <option value="ALL">All Status</option>
           <option value="HEALTHY">Healthy</option>
+          <option value="NEEDS_SYNC">Needs Sync</option>
           <option value="MISSING_DAILY">Missing Daily</option>
           <option value="PARTIAL">Partial</option>
           <option value="NO_SCHEDULES">No Schedules</option>
@@ -106,6 +111,7 @@ export default function ScheduleHealthTable({ students, isLoading, onFix, isFixi
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Weekly</th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Daily</th>
+              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sync Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
             </tr>
@@ -124,6 +130,24 @@ export default function ScheduleHealthTable({ students, isLoading, onFix, isFixi
                 <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
                   {student.dailySchedulesCount}/{student.expectedDailySchedules}
                 </td>
+                <td className="px-6 py-4 whitespace-nowrap text-center">
+                  {student.healthStatus === 'NEEDS_SYNC' || (student.schedulesWithoutAssessment && student.schedulesWithoutAssessment > 0) || (student.schedulesWithoutTimeWindow && student.schedulesWithoutTimeWindow > 0) ? (
+                    <div className="text-xs">
+                      {student.schedulesWithoutAssessment && student.schedulesWithoutAssessment > 0 && (
+                        <div className="text-red-600 font-semibold">
+                          {student.schedulesWithoutAssessment} missing assessment
+                        </div>
+                      )}
+                      {student.schedulesWithoutTimeWindow && student.schedulesWithoutTimeWindow > 0 && (
+                        <div className="text-orange-600 font-semibold">
+                          {student.schedulesWithoutTimeWindow} missing time window
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-green-600">✓ Synced</span>
+                  )}
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   {getStatusBadge(student.healthStatus)}
                   <div className="text-xs text-gray-500 mt-1">{student.statusMessage}</div>
@@ -133,19 +157,19 @@ export default function ScheduleHealthTable({ students, isLoading, onFix, isFixi
                     <button
                       onClick={() => handleFix(student.studentId, false)}
                       disabled={isFixing}
-                      className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                      className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
                     >
-                      Generate
+                      ➕ Generate
                     </button>
                   )}
                   {student.canRegenerate && (
                     <button
                       onClick={() => handleFix(student.studentId, true)}
                       disabled={isFixing}
-                      className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
-                      title="Update existing schedules with assessment data"
+                      className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 text-xs font-medium"
+                      title="Update existing schedules with assessment data and time windows"
                     >
-                      🔄 Sync Assessments
+                      🔄 Sync
                     </button>
                   )}
                   {!student.canGenerate && !student.canRegenerate && (

@@ -82,8 +82,23 @@ public class ScheduleHealthService {
         LocalDate weekStart = activeTerm.getWeekStartDate(currentWeek);
         LocalDate weekEnd = weekStart.plusDays(6);
         
-        int dailySchedulesCount = getDailyScheduleCount(studentId, weekStart, weekEnd);
+        List<DailySchedule> dailySchedules = dailyScheduleRepository
+                .findByStudentProfileAndScheduledDateBetweenOrderByScheduledDateAscPeriodNumberAsc(
+                        student, weekStart, weekEnd);
+        
+        int dailySchedulesCount = dailySchedules.size();
         int expectedDaily = calculateExpectedDailySchedules(studentClass.getId(), currentWeek);
+        
+        // ✅ NEW: Check if schedules need assessment sync
+        int schedulesWithoutAssessment = (int) dailySchedules.stream()
+                .filter(ds -> ds.getAssessment() == null)
+                .count();
+        
+        int schedulesWithoutTimeWindow = (int) dailySchedules.stream()
+                .filter(ds -> ds.getAssessmentWindowStart() == null || ds.getAssessmentWindowEnd() == null)
+                .count();
+        
+        boolean needsAssessmentSync = schedulesWithoutAssessment > 0 || schedulesWithoutTimeWindow > 0;
         
         HealthStatus status;
         String statusMessage;
@@ -108,12 +123,20 @@ public class ScheduleHealthService {
             statusMessage = String.format("%d of %d schedules", dailySchedulesCount, expectedDaily);
             canGenerate = false;
             canRegenerate = true;
-            actionRequired = "Click 'Regenerate'";
-        } else {
-            status = HealthStatus.HEALTHY;
-            statusMessage = "All schedules generated";
+            actionRequired = "Click 'Regenerate' to add missing schedules";
+        } else if (needsAssessmentSync) {
+            // ✅ NEW: Status for schedules needing assessment sync
+            status = HealthStatus.NEEDS_SYNC;
+            statusMessage = String.format("Schedules need assessment sync (%d missing assessments, %d missing time windows)", 
+                                         schedulesWithoutAssessment, schedulesWithoutTimeWindow);
             canGenerate = false;
             canRegenerate = true;
+            actionRequired = "Click '🔄 Sync Assessments' to update";
+        } else {
+            status = HealthStatus.HEALTHY;
+            statusMessage = "All schedules generated with assessments";
+            canGenerate = false;
+            canRegenerate = false; // ✅ Changed: Only allow regenerate if truly needed
             actionRequired = null;
         }
         
@@ -135,6 +158,8 @@ public class ScheduleHealthService {
                 .weeklySchedulesCount(weeklySchedulesCount)
                 .dailySchedulesCount(dailySchedulesCount)
                 .expectedDailySchedules(expectedDaily)
+                .schedulesWithoutAssessment(schedulesWithoutAssessment)
+                .schedulesWithoutTimeWindow(schedulesWithoutTimeWindow)
                 .healthStatus(status)
                 .statusMessage(statusMessage)
                 .missingDays(missingDays)
@@ -148,16 +173,6 @@ public class ScheduleHealthService {
 
     private int getWeeklyScheduleCount(Long classId) {
         return weeklyScheduleRepository.findByClassEntityId(classId).size();
-    }
-
-    private int getDailyScheduleCount(Long studentId, LocalDate fromDate, LocalDate toDate) {
-        StudentProfile student = studentProfileRepository.findById(studentId)
-                .orElseThrow(() -> new RuntimeException("Student not found"));
-        
-        return dailyScheduleRepository
-                .findByStudentProfileAndScheduledDateBetweenOrderByScheduledDateAscPeriodNumberAsc(
-                        student, fromDate, toDate)
-                .size();
     }
 
     private int calculateExpectedDailySchedules(Long classId, Integer weekNumber) {
