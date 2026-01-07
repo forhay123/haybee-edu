@@ -331,7 +331,7 @@ public class DailyScheduleService {
      * ✅ NEW: Create progress record when daily schedule is generated
      */
     @Transactional
-    private void createProgressRecordForDailySchedule(DailySchedule dailySchedule) {
+    public void createProgressRecordForDailySchedule(DailySchedule dailySchedule) {
         // Check if progress already exists
         boolean exists = progressRepository.existsByStudentProfileAndScheduledDateAndLessonTopic(
             dailySchedule.getStudentProfile(),

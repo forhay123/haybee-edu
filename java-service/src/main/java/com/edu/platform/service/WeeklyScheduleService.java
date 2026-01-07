@@ -711,12 +711,21 @@ public class WeeklyScheduleService {
                     log.warn("⚠️ WeeklySchedule {} has no start/end times", weeklySchedule.getId());
                 }
                 
-                dailyScheduleRepository.save(schedule);
-                
-            } catch (Exception e) {
-                log.error("❌ Failed to regenerate from weekly schedule {}: {}", 
-                    weeklySchedule.getId(), e.getMessage());
-            }
+                DailySchedule savedSchedule = dailyScheduleRepository.save(schedule);
+
+             // ✅ CRITICAL: Create progress record with correct time windows
+             try {
+                 dailyScheduleService.createProgressRecordForDailySchedule(savedSchedule);
+                 log.debug("✅ Created progress record for schedule {}", savedSchedule.getId());
+             } catch (Exception progressError) {
+                 log.error("❌ Failed to create progress for schedule {}: {}", 
+                          savedSchedule.getId(), progressError.getMessage());
+             }
+
+             } catch (Exception e) {
+                 log.error("❌ Failed to regenerate from weekly schedule {}: {}", 
+                     weeklySchedule.getId(), e.getMessage());
+             }
         }
         
         log.info("✅ Regenerated {} schedules for student {} ({} updated, {} created)", 
