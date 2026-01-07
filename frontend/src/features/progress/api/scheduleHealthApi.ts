@@ -15,6 +15,7 @@ export interface ScheduleHealthDto {
   // ✅ NEW: Assessment sync tracking
   schedulesWithoutAssessment?: number;
   schedulesWithoutTimeWindow?: number;
+  schedulesWithoutProgress?: number
   healthStatus: 'HEALTHY' | 'MISSING_DAILY' | 'NO_SCHEDULES' | 'PARTIAL' | 'NEEDS_SYNC' | 'INDIVIDUAL_STUDENT';
   statusMessage: string;
   missingDays?: string[];

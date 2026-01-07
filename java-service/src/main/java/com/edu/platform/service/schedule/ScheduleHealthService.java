@@ -5,6 +5,7 @@ import com.edu.platform.dto.schedule.ScheduleHealthDto.HealthStatus;
 import com.edu.platform.model.*;
 import com.edu.platform.model.enums.StudentType;
 import com.edu.platform.repository.*;
+import com.edu.platform.repository.progress.StudentLessonProgressRepository;
 import com.edu.platform.service.TermService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ public class ScheduleHealthService {
     private final WeeklyScheduleRepository weeklyScheduleRepository;
     private final DailyScheduleRepository dailyScheduleRepository;
     private final TermService termService;
+    private final StudentLessonProgressRepository progressRepository;
 
     @Transactional(readOnly = true)
     public List<ScheduleHealthDto> getAllStudentsHealthStatus() {
@@ -89,7 +91,7 @@ public class ScheduleHealthService {
         int dailySchedulesCount = dailySchedules.size();
         int expectedDaily = calculateExpectedDailySchedules(studentClass.getId(), currentWeek);
         
-        // ✅ NEW: Check if schedules need assessment sync
+        // ✅ Check if schedules need assessment sync
         int schedulesWithoutAssessment = (int) dailySchedules.stream()
                 .filter(ds -> ds.getAssessment() == null)
                 .count();
@@ -98,7 +100,23 @@ public class ScheduleHealthService {
                 .filter(ds -> ds.getAssessmentWindowStart() == null || ds.getAssessmentWindowEnd() == null)
                 .count();
         
-        boolean needsAssessmentSync = schedulesWithoutAssessment > 0 || schedulesWithoutTimeWindow > 0;
+        // ✅ NEW: Check if progress records exist for each schedule
+        int schedulesWithoutProgress = 0;
+        for (DailySchedule ds : dailySchedules) {
+            boolean hasProgress = progressRepository.existsByStudentProfileAndScheduledDateAndLessonTopic(
+                ds.getStudentProfile(),
+                ds.getScheduledDate(),
+                ds.getLessonTopic()
+            );
+            if (!hasProgress) {
+                schedulesWithoutProgress++;
+            }
+        }
+        
+        // ✅ UPDATED: Include progress check
+        boolean needsAssessmentSync = schedulesWithoutAssessment > 0 || 
+                                       schedulesWithoutTimeWindow > 0 ||
+                                       schedulesWithoutProgress > 0;
         
         HealthStatus status;
         String statusMessage;
@@ -125,18 +143,18 @@ public class ScheduleHealthService {
             canRegenerate = true;
             actionRequired = "Click 'Regenerate' to add missing schedules";
         } else if (needsAssessmentSync) {
-            // ✅ NEW: Status for schedules needing assessment sync
+            // ✅ UPDATED: More detailed status message
             status = HealthStatus.NEEDS_SYNC;
-            statusMessage = String.format("Schedules need assessment sync (%d missing assessments, %d missing time windows)", 
-                                         schedulesWithoutAssessment, schedulesWithoutTimeWindow);
+            statusMessage = String.format("Schedules need sync (%d missing assessments, %d missing windows, %d missing progress)", 
+                                         schedulesWithoutAssessment, schedulesWithoutTimeWindow, schedulesWithoutProgress);
             canGenerate = false;
             canRegenerate = true;
-            actionRequired = "Click '🔄 Sync Assessments' to update";
+            actionRequired = "Click '🔄 Sync' to create progress records";
         } else {
             status = HealthStatus.HEALTHY;
-            statusMessage = "All schedules generated with assessments";
+            statusMessage = "All schedules generated with assessments and progress";
             canGenerate = false;
-            canRegenerate = false; // ✅ Changed: Only allow regenerate if truly needed
+            canRegenerate = false;
             actionRequired = null;
         }
         
@@ -160,6 +178,7 @@ public class ScheduleHealthService {
                 .expectedDailySchedules(expectedDaily)
                 .schedulesWithoutAssessment(schedulesWithoutAssessment)
                 .schedulesWithoutTimeWindow(schedulesWithoutTimeWindow)
+                .schedulesWithoutProgress(schedulesWithoutProgress)
                 .healthStatus(status)
                 .statusMessage(statusMessage)
                 .missingDays(missingDays)

@@ -31,6 +31,7 @@ public class ScheduleHealthDto {
     // ✅ NEW: Assessment sync tracking
     private Integer schedulesWithoutAssessment;
     private Integer schedulesWithoutTimeWindow;
+    private Integer schedulesWithoutProgress; 
     
     // Health status
     private HealthStatus healthStatus;
