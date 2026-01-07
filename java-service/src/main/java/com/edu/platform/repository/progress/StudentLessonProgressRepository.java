@@ -920,4 +920,10 @@ public interface StudentLessonProgressRepository extends JpaRepository<StudentLe
         @Param("studentProfileId") Long studentProfileId,
         @Param("subjectId") Long subjectId
     );
+    
+    boolean existsByStudentProfileAndScheduledDateAndLessonTopic(
+    	    StudentProfile studentProfile,
+    	    LocalDate scheduledDate,
+    	    LessonTopic lessonTopic
+    	);
 }

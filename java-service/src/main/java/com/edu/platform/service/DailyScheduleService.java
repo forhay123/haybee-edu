@@ -1,5 +1,5 @@
 // ============================================================
-// FIXED: DailyScheduleService with Assessment & Time Window Sync
+// FIXED: DailyScheduleService with Assessment & Time Window Sync + Progress Creation
 // ============================================================
 package com.edu.platform.service;
 
@@ -7,7 +7,9 @@ import lombok.extern.slf4j.Slf4j;
 import com.edu.platform.dto.classdata.DailyScheduleDto;
 import com.edu.platform.model.*;
 import com.edu.platform.model.enums.StudentType;
+import com.edu.platform.model.progress.StudentLessonProgress;
 import com.edu.platform.repository.*;
+import com.edu.platform.repository.progress.StudentLessonProgressRepository;
 import com.edu.platform.service.individual.IndividualScheduleGenerator;
 
 import jakarta.persistence.EntityNotFoundException;
@@ -37,6 +39,7 @@ public class DailyScheduleService {
     private final StudentProfileRepository studentProfileRepository;
     private final ClassRepository classRepository;
     private final IndividualScheduleGenerator individualScheduleGenerator;
+    private final StudentLessonProgressRepository progressRepository;
 
     private static final Long GENERAL_DEPT_ID = 4L;
 
@@ -241,7 +244,12 @@ public class DailyScheduleService {
                     weeklySchedule.getId());
         }
 
-        return dailyScheduleRepository.save(schedule);
+        DailySchedule saved = dailyScheduleRepository.save(schedule);
+        
+        // ✅ NEW: Create progress record
+        createProgressRecordForDailySchedule(saved);
+        
+        return saved;
     }
 
     @Transactional
@@ -306,11 +314,58 @@ public class DailyScheduleService {
 
         if (!dailySchedules.isEmpty()) {
             dailyScheduleRepository.saveAll(dailySchedules);
+            
+            // ✅ NEW: Create progress records for all new schedules
+            for (DailySchedule ds : dailySchedules) {
+                createProgressRecordForDailySchedule(ds);
+            }
+            
             log.info("✅ Generated {} daily schedules with assessments for student {} on {}", 
                     dailySchedules.size(), student.getId(), date);
         }
 
         return dailyScheduleRepository.findByStudentProfileAndScheduledDate(student, date);
+    }
+
+    /**
+     * ✅ NEW: Create progress record when daily schedule is generated
+     */
+    @Transactional
+    private void createProgressRecordForDailySchedule(DailySchedule dailySchedule) {
+        // Check if progress already exists
+        boolean exists = progressRepository.existsByStudentProfileAndScheduledDateAndLessonTopic(
+            dailySchedule.getStudentProfile(),
+            dailySchedule.getScheduledDate(),
+            dailySchedule.getLessonTopic()
+        );
+        
+        if (exists) {
+            log.debug("Progress already exists for schedule {}", dailySchedule.getId());
+            return;
+        }
+        
+        StudentLessonProgress progress = StudentLessonProgress.builder()
+            .studentProfile(dailySchedule.getStudentProfile())
+            .lessonTopic(dailySchedule.getLessonTopic())
+            .subject(dailySchedule.getSubject())
+            .assessment(dailySchedule.getAssessment())
+            .scheduledDate(dailySchedule.getScheduledDate())
+            .date(dailySchedule.getScheduledDate())
+            .periodNumber(dailySchedule.getPeriodNumber())
+            .priority(dailySchedule.getPriority())
+            .weight(dailySchedule.getWeight())
+            .assessmentWindowStart(dailySchedule.getAssessmentWindowStart())
+            .assessmentWindowEnd(dailySchedule.getAssessmentWindowEnd())
+            .assessmentAccessible(true)
+            .completed(false)
+            .build();
+        
+        progressRepository.save(progress);
+        
+        log.info("✅ Created progress record for daily schedule {} with assessment window {} to {}", 
+                 dailySchedule.getId(), 
+                 progress.getAssessmentWindowStart(), 
+                 progress.getAssessmentWindowEnd());
     }
 
     private List<WeeklySchedule> filterRelevantSchedules(
