@@ -171,16 +171,16 @@ export function DailyScheduleCard({
   const getStatusIcon = (calculatedStatus: CalculatedStatus) => {
     switch (calculatedStatus) {
       case 'COMPLETED':
-        return <CheckCircle2 className="h-4 w-4 sm:h-4 sm:w-4 text-green-600" />;
+        return <CheckCircle2 className="h-4 w-4 text-green-600" />;
       case 'AVAILABLE':
-        return <Clock className="h-4 w-4 sm:h-4 sm:w-4 text-blue-600" />;
+        return <Clock className="h-4 w-4 text-blue-600" />;
       case 'MISSED':
-        return <XCircle className="h-4 w-4 sm:h-4 sm:w-4 text-red-600" />;
+        return <XCircle className="h-4 w-4 text-red-600" />;
       case 'PENDING':
       case 'UPCOMING':
-        return <AlertCircle className="h-4 w-4 sm:h-4 sm:w-4 text-amber-600" />;
+        return <AlertCircle className="h-4 w-4 text-amber-600" />;
       default:
-        return <Clock className="h-4 w-4 sm:h-4 sm:w-4 text-gray-600" />;
+        return <Clock className="h-4 w-4 text-gray-600" />;
     }
   };
 
@@ -232,9 +232,9 @@ export function DailyScheduleCard({
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1 flex-1 min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              <CardTitle className="text-base sm:text-lg truncate">
+              <CardTitle className="text-base sm:text-lg">
                 <span className="hidden sm:inline">{format(scheduleDate, "EEEE, MMMM d")}</span>
-                <span className="sm:hidden">{format(scheduleDate, "EEE, MMM d")}</span>
+                <span className="sm:hidden">{format(scheduleDate, "EEEE, MMMM d")}</span>
               </CardTitle>
               {isToday && (
                 <Badge variant="outline" className="bg-indigo-100 text-indigo-700 border-indigo-300 text-xs flex-shrink-0">
@@ -251,7 +251,7 @@ export function DailyScheduleCard({
             <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-xs sm:text-sm">
               <div className="flex items-center gap-1 sm:gap-1.5 text-muted-foreground">
                 <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                <span className="truncate">
+                <span>
                   {sortedSchedules.length} lesson{sortedSchedules.length !== 1 ? 's' : ''}
                   {hasOverflow && (
                     <span className="text-amber-600 ml-1">
@@ -262,7 +262,7 @@ export function DailyScheduleCard({
               </div>
               <div className="flex items-center gap-1 sm:gap-1.5 text-indigo-600 font-medium">
                 <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                <span className="truncate text-xs sm:text-sm">
+                <span className="text-xs sm:text-sm">
                   {learningHours.start && learningHours.end
                     ? `${formatLearningTime(learningHours.start)} - ${formatLearningTime(learningHours.end)}`
                     : 'No learning hours'}
@@ -370,112 +370,90 @@ export function DailyScheduleCard({
                 ${finalIsWaitingForTeacher ? 'border-yellow-300 bg-yellow-50' : ''}  
               `}>
                 
-                {/* Main Content Row - Mobile Optimized */}
-                <div className="flex items-start sm:items-center gap-2 sm:gap-3">
-                  {/* Status Icon */}
-                  <div className="flex-shrink-0 mt-0.5 sm:mt-0">
-                    {finalIsWaitingForTeacher ? (
-                      <HourglassIcon className="h-4 w-4 text-yellow-600 animate-pulse" />
-                    ) : (
-                      getStatusIcon(schedule.calculatedStatus)
-                    )}
-                  </div>
-
-                  {/* Period Info - Compact on Mobile */}
-                  <div className="flex-shrink-0 min-w-[70px] sm:min-w-[120px]">
-                    <div className="text-xs sm:text-sm font-semibold text-gray-900">
-                      P{schedule.periodNumber}
-                      <span className="hidden sm:inline">eriod {schedule.periodNumber}</span>
+                {/* MOBILE: Vertical Stack Layout */}
+                <div className="flex flex-col gap-2">
+                  {/* Row 1: Status Icon + Period + Time + Badge */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-shrink-0">
+                      {finalIsWaitingForTeacher ? (
+                        <HourglassIcon className="h-4 w-4 text-yellow-600 animate-pulse" />
+                      ) : (
+                        getStatusIcon(schedule.calculatedStatus)
+                      )}
                     </div>
-                    {schedule.startTime && schedule.endTime && (
-                      <div className="text-[10px] sm:text-xs text-muted-foreground">
-                        {formatLearningTime(schedule.startTime)} - {formatLearningTime(schedule.endTime)}
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Subject & Topic - Flexible Width */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
-                      <BookOpen className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground flex-shrink-0" />
-                      <span className="text-xs sm:text-sm font-medium text-gray-900 truncate">
-                        {schedule.subjectName}
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            Period {schedule.periodNumber}
+                          </div>
+                          {schedule.startTime && schedule.endTime && (
+                            <div className="text-xs text-muted-foreground">
+                              {formatLearningTime(schedule.startTime)} - {formatLearningTime(schedule.endTime)}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="flex-shrink-0">
+                          {finalIsWaitingForTeacher ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-yellow-100 text-yellow-800 border-yellow-300"
+                            >
+                              <HourglassIcon className="mr-1 h-2.5 w-2.5" />
+                              <span className="hidden sm:inline">Waiting</span>
+                              <span className="sm:hidden">Wait</span>
+                            </Badge>
+                          ) : requiresCustomAssessment && customAssessmentCreated ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-purple-100 text-purple-800 border-purple-300"
+                            >
+                              <CheckCircle2 className="mr-1 h-2.5 w-2.5" />
+                              Custom
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${statusInfo.bgColor} ${statusInfo.color} border-current`}
+                            >
+                              <span className="mr-1">{statusInfo.icon}</span>
+                              {statusInfo.label}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    {schedule.lessonTopicTitle ? (
-                      <div className="text-[10px] sm:text-xs text-muted-foreground truncate">
-                        {schedule.lessonTopicTitle}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1 text-[10px] sm:text-xs text-orange-600 italic">
-                        <AlertCircle className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                        Topic not assigned
-                      </div>
-                    )}
                   </div>
 
-                  {/* Status Badge - Hidden on Mobile, Show on Desktop */}
-                  <div className="hidden sm:block flex-shrink-0">
-                    {finalIsWaitingForTeacher ? (
-                      <Badge
-                        variant="outline"
-                        className="text-xs bg-yellow-100 text-yellow-800 border-yellow-300"
-                      >
-                        <HourglassIcon className="mr-1 h-3 w-3" />
-                        Waiting
-                      </Badge>
-                    ) : requiresCustomAssessment && customAssessmentCreated ? (
-                      <Badge
-                        variant="outline"
-                        className="text-xs bg-purple-100 text-purple-800 border-purple-300"
-                      >
-                        <CheckCircle2 className="mr-1 h-3 w-3" />
-                        Custom
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant="outline"
-                        className={`text-xs ${statusInfo.bgColor} ${statusInfo.color} border-current`}
-                      >
-                        <span className="mr-1">{statusInfo.icon}</span>
-                        {statusInfo.label}
-                      </Badge>
-                    )}
+                  {/* Row 2: Subject Name & Topic (Full Width) */}
+                  <div className="pl-6">
+                    <div className="flex items-start gap-1.5 mb-1">
+                      <BookOpen className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 break-words">
+                          {schedule.subjectName}
+                        </div>
+                        {schedule.lessonTopicTitle ? (
+                          <div className="text-xs text-muted-foreground mt-0.5 break-words">
+                            {schedule.lessonTopicTitle}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-xs text-orange-600 italic mt-0.5">
+                            <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                            Topic not assigned
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-
-                {/* Mobile Status Badge - Show Below on Mobile */}
-                <div className="sm:hidden pl-6">
-                  {finalIsWaitingForTeacher ? (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] bg-yellow-100 text-yellow-800 border-yellow-300 inline-flex"
-                    >
-                      <HourglassIcon className="mr-1 h-2.5 w-2.5" />
-                      Waiting for Teacher
-                    </Badge>
-                  ) : requiresCustomAssessment && customAssessmentCreated ? (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] bg-purple-100 text-purple-800 border-purple-300 inline-flex"
-                    >
-                      <CheckCircle2 className="mr-1 h-2.5 w-2.5" />
-                      Custom Assessment
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] ${statusInfo.bgColor} ${statusInfo.color} border-current inline-flex`}
-                    >
-                      <span className="mr-1">{statusInfo.icon}</span>
-                      {statusInfo.label}
-                    </Badge>
-                  )}
                 </div>
                 
                 {/* Nullified Submission Notice */}
                 {hasNullifiedSubmission && nullifiedSubmission && schedule.assessmentWindowStart && (
-                  <div className="pl-0 sm:pl-6">
+                  <div className="pl-6">
                     <NullifiedSubmissionNotice
                       originalSubmissionTime={nullifiedSubmission.originalSubmissionTime || nullifiedSubmission.submittedAt}
                       nullifiedReason={nullifiedSubmission.nullifiedReason || "Submitted before assessment window"}
@@ -491,9 +469,8 @@ export function DailyScheduleCard({
                     <div className="flex items-center justify-between gap-2 sm:gap-4">
                       <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                         <Award className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-600 flex-shrink-0" />
-                        <span className="text-[10px] sm:text-xs font-medium text-gray-700 truncate">
-                          <span className="hidden sm:inline">Assessment Score:</span>
-                          <span className="sm:hidden">Score:</span>
+                        <span className="text-[10px] sm:text-xs font-medium text-gray-700">
+                          Score:
                         </span>
                       </div>
                       <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
@@ -514,7 +491,6 @@ export function DailyScheduleCard({
                           }`}
                         >
                           {assessmentResult.passed ? '✓ Pass' : '✗ Fail'}
-                          <span className="hidden sm:inline">{assessmentResult.passed ? 'ed' : 'ed'}</span>
                         </Badge>
                       </div>
                     </div>
@@ -527,9 +503,9 @@ export function DailyScheduleCard({
                   </div>
                 )}
                 
-                {/* Click Message - Mobile Optimized */}
+                {/* Click Message */}
                 {clickMessage && (
-                  <div className="text-[10px] sm:text-xs font-medium text-gray-700 pl-0 sm:pl-6 leading-relaxed">
+                  <div className="text-[10px] sm:text-xs font-medium text-gray-700 pl-6 leading-relaxed">
                     {clickMessage}
                   </div>
                 )}
@@ -546,7 +522,7 @@ export function DailyScheduleCard({
           </div>
         )}
 
-        {/* Learning Window Footer - Mobile Optimized */}
+        {/* Learning Window Footer */}
         {schedules.length > 0 && (
           <div className="pt-2 sm:pt-3 mt-2 sm:mt-3 border-t">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0 text-[10px] sm:text-xs text-muted-foreground">
