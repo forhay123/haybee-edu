@@ -652,5 +652,10 @@ public interface DailyScheduleRepository extends JpaRepository<DailySchedule, Lo
 	    Long lessonTopicId, 
 	    Long studentProfileId
 	);
+	
+	/**
+	 * Find most recent daily schedule for a student (for last generated date)
+	 */
+	Optional<DailySchedule> findTopByStudentProfileOrderByCreatedAtDesc(StudentProfile student);
 }
 

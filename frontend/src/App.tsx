@@ -81,6 +81,7 @@ import { DailyPlannerPage, ComprehensiveLessonsPage } from "./features/progress"
 // 📋 Schedule Management - ✅ NEW IMPORTS
 import { ScheduleManagementPage } from "./features/progress/pages/ScheduleManagementPage";
 import { IncompleteLessonsPage } from "./features/progress/pages/IncompleteLessonsPage";
+import { ScheduleHealthPage } from "./features/progress/pages/ScheduleHealthPage"; // ✅ ADD THIS
 
 
 // 🧠 Assessments (NEW FEATURE)
@@ -730,6 +731,19 @@ const App = () => {
                 </ProtectedRoute>
               }
             />
+
+            {/* ✅ NEW: Schedule Health Dashboard */}
+            <Route
+              path="/progress/schedule-health"
+              element={
+                <ProtectedRoute roles={["ADMIN", "TEACHER"]}>
+                  <AppLayout>
+                    <ScheduleHealthPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            
             <Route
               path="/schedules/teacher"
               element={

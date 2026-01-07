@@ -66,6 +66,7 @@ const links: Record<Role, NavSection[]> = {
         { name: "Teacher Profiles", path: "/teacher-profiles/admin", icon: "👨‍🏫" },
         { name: "Schedule Management", path: "/schedules/admin", icon: "📋" },
         { name: "Schedule Generation", path: "/admin/schedule-generation", icon: <RefreshCw className="w-5 h-5" /> },
+        { name: "Schedule Health", path: "/progress/schedule-health", icon: "🏥" }, // ✅ ADD THIS
         { name: "Comprehensive Lessons", path: "/admin/comprehensive-lessons", icon: "📊" },
         { name: "Incomplete Lessons", path: "/admin/incomplete-lessons", icon: "⚠️" },
       ],
