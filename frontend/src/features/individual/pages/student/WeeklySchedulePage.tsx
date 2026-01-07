@@ -75,7 +75,6 @@ const WeeklySchedulePage: React.FC = () => {
       };
     }
     
-    // Calculate status for each schedule
     const schedulesWithStatus = weeklySchedule.schedules.map((schedule: any) => ({
       ...schedule,
       calculatedStatus: calculateScheduleStatus(schedule)
@@ -127,11 +126,11 @@ const WeeklySchedulePage: React.FC = () => {
   // ============================================================
   if (profileLoading || termLoading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex items-center justify-center min-h-[400px]">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="flex items-center justify-center min-h-[300px] sm:min-h-[400px]">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading your schedule...</p>
+            <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-indigo-600 mx-auto mb-3 sm:mb-4"></div>
+            <p className="text-sm sm:text-base text-gray-600">Loading your schedule...</p>
           </div>
         </div>
       </div>
@@ -143,10 +142,10 @@ const WeeklySchedulePage: React.FC = () => {
   // ============================================================
   if (profileError || !profile) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
+          <AlertDescription className="text-sm">
             Failed to load profile: {profileError?.message || 'Unknown error'}
           </AlertDescription>
         </Alert>
@@ -159,10 +158,10 @@ const WeeklySchedulePage: React.FC = () => {
   // ============================================================
   if (profile.studentType !== 'INDIVIDUAL') {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         <Alert className="border-yellow-200 bg-yellow-50">
           <AlertCircle className="h-4 w-4 text-yellow-600" />
-          <AlertDescription className="text-yellow-800">
+          <AlertDescription className="text-sm text-yellow-800">
             This feature is only available for INDIVIDUAL students.
           </AlertDescription>
         </Alert>
@@ -175,10 +174,10 @@ const WeeklySchedulePage: React.FC = () => {
   // ============================================================
   if (!activeTerm) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         <Alert className="border-amber-200 bg-amber-50">
           <AlertCircle className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-amber-800">
+          <AlertDescription className="text-sm text-amber-800">
             No active term found. Please contact your administrator to set an active term.
           </AlertDescription>
         </Alert>
@@ -191,11 +190,11 @@ const WeeklySchedulePage: React.FC = () => {
   // ============================================================
   if (scheduleLoading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex items-center justify-center min-h-[400px]">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="flex items-center justify-center min-h-[300px] sm:min-h-[400px]">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading weekly schedule...</p>
+            <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-indigo-600 mx-auto mb-3 sm:mb-4"></div>
+            <p className="text-sm sm:text-base text-gray-600">Loading weekly schedule...</p>
           </div>
         </div>
       </div>
@@ -207,10 +206,10 @@ const WeeklySchedulePage: React.FC = () => {
   // ============================================================
   if (scheduleError) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
+          <AlertDescription className="text-sm">
             Failed to load weekly schedule: {scheduleError.message}
           </AlertDescription>
         </Alert>
@@ -222,172 +221,172 @@ const WeeklySchedulePage: React.FC = () => {
   // MAIN RENDER
   // ============================================================
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+      {/* Header - Mobile Optimized */}
+      <div className="mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
+          <div className="flex-1">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">
               Weekly Schedule
             </h1>
-            <p className="text-gray-600">
-              Your personalized learning schedule for Week {selectedWeek}
+            <p className="text-sm sm:text-base text-gray-600">
+              Week {selectedWeek} schedule
             </p>
           </div>
-          <WeeklyCompletionBadge 
-            completionRate={weekStats.completionRate}
-            totalAssessments={weekStats.total}
-            completedCount={weekStats.completed}
-          />
+          <div className="self-start sm:self-auto">
+            <WeeklyCompletionBadge 
+              completionRate={weekStats.completionRate}
+              totalAssessments={weekStats.total}
+              completedCount={weekStats.completed}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Learning Hours Info + Week Navigation */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Learning Hours Info - Left Column */}
-        <div className="lg:col-span-1">
-          <LearningHoursInfo />
-        </div>
+      {/* Week Navigation - Mobile First */}
+      <Card className="mb-4 sm:mb-6">
+        <CardContent className="p-3 sm:p-6">
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePreviousWeek}
+              disabled={selectedWeek === 1}
+              className="flex-shrink-0"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span className="hidden sm:inline ml-2">Previous</span>
+            </Button>
 
-        {/* Week Navigation - Right Column */}
-        <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  onClick={handlePreviousWeek}
-                  disabled={selectedWeek === 1}
-                >
-                  <ChevronLeft className="w-4 h-4 mr-2" />
-                  Previous Week
-                </Button>
-
-                <div className="text-center flex-1 mx-4">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <Calendar className="w-5 h-5 text-indigo-600" />
-                    <h2 className="text-xl font-bold text-gray-900">
-                      Week {selectedWeek}
-                    </h2>
-                    {weekInfo.isCurrentWeek && (
-                      <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
-                        Current Week
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    {weeklyGenerationService.formatScheduleDate(weekInfo.startDate)} -{' '}
-                    {weeklyGenerationService.formatScheduleDate(weekInfo.endDate)}
-                  </p>
-                  {!weekInfo.isCurrentWeek && (
-                    <Button
-                      variant="link"
-                      size="sm"
-                      onClick={handleGoToCurrentWeek}
-                      className="mt-2"
-                    >
-                      Go to Current Week
-                    </Button>
-                  )}
-                </div>
-
-                <Button
-                  variant="outline"
-                  onClick={handleNextWeek}
-                  disabled={selectedWeek >= maxWeeks}
-                >
-                  Next Week
-                  <ChevronRight className="w-4 h-4 ml-2" />
-                </Button>
+            <div className="text-center flex-1 min-w-0">
+              <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+                <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 flex-shrink-0" />
+                <h2 className="text-base sm:text-xl font-bold text-gray-900 truncate">
+                  Week {selectedWeek}
+                </h2>
+                {weekInfo.isCurrentWeek && (
+                  <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full flex-shrink-0">
+                    Current
+                  </span>
+                )}
               </div>
-            </CardContent>
-          </Card>
+              <p className="text-xs sm:text-sm text-gray-600 truncate px-2">
+                {weeklyGenerationService.formatScheduleDate(weekInfo.startDate)} - {weeklyGenerationService.formatScheduleDate(weekInfo.endDate)}
+              </p>
+              {!weekInfo.isCurrentWeek && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={handleGoToCurrentWeek}
+                  className="mt-1 text-xs sm:text-sm h-auto py-1"
+                >
+                  Go to Current Week
+                </Button>
+              )}
+            </div>
 
-          {/* Week Statistics */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Calendar className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Total</p>
-                    <p className="text-xl font-bold text-gray-900">{weekStats.total}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Done</p>
-                    <p className="text-xl font-bold text-gray-900">{weekStats.completed}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Clock className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Available</p>
-                    <p className="text-xl font-bold text-gray-900">{weekStats.available}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-yellow-100 rounded-lg">
-                    <AlertCircle className="w-5 h-5 text-yellow-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Upcoming</p>
-                    <p className="text-xl font-bold text-gray-900">{weekStats.pending}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-red-100 rounded-lg">
-                    <XCircle className="w-5 h-5 text-red-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Missed</p>
-                    <p className="text-xl font-bold text-gray-900">{weekStats.missed}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNextWeek}
+              disabled={selectedWeek >= maxWeeks}
+              className="flex-shrink-0"
+            >
+              <span className="hidden sm:inline mr-2">Next</span>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
           </div>
-        </div>
+        </CardContent>
+      </Card>
+
+      {/* Statistics - Mobile Optimized Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4 mb-4 sm:mb-6">
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 sm:p-2 bg-blue-100 rounded-lg flex-shrink-0">
+                <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-gray-600 truncate">Total</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900">{weekStats.total}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 sm:p-2 bg-green-100 rounded-lg flex-shrink-0">
+                <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-gray-600 truncate">Done</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900">{weekStats.completed}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 sm:p-2 bg-blue-100 rounded-lg flex-shrink-0">
+                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-gray-600 truncate">Available</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900">{weekStats.available}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 sm:p-2 bg-yellow-100 rounded-lg flex-shrink-0">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-gray-600 truncate">Upcoming</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900">{weekStats.pending}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 sm:p-2 bg-red-100 rounded-lg flex-shrink-0">
+                <XCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-gray-600 truncate">Missed</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900">{weekStats.missed}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Learning Hours Info - Full Width on Mobile */}
+      <div className="mb-4 sm:mb-6">
+        <LearningHoursInfo />
       </div>
 
       {/* Daily Schedule Cards */}
-      <div className="space-y-6">
+      <div className="space-y-3 sm:space-y-6">
         {Object.entries(schedulesByDate).length === 0 ? (
           <Card>
-            <CardContent className="p-12 text-center">
-              <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <CardContent className="p-8 sm:p-12 text-center">
+              <Calendar className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                 No Schedule Available
               </h3>
-              <p className="text-gray-600">
+              <p className="text-sm sm:text-base text-gray-600">
                 {weekInfo.isPastWeek
                   ? 'This week has passed and schedules have been archived.'
                   : weekInfo.isFutureWeek
@@ -409,13 +408,13 @@ const WeeklySchedulePage: React.FC = () => {
         )}
       </div>
 
-      {/* Info Footer */}
+      {/* Info Footer - Mobile Optimized */}
       {weekInfo.isCurrentWeek && (
         <>
           {weekStats.available > 0 && (
-            <Alert className="mt-6">
+            <Alert className="mt-4 sm:mt-6">
               <Clock className="h-4 w-4" />
-              <AlertDescription>
+              <AlertDescription className="text-sm">
                 You have {weekStats.available} assessment{weekStats.available !== 1 ? 's' : ''} available NOW.
                 Complete them before the windows close!
               </AlertDescription>
@@ -423,9 +422,9 @@ const WeeklySchedulePage: React.FC = () => {
           )}
           
           {weekStats.missed > 0 && (
-            <Alert className="mt-6 border-red-200 bg-red-50">
+            <Alert className="mt-4 sm:mt-6 border-red-200 bg-red-50">
               <XCircle className="h-4 w-4 text-red-600" />
-              <AlertDescription className="text-red-800">
+              <AlertDescription className="text-sm text-red-800">
                 You missed {weekStats.missed} assessment{weekStats.missed !== 1 ? 's' : ''} this week.
                 Their submission windows have expired.
               </AlertDescription>
@@ -433,9 +432,9 @@ const WeeklySchedulePage: React.FC = () => {
           )}
           
           {weekStats.pending > 0 && weekStats.available === 0 && weekStats.missed === 0 && (
-            <Alert className="mt-6">
+            <Alert className="mt-4 sm:mt-6">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
+              <AlertDescription className="text-sm">
                 You have {weekStats.pending} upcoming assessment{weekStats.pending !== 1 ? 's' : ''} this week.
                 They will become available during their scheduled times.
               </AlertDescription>
