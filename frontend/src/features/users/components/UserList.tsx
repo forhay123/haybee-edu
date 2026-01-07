@@ -1,3 +1,4 @@
+// src/features/users/components/UserList.tsx
 import React, { useState } from "react";
 import UserCard from "./UserCard";
 import { UserDto, RoleDto } from "../api/usersApi";
@@ -40,6 +41,8 @@ const UserList: React.FC<UserListProps> = ({
               <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider">Name</th>
               <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider hidden sm:table-cell">Email</th>
               <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider hidden md:table-cell">Roles</th>
+              <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider hidden lg:table-cell">Type</th>
+              <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider hidden xl:table-cell">Class/Dept</th>
               <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider">Status</th>
               <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider">Actions</th>
             </tr>
@@ -56,6 +59,31 @@ const UserList: React.FC<UserListProps> = ({
                   {renderRoles(user)}
                   {user.roles.length > 3 && (
                     <span className="text-xs text-muted-foreground ml-1">...</span>
+                  )}
+                </td>
+                {/* ✅ NEW: Student Type Column */}
+                <td className="px-6 py-4 text-sm text-muted-foreground hidden lg:table-cell">
+                  {user.studentType ? (
+                    <span className="inline-block bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs font-medium px-2 py-1 rounded">
+                      {user.studentType}
+                    </span>
+                  ) : (
+                    <span className="text-xs italic text-gray-400">—</span>
+                  )}
+                </td>
+                {/* ✅ NEW: Class/Department Column */}
+                <td className="px-6 py-4 text-sm text-muted-foreground hidden xl:table-cell">
+                  {user.preferredClass || user.preferredDepartment ? (
+                    <div className="space-y-0.5">
+                      {user.preferredClass && (
+                        <div className="text-xs font-medium">{user.preferredClass}</div>
+                      )}
+                      {user.preferredDepartment && (
+                        <div className="text-xs text-muted-foreground/80">{user.preferredDepartment}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs italic text-gray-400">—</span>
                   )}
                 </td>
                 <td className="px-6 py-4 text-sm">
@@ -101,7 +129,6 @@ const UserList: React.FC<UserListProps> = ({
             <UserCard
               user={selectedUser}
               roles={roles}
-              // Pass all necessary handlers to the card for in-modal management
               onDelete={onDelete}
               onAssignRole={onAssignRole}
               onRemoveRole={onRemoveRole}

@@ -20,13 +20,14 @@ const AdminUsersPage: React.FC = () => {
   const handleRemoveRole = (userId: number, role: string) =>
     removeRole.mutate({ userId, role });
 
-  // Extract unique values for filters
+  // ✅ Extract unique values for filters (exclude null/undefined)
   const { uniqueStudentTypes, uniqueClasses, uniqueDepartments } = useMemo(() => {
     const types = new Set<string>();
     const classes = new Set<string>();
     const departments = new Set<string>();
 
     usersQuery.data?.forEach((user) => {
+      // ✅ Only add non-null values
       if (user.studentType) types.add(user.studentType);
       if (user.preferredClass) classes.add(user.preferredClass);
       if (user.preferredDepartment) departments.add(user.preferredDepartment);
@@ -64,6 +65,9 @@ const AdminUsersPage: React.FC = () => {
   };
 
   const filterInputClass = "border border-input rounded-lg p-2.5 bg-background text-sm focus:border-primary focus:ring-1 focus:ring-primary transition shadow-sm";
+
+  // ✅ Check if student-specific filters should be shown
+  const hasStudentData = uniqueStudentTypes.length > 0 || uniqueClasses.length > 0 || uniqueDepartments.length > 0;
 
   return (
     <div className="p-6 md:p-10 space-y-8 bg-background">
@@ -137,60 +141,70 @@ const AdminUsersPage: React.FC = () => {
             </select>
           </div>
 
-          {/* Second Row: Student-specific filters */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <select
-              value={studentTypeFilter}
-              onChange={(e) => setStudentTypeFilter(e.target.value)}
-              className={filterInputClass + " flex-1"}
-            >
-              <option value="">All Student Types</option>
-              {uniqueStudentTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
+          {/* ✅ Second Row: Student-specific filters (only show if data exists) */}
+          {hasStudentData && (
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              {uniqueStudentTypes.length > 0 && (
+                <select
+                  value={studentTypeFilter}
+                  onChange={(e) => setStudentTypeFilter(e.target.value)}
+                  className={filterInputClass + " flex-1"}
+                >
+                  <option value="">All Student Types</option>
+                  {uniqueStudentTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              )}
 
-            <select
-              value={classFilter}
-              onChange={(e) => setClassFilter(e.target.value)}
-              className={filterInputClass + " flex-1"}
-            >
-              <option value="">All Classes</option>
-              {uniqueClasses.map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
-                </option>
-              ))}
-            </select>
+              {uniqueClasses.length > 0 && (
+                <select
+                  value={classFilter}
+                  onChange={(e) => setClassFilter(e.target.value)}
+                  className={filterInputClass + " flex-1"}
+                >
+                  <option value="">All Classes</option>
+                  {uniqueClasses.map((cls) => (
+                    <option key={cls} value={cls}>
+                      {cls}
+                    </option>
+                  ))}
+                </select>
+              )}
 
-            <select
-              value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-              className={filterInputClass + " flex-1"}
-            >
-              <option value="">All Departments</option>
-              {uniqueDepartments.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
+              {uniqueDepartments.length > 0 && (
+                <select
+                  value={departmentFilter}
+                  onChange={(e) => setDepartmentFilter(e.target.value)}
+                  className={filterInputClass + " flex-1"}
+                >
+                  <option value="">All Departments</option>
+                  {uniqueDepartments.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {/* Results count and reset button row */}
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing <span className="font-semibold">{filteredUsers.length}</span> of <span className="font-semibold">{usersQuery.data?.length || 0}</span> users
+            </div>
 
             {hasActiveFilters && (
               <button
                 onClick={resetFilters}
-                className="bg-muted text-foreground px-4 py-2.5 rounded-lg hover:bg-muted-foreground/10 transition-colors text-sm font-medium whitespace-nowrap"
+                className="bg-muted text-foreground px-4 py-2 rounded-lg hover:bg-muted/80 transition-colors text-sm font-medium"
               >
-                Reset Filters
+                ✖ Reset Filters
               </button>
             )}
-          </div>
-
-          {/* Results count */}
-          <div className="text-sm text-muted-foreground">
-            Showing {filteredUsers.length} of {usersQuery.data?.length || 0} users
           </div>
         </div>
       </div>
