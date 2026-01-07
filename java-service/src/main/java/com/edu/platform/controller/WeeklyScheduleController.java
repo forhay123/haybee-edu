@@ -9,11 +9,14 @@ import com.edu.platform.service.schedule.WeeklyScheduleValidationService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -88,11 +91,15 @@ public class WeeklyScheduleController {
         return ResponseEntity.ok(result);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    @PreAuthorize("isAuthenticated()")  // ✅ Allow students
     @GetMapping
-    public ResponseEntity<List<WeeklyScheduleDto>> getAll() {
-        log.info("GET /weekly-schedules - Fetching all weekly schedules");
+    public ResponseEntity<List<WeeklyScheduleDto>> getAll(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        log.info("GET /weekly-schedules - from: {}, to: {}", from, to);
         
+        // For now, just return all schedules (you can add filtering later)
         List<WeeklyScheduleDto> schedules = weeklyScheduleService.getAllSchedules().stream()
                 .map(WeeklyScheduleDto::fromEntity)
                 .toList();
