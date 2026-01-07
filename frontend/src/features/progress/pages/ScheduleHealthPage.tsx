@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAllStudentsHealth, useHealthSummary, useFixStudentSchedules, useFixAllStudents } from '../hooks/useScheduleHealth';
 import ScheduleHealthTable from '../components/ScheduleHealthTable';
 
-export default function ScheduleHealthPage() {
+export function ScheduleHealthPage() {
   const { data: students, isLoading, refetch } = useAllStudentsHealth();
   const { data: summary } = useHealthSummary();
   const fixStudent = useFixStudentSchedules();
