@@ -2107,34 +2107,38 @@ public class ProgressRecordFixerController {
 	// ============================================================
 
 	// ✅ NEW: Step -1 - Assign lesson topics to schedules that don't have them
-	private Map<String, Integer> studentStepMinus1_assignLessonTopics(Long studentId, LocalDate weekStart, LocalDate weekEnd) {
+	// ✅ FIXED: Step -1 - Assign lesson topics from lesson_topics table
+	private Map<String, Integer> studentStepMinus1_assignLessonTopics(
+	        Long studentId, LocalDate weekStart, LocalDate weekEnd) {
 	    Map<String, Integer> result = new HashMap<>();
 	    
 	    try {
-	        // Check if student has individual lesson topics configured
-	        String checkTopicsSql = """
-	            SELECT COUNT(*) FROM academic.individual_lesson_topics
-	            WHERE student_profile_id = ?
+	        // Get active term
+	        String getTermSql = """
+	            SELECT id FROM academic.terms 
+	            WHERE is_active = true 
+	            LIMIT 1
 	            """;
-	        Integer hasTopics = jdbcTemplate.queryForObject(checkTopicsSql, Integer.class, studentId);
+	        Integer termId = jdbcTemplate.queryForObject(getTermSql, Integer.class);
 	        
-	        if (hasTopics == null || hasTopics == 0) {
-	            log.warn("⚠️ Student {} has no individual lesson topics configured - cannot assign topics to schedules", studentId);
+	        if (termId == null) {
+	            log.warn("⚠️ No active term found");
 	            result.put("topicsAssigned", 0);
 	            return result;
 	        }
 	        
-	        log.info("  📚 Student has {} individual lesson topics available", hasTopics);
+	        log.info("  📚 Active term ID: {}", termId);
 	        
 	        // Assign the first available lesson topic for each subject to schedules without topics
 	        String assignTopicsSql = """
 	            UPDATE academic.daily_schedules ds
 	            SET lesson_topic_id = (
-	                SELECT ilt.id 
-	                FROM academic.individual_lesson_topics ilt
-	                WHERE ilt.student_profile_id = ds.student_id
-	                  AND ilt.subject_id = ds.subject_id
-	                ORDER BY ilt.week_number, ilt.id
+	                SELECT lt.id 
+	                FROM academic.lesson_topics lt
+	                WHERE lt.subject_id = ds.subject_id
+	                  AND lt.term_id = ?
+	                  AND lt.question_count > 0
+	                ORDER BY lt.week_number, lt.id
 	                LIMIT 1
 	            )
 	            WHERE ds.student_id = ?
@@ -2142,14 +2146,24 @@ public class ProgressRecordFixerController {
 	              AND ds.lesson_topic_id IS NULL
 	              AND ds.schedule_source = 'INDIVIDUAL'
 	              AND EXISTS (
-	                  SELECT 1 FROM academic.individual_lesson_topics ilt
-	                  WHERE ilt.student_profile_id = ds.student_id
-	                    AND ilt.subject_id = ds.subject_id
+	                  SELECT 1 FROM academic.lesson_topics lt
+	                  WHERE lt.subject_id = ds.subject_id
+	                    AND lt.term_id = ?
+	                    AND lt.question_count > 0
 	              )
 	            """;
 	        
-	        int topicsAssigned = jdbcTemplate.update(assignTopicsSql, studentId, weekStart, weekEnd);
+	        int topicsAssigned = jdbcTemplate.update(
+	            assignTopicsSql, 
+	            termId,      // First ?
+	            studentId,   // Second ?
+	            weekStart,   // Third ?
+	            weekEnd,     // Fourth ?
+	            termId       // Fifth ?
+	        );
+	        
 	        result.put("topicsAssigned", topicsAssigned);
+	        log.info("  ✅ Assigned {} lesson topics from lesson_topics table", topicsAssigned);
 	        
 	        return result;
 	        
