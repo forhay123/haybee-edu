@@ -10,6 +10,11 @@ export interface UserDto {
   fullName: string;
   roles: string[];
   enabled: boolean;
+  phone?: string;
+  userType?: string;
+  studentType?: string;
+  preferredClass?: string;      // ✅ NEW
+  preferredDepartment?: string; // ✅ NEW
 }
 
 export interface StudentDto {
@@ -25,12 +30,19 @@ export interface StudentDto {
   subjectIds?: number[];
   subjectNames?: string[];
   chosenLanguage?: string;
+  preferredClass?: string;      // ✅ NEW - from registration
+  preferredDepartment?: string; // ✅ NEW - from registration
 }
 
 export interface CreateUserDto {
   email: string;
   fullName: string;
   password: string;
+  phone?: string;
+  userType?: string;
+  studentType?: string;
+  preferredClass?: string;      // ✅ NEW
+  preferredDepartment?: string; // ✅ NEW
   roles?: string[];
 }
 
@@ -38,6 +50,11 @@ export interface UpdateUserDto {
   email?: string;
   fullName?: string;
   password?: string;
+  phone?: string;
+  userType?: string;
+  studentType?: string;
+  preferredClass?: string;      // ✅ NEW
+  preferredDepartment?: string; // ✅ NEW
   roles?: string[];
 }
 
@@ -84,6 +101,10 @@ export const usersApi = {
 
   assignRole: async (userId: number, role: string): Promise<void> => {
     await api.put(`${BASE_URL}/${userId}/roles`, null, { params: { role } });
+  },
+
+  removeRole: async (userId: number, role: string): Promise<void> => {
+    await api.delete(`${BASE_URL}/${userId}/roles`, { params: { role } });
   },
 
   getRoles: async (id: number): Promise<string[]> => {

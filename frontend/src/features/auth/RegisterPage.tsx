@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "./useAuth";
 import { Link, useNavigate } from "react-router-dom";
 import { AlertCircle } from "lucide-react";
@@ -13,9 +13,19 @@ const RegisterPage: React.FC = () => {
   const [phone, setPhone] = useState("");
   const [userType, setUserType] = useState("STUDENT");
   const [studentType, setStudentType] = useState("SCHOOL");
+  const [preferredClass, setPreferredClass] = useState("");
+  const [preferredDepartment, setPreferredDepartment] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Reset class and department when student type changes
+  useEffect(() => {
+    if (studentType === "ASPIRANT") {
+      setPreferredClass("");
+      setPreferredDepartment("");
+    }
+  }, [studentType]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,11 +34,19 @@ const RegisterPage: React.FC = () => {
 
     try {
       const payload: any = { fullName, email, password, phone, userType };
+      
       if (userType === "STUDENT") {
         payload.studentType = studentType;
+        
+        // Only include class and department for non-ASPIRANT students
+        if (studentType !== "ASPIRANT") {
+          if (preferredClass) payload.preferredClass = preferredClass;
+          if (preferredDepartment) payload.preferredDepartment = preferredDepartment;
+        }
       }
+      
       await register(payload);
-      navigate("/dashboard"); // redirect after successful registration
+      navigate("/dashboard");
     } catch (err: any) {
       setError(err?.response?.data?.message || err?.message || "Registration failed");
     } finally {
@@ -36,7 +54,6 @@ const RegisterPage: React.FC = () => {
     }
   };
 
-  // ✅ Get description for selected student type
   const getStudentTypeDescription = (type: string): string => {
     switch (type) {
       case "SCHOOL":
@@ -51,6 +68,21 @@ const RegisterPage: React.FC = () => {
         return "";
     }
   };
+
+  // Common classes for Nigerian secondary schools
+  const classOptions = [
+    "JSS 1", "JSS 2", "JSS 3",
+    "SS 1", "SS 2", "SS 3"
+  ];
+
+  // Common departments for senior secondary
+  const departmentOptions = [
+    "Science",
+    "Commercial",
+    "Arts"
+  ];
+
+  const showClassAndDepartment = userType === "STUDENT" && studentType !== "ASPIRANT";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-8">
@@ -144,7 +176,7 @@ const RegisterPage: React.FC = () => {
             </select>
           </div>
 
-          {/* ✅ UPDATED: Student Type with INDIVIDUAL option */}
+          {/* Student Type */}
           {userType === "STUDENT" && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -162,14 +194,12 @@ const RegisterPage: React.FC = () => {
                 <option value="INDIVIDUAL">Individual Learner</option>
               </select>
 
-              {/* ✅ Show description for selected type */}
               <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <p className="text-xs text-blue-800 dark:text-blue-300">
                   {getStudentTypeDescription(studentType)}
                 </p>
               </div>
 
-              {/* ✅ Special notice for INDIVIDUAL students */}
               {studentType === "INDIVIDUAL" && (
                 <div className="mt-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
                   <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-300 mb-1">
@@ -186,6 +216,65 @@ const RegisterPage: React.FC = () => {
                 </div>
               )}
             </div>
+          )}
+
+          {/* Class Selection - Only for non-ASPIRANT students */}
+          {showClassAndDepartment && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Current Class
+                  <span className="text-gray-500 text-xs ml-1">(Optional)</span>
+                </label>
+                <select
+                  value={preferredClass}
+                  onChange={(e) => setPreferredClass(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select your class</option>
+                  {classOptions.map((cls) => (
+                    <option key={cls} value={cls}>
+                      {cls}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  This helps admin assign you to the correct class
+                </p>
+              </div>
+
+              {/* Department Selection - Only show for Senior Secondary */}
+              {(preferredClass?.startsWith("SS") || preferredClass === "") && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Department
+                    <span className="text-gray-500 text-xs ml-1">(Optional, for SS students)</span>
+                  </label>
+                  <select
+                    value={preferredDepartment}
+                    onChange={(e) => setPreferredDepartment(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select your department</option>
+                    {departmentOptions.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    This helps admin assign you to the correct department
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  💡 <strong>Note:</strong> These preferences help the admin set up your profile correctly. 
+                  The admin will finalize your class and department assignment.
+                </p>
+              </div>
+            </>
           )}
 
           {/* Submit Button */}

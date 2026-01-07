@@ -23,40 +23,47 @@ import java.util.Set;
 @Builder
 @ToString(exclude = {"roles", "studentProfile", "teacherProfile"})
 public class User {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    
     @Column(nullable = false, unique = true, length = 180)
     private String email;
-
+    
     @Column(nullable = false)
     private String password;
-
+    
     @Column(name = "full_name", length = 200, nullable = false)
     private String fullName;
-
+    
     @Column(length = 15)
     private String phone;
-
+    
     @Column(nullable = false)
     @Builder.Default
     private boolean enabled = true;
-
+    
     @Enumerated(EnumType.STRING)
     @Column(name = "student_type", length = 30)
-    private StudentType studentType; // SCHOOL, HOME, ASPIRANT
-
+    private StudentType studentType; // SCHOOL, HOME, ASPIRANT, INDIVIDUAL
+    
     @Column(name = "user_type", length = 30)
-    private String userType; // "STUDENT" | "TEACHER" | "ADMIN" | etc.
-
+    private String userType; // "STUDENT" | "TEACHER" | "ADMIN" | "PARENT"
+    
+    // ✅ NEW: Student's preferred class during registration
+    @Column(name = "preferred_class", length = 50)
+    private String preferredClass; // e.g., "JSS 1", "SS 2"
+    
+    // ✅ NEW: Student's preferred department during registration
+    @Column(name = "preferred_department", length = 50)
+    private String preferredDepartment; // e.g., "Science", "Arts"
+    
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private StudentProfile studentProfile;
-
+    
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private TeacherProfile teacherProfile;
-
+    
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "user_roles",
@@ -66,11 +73,11 @@ public class User {
     )
     @Builder.Default
     private Set<Role> roles = new HashSet<>();
-
+    
     @Column(name = "created_at", nullable = false, updatable = false,
             columnDefinition = "TIMESTAMP WITH TIME ZONE DEFAULT now()")
     private Instant createdAt;
-
+    
     @PrePersist
     protected void prePersist() {
         if (this.createdAt == null) {

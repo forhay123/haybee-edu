@@ -62,7 +62,7 @@ public class AuthService {
     }
 
     /**
-     * Register new user with default role STUDENT.
+     * Register new user with default role based on userType.
      */
     @Transactional
     public JwtResponse register(RegisterRequest req) {
@@ -77,14 +77,25 @@ public class AuthService {
         String userType = req.getUserType().toUpperCase();
         StudentType studentType = req.getStudentType();
 
+        // Validate student-specific fields
         if ("STUDENT".equals(userType)) {
             if (studentType == null) {
                 throw new IllegalArgumentException("Student type must be selected for STUDENT user");
             }
+            
+            // For ASPIRANT students, clear class/department preferences since they don't apply
+            if (studentType == StudentType.ASPIRANT) {
+                req.setPreferredClass(null);
+                req.setPreferredDepartment(null);
+            }
         } else {
-            studentType = null; // clear studentType if not student
+            // Clear student-specific fields if not a student
+            studentType = null;
+            req.setPreferredClass(null);
+            req.setPreferredDepartment(null);
         }
 
+        // Build user with all fields including preferences
         User user = User.builder()
                 .email(req.getEmail())
                 .password(passwordEncoder.encode(req.getPassword()))
@@ -92,9 +103,12 @@ public class AuthService {
                 .phone(req.getPhone())
                 .userType(userType)
                 .studentType(studentType)
+                .preferredClass(req.getPreferredClass())          // ✅ NEW
+                .preferredDepartment(req.getPreferredDepartment()) // ✅ NEW
                 .enabled(true)
                 .build();
 
+        // Assign default role based on user type
         Role role = roleRepository.findByName(userType)
                 .orElseGet(() -> roleRepository.save(
                         Role.builder()
@@ -123,7 +137,6 @@ public class AuthService {
                 roles
         );
     }
-
 
     /**
      * Refresh access token using refresh token.
