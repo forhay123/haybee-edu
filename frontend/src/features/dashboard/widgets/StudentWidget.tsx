@@ -162,10 +162,26 @@ const StudentWidget: React.FC = () => {
     return { total, completed, available, pending, missed, completionRate };
   }, [weeklySchedule]);
 
-  // ✅ Get progress history for this week (for class students)
+  // ✅ Fetch weekly schedule for CLASS students (same as ASPIRANT students)
   const fromDate = format(startOfWeek(new Date()), 'yyyy-MM-dd');
   const toDate = format(endOfWeek(new Date()), 'yyyy-MM-dd');
-  const { data: history = [], isLoading: loadingHistoryStats } = useMyHistory(fromDate, toDate);
+
+  const { data: classWeeklySchedule = [], isLoading: loadingHistoryStats } = useQuery({
+    queryKey: ['class-weekly-schedule', profile?.id],
+    queryFn: async () => {
+      const res = await axiosInstance.get('/weekly-schedules', {
+        params: {
+          from: fromDate,
+          to: toDate
+        }
+      });
+      return res.data;
+    },
+    enabled: profileLoaded && !isIndividualStudent,
+  });
+
+  // Use classWeeklySchedule instead of history
+  const history = classWeeklySchedule;
 
   // ✅ Calculate summary statistics (for class students)
   const totalLessons = history.length;
@@ -221,8 +237,18 @@ const StudentWidget: React.FC = () => {
     })
     .slice(0, 4);
 
-  const dailyLessons = dailyProgress?.lessons || [];
-  const completedCount = dailyLessons.filter(l => l?.completed).length;
+  // ✅ Filter today's lessons from weekly schedule
+  const dailyLessons = useMemo(() => {
+    if (!classWeeklySchedule) return [];
+    const today = format(new Date(), 'yyyy-MM-dd');
+    // Filter weekly schedule by today's date
+    return classWeeklySchedule.filter((s: any) => {
+      const scheduleDate = format(new Date(s.scheduledDate || s.scheduled_date), 'yyyy-MM-dd');
+      return scheduleDate === today;
+    });
+  }, [classWeeklySchedule]);
+
+  const completedCount = dailyLessons.filter(l => l?.status === 'COMPLETED').length;
 
   const displaySessions = upcomingSessions
     .filter(session => session.status === 'LIVE' || session.status === 'SCHEDULED')
@@ -616,13 +642,13 @@ const StudentWidget: React.FC = () => {
               <div
                 key={lesson.id}
                 className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                  lesson.completed
+                  lesson.status === 'COMPLETED'  // ✅ CHANGED
                     ? 'bg-green-50 border-green-200'
                     : 'bg-gray-50 border-gray-200 hover:border-blue-300'
                 }`}
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  {lesson.completed ? (
+                  {lesson.status === 'COMPLETED' ? (  // ✅ CHANGED
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
                   ) : (
                     <Clock className="w-5 h-5 text-gray-400 flex-shrink-0" />
@@ -632,21 +658,21 @@ const StudentWidget: React.FC = () => {
                       {lesson.subjectName}
                     </p>
                     <p className="text-sm text-gray-600 truncate">
-                      {lesson.lessonTitle}
+                      {lesson.lessonTopicTitle || 'Lesson'}
                     </p>
                   </div>
                 </div>
 
-                {lesson.completed ? (
+                {lesson.status === 'COMPLETED' ? (  // ✅ CHANGED
                   <Link
-                    to={`/subjects/${lesson.subjectId}/lesson-topics/${lesson.lessonId}`}
+                    to={`/subjects/${lesson.subjectId}/lesson-topics/${lesson.lessonTopicId}`}  // ✅ CHANGED
                     className="text-sm text-blue-600 font-semibold hover:underline flex-shrink-0 ml-3"
                   >
                     Review
                   </Link>
                 ) : (
                   <Link
-                    to={`/lesson-topics/${lesson.lessonId}/assessment`}
+                    to={`/lesson-topics/${lesson.lessonTopicId}/assessment`}  // ✅ CHANGED
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold flex-shrink-0 ml-3"
                   >
                     Start
