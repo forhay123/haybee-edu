@@ -325,33 +325,77 @@ public class LessonTopicService {
 
     /**
      * Get lessons for a student by their profile ID
+     * FIXED: Uses SubjectService to properly fetch subjects for all student types
      */
     public List<LessonTopicDto> getLessonsForStudent(Long studentProfileId) {
         StudentProfile student = studentProfileRepository.findById(studentProfileId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Student not found: " + studentProfileId));
 
-        if (student.getClassLevel() == null) {
-            log.warn("⚠️ Student {} ({}) has no class assigned", 
-                    studentProfileId, student.getStudentType());
-            return Collections.emptyList();
+        Set<Long> subjectIds;
+        
+        // ✅ FIX: Get subjects based on student type
+        if (student.getStudentType() == StudentType.ASPIRANT) {
+            // ASPIRANT students have subjects in Many-to-Many relationship
+            subjectIds = student.getSubjects().stream()
+                    .map(Subject::getId)
+                    .collect(Collectors.toSet());
+            
+            if (subjectIds.isEmpty()) {
+                log.warn("⚠️ ASPIRANT student {} has no enrolled subjects", studentProfileId);
+                return Collections.emptyList();
+            }
+            
+            log.info("📌 ASPIRANT student {} - Enrolled subjects: {}", 
+                    studentProfileId, subjectIds);
+        } else {
+            // SCHOOL/HOME/INDIVIDUAL students: Fetch subjects using existing logic
+            if (student.getClassLevel() == null) {
+                log.warn("⚠️ Student {} ({}) has no class assigned", 
+                        studentProfileId, student.getStudentType());
+                return Collections.emptyList();
+            }
+            
+            // ✅ Use existing repository method to get subjects for class
+            List<Subject> subjects = subjectRepository.findByClassEntityId(student.getClassLevel().getId());
+            
+            // Filter by department if student has one
+            if (student.getDepartment() != null) {
+                Long deptId = student.getDepartment().getId();
+                subjects = subjects.stream()
+                        .filter(s -> {
+                            // Include subjects from student's department OR general subjects
+                            Department subjectDept = s.getDepartment();
+                            if (subjectDept == null) return true; // No department = general
+                            Long subjectDeptId = subjectDept.getId();
+                            // General department is typically ID 4, or check for compulsory flag
+                            return subjectDeptId.equals(deptId) || 
+                                   subjectDeptId == 4L || 
+                                   s.isCompulsory();
+                        })
+                        .collect(Collectors.toList());
+            }
+            
+            subjectIds = subjects.stream()
+                    .map(Subject::getId)
+                    .collect(Collectors.toSet());
+            
+            if (subjectIds.isEmpty()) {
+                log.warn("⚠️ {} student {} in class {} (dept: {}) has no subjects found", 
+                        student.getStudentType(),
+                        studentProfileId, 
+                        student.getClassLevel().getName(),
+                        student.getDepartment() != null ? student.getDepartment().getName() : "none");
+                return Collections.emptyList();
+            }
+            
+            log.info("📌 {} student {} - Class: {} - Department: {} - Subjects: {}", 
+                    student.getStudentType(), 
+                    studentProfileId, 
+                    student.getClassLevel().getName(),
+                    student.getDepartment() != null ? student.getDepartment().getName() : "none",
+                    subjectIds);
         }
-        
-        Set<Long> subjectIds = student.getClassLevel().getSubjects().stream()
-                .map(Subject::getId)
-                .collect(Collectors.toSet());
-        
-        if (subjectIds.isEmpty()) {
-            log.warn("⚠️ Student {} has class {} but no subjects", 
-                    studentProfileId, student.getClassLevel().getName());
-            return Collections.emptyList();
-        }
-        
-        log.info("📌 {} student {} - Class: {} - Subjects: {}", 
-                student.getStudentType(), 
-                studentProfileId, 
-                student.getClassLevel().getName(),
-                subjectIds);
 
         return getLessonsForStudent(subjectIds, student.getStudentType().name());
     }
