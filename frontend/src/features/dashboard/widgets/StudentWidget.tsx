@@ -662,10 +662,21 @@ const StudentWidget: React.FC = () => {
             {dailyLessons.slice(0, 3).map((lesson) => {
               // Determine status
               const isCompleted = lesson.completed;
-              const isAccessible = lesson.assessmentAccessible;
+              const isIncomplete = lesson.incomplete;
+              const isMissed = lesson.incompleteReason === 'MISSED_GRACE_PERIOD';
               const now = new Date();
               const windowStart = lesson.assessmentWindowStart ? new Date(lesson.assessmentWindowStart) : null;
               const windowEnd = lesson.assessmentWindowEnd ? new Date(lesson.assessmentWindowEnd) : null;
+              const gracePeriodEnd = lesson.gracePeriodEnd ? new Date(lesson.gracePeriodEnd) : windowEnd;
+              
+              // Check if assessment is truly accessible (not missed and within window)
+              const isAccessible = lesson.assessmentAccessible && 
+                                   !isIncomplete && 
+                                   !isMissed && 
+                                   windowStart && 
+                                   windowEnd && 
+                                   now >= windowStart && 
+                                   now <= (gracePeriodEnd || windowEnd);
               
               // Determine status text and styling
               let statusBadge = null;
@@ -715,6 +726,19 @@ const StudentWidget: React.FC = () => {
                   </span>
                 );
               } else if (windowEnd && now > windowEnd) {
+                bgClass = 'bg-red-50 border-red-200';
+                statusBadge = (
+                  <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded">
+                    Missed
+                  </span>
+                );
+                actionButton = (
+                  <span className="text-sm text-red-600 font-semibold flex-shrink-0">
+                    Window Closed
+                  </span>
+                );
+              } else if (isMissed || isIncomplete) {
+                // Explicitly handle missed/incomplete assessments
                 bgClass = 'bg-red-50 border-red-200';
                 statusBadge = (
                   <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded">
