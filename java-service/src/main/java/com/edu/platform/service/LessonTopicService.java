@@ -305,14 +305,26 @@ public class LessonTopicService {
         return lessonRepository.findAll();
     }
 
+    /**
+     * Get lessons for students by subject IDs
+     * ✅ FIXED: ASPIRANT students see ALL lessons regardless of isAspirantMaterial flag
+     */
     public List<LessonTopicDto> getLessonsForStudent(Set<Long> subjectIds, String studentType) {
         if (subjectIds == null || subjectIds.isEmpty()) {
             return Collections.emptyList();
         }
 
-        List<LessonTopic> lessons = "ASPIRANT".equalsIgnoreCase(studentType)
-                ? lessonRepository.findBySubjectIdInAndIsAspirantMaterialTrue(subjectIds)
-                : lessonRepository.findBySubjectIdInAndIsAspirantMaterialFalse(subjectIds);
+        List<LessonTopic> lessons;
+        
+        // ✅ FIX: ASPIRANT students see ALL lessons, don't filter by isAspirantMaterial
+        if ("ASPIRANT".equalsIgnoreCase(studentType)) {
+            lessons = lessonRepository.findBySubjectIdIn(subjectIds);
+            log.info("📚 ASPIRANT student - fetching ALL lessons for {} subjects (no material type filter)", subjectIds.size());
+        } else {
+            // SCHOOL/HOME/INDIVIDUAL students only see non-ASPIRANT materials
+            lessons = lessonRepository.findBySubjectIdInAndIsAspirantMaterialFalse(subjectIds);
+            log.info("📚 {} student - fetching REGULAR lessons only for {} subjects", studentType, subjectIds.size());
+        }
 
         return lessons.stream()
                 .map(this::convertToDto)
@@ -325,7 +337,7 @@ public class LessonTopicService {
 
     /**
      * Get lessons for a student by their profile ID
-     * FIXED: Uses SubjectService to properly fetch subjects for all student types
+     * ✅ FIXED: Properly handles ASPIRANT students using Many-to-Many subjects
      */
     public List<LessonTopicDto> getLessonsForStudent(Long studentProfileId) {
         StudentProfile student = studentProfileRepository.findById(studentProfileId)
@@ -402,6 +414,7 @@ public class LessonTopicService {
 
     /**
      * Get lessons for a student filtered by subject
+     * ✅ FIXED: ASPIRANT students see ALL lessons regardless of isAspirantMaterial flag
      */
     public List<LessonTopicDto> getLessonsForStudentAndSubject(Long studentProfileId, Long subjectId) {
         StudentProfile student = studentProfileRepository.findById(studentProfileId)
@@ -413,9 +426,16 @@ public class LessonTopicService {
         log.info("📌 Fetching lessons for {} student {} in subject {}", 
                 student.getStudentType(), studentProfileId, subjectId);
 
-        List<LessonTopic> lessons = "ASPIRANT".equalsIgnoreCase(student.getStudentType().name())
-                ? lessonRepository.findBySubjectIdInAndIsAspirantMaterialTrue(singleSubjectId)
-                : lessonRepository.findBySubjectIdInAndIsAspirantMaterialFalse(singleSubjectId);
+        List<LessonTopic> lessons;
+        
+        // ✅ FIX: ASPIRANT students see ALL lessons
+        if ("ASPIRANT".equalsIgnoreCase(student.getStudentType().name())) {
+            lessons = lessonRepository.findBySubjectIdIn(singleSubjectId);
+            log.info("📚 ASPIRANT student - fetching ALL lessons (no material type filter)");
+        } else {
+            lessons = lessonRepository.findBySubjectIdInAndIsAspirantMaterialFalse(singleSubjectId);
+            log.info("📚 {} student - fetching REGULAR lessons only", student.getStudentType());
+        }
         
         log.info("✅ Found {} lessons for {} student in subject {}", 
                 lessons.size(), student.getStudentType(), subjectId);

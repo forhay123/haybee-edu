@@ -228,7 +228,7 @@ const StudentLessonTopicsPage: React.FC = () => {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -243,44 +243,16 @@ const StudentLessonTopicsPage: React.FC = () => {
           </div>
         </div>
         
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 border-2 border-yellow-300 dark:border-yellow-700">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-              <span className="text-2xl font-bold">🎯</span>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-yellow-900 dark:text-yellow-200">
-                {filteredLessons.filter(l => l.isAspirantMaterial === true).length}
-              </div>
-              <div className="text-sm text-yellow-700 dark:text-yellow-400 font-bold">ASPIRANT</div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 border-2 border-gray-300 dark:border-gray-600">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-              <span className="text-2xl font-bold">📚</span>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {filteredLessons.filter(l => l.isAspirantMaterial === false).length}
-              </div>
-              <div className="text-sm text-gray-700 dark:text-gray-400 font-bold">REGULAR</div>
-            </div>
-          </div>
-        </div>
-        
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-              <Calendar className="w-6 h-6 text-green-600 dark:text-green-400" />
+              <FileText className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
                 {filteredLessons.filter(l => l.fileUrl).length}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">With Files</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">With Materials</div>
             </div>
           </div>
         </div>
@@ -334,16 +306,6 @@ const StudentLessonTopicsPage: React.FC = () => {
                           {lesson.status === "done" && (
                             <span className="px-2 py-1 bg-green-500 rounded text-xs font-semibold">
                               ✓ Complete
-                            </span>
-                          )}
-                          {/* ✅ Show ASPIRANT Material Badge - Enhanced */}
-                          {lesson.isAspirantMaterial !== undefined && (
-                            <span className={`px-2.5 py-1 rounded-md text-xs font-bold shadow-sm ${
-                              lesson.isAspirantMaterial 
-                                ? 'bg-yellow-400 text-yellow-900' 
-                                : 'bg-gray-200 text-gray-700'
-                            }`}>
-                              {lesson.isAspirantMaterial ? '🎯 ASPIRANT' : '📚 REGULAR'}
                             </span>
                           )}
                         </div>
