@@ -1,16 +1,12 @@
-
-// ============================================================
-// FILE 4: IncompleteLessonCard.tsx (FIXED - No changes needed)
-// Location: frontend/src/features/progress/components/IncompleteLessonCard.tsx
-// ============================================================
+// frontend/src/features/progress/components/IncompleteLessonCard.tsx
+// ✅ CORRECTED VERSION - Replace the entire file with this
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CustomBadge as Badge } from '@/components/ui/custom-badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Calendar, BookOpen, AlertCircle, Clock } from 'lucide-react';
+import { Calendar, BookOpen, AlertCircle } from 'lucide-react';
 import { IncompleteLessonInfo, IncompleteLessonReason } from '../types/types';
 import { formatDate } from '@/lib/utils';
 
@@ -20,8 +16,7 @@ interface IncompleteLessonCardProps {
 }
 
 const IncompleteLessonCard: React.FC<IncompleteLessonCardProps> = ({ 
-  lesson, 
-  onActionComplete 
+  lesson
 }) => {
   const navigate = useNavigate();
 
@@ -31,57 +26,38 @@ const IncompleteLessonCard: React.FC<IncompleteLessonCardProps> = ({
         return {
           variant: 'danger' as const,
           icon: <AlertCircle className="h-3 w-3" />,
-          text: 'Not Attempted'
+          text: 'Missed Grace Period',
+          bgColor: 'bg-red-50',
+          borderColor: 'border-red-200'
         };
       case IncompleteLessonReason.INCOMPLETE_ASSESSMENT:
         return {
           variant: 'secondary' as const,
-          icon: <Clock className="h-3 w-3" />,
-          text: 'Assessment Incomplete'
+          icon: <AlertCircle className="h-3 w-3" />,
+          text: 'Late Submission',
+          bgColor: 'bg-yellow-50',
+          borderColor: 'border-yellow-200'
         };
       case IncompleteLessonReason.NOT_PASSED:
         return {
           variant: 'outline' as const,
           icon: <AlertCircle className="h-3 w-3" />,
-          text: 'Not Passed'
+          text: 'No Submission',
+          bgColor: 'bg-gray-50',
+          borderColor: 'border-gray-200'
         };
       default:
         return {
           variant: 'default' as const,
           icon: null,
-          text: 'Unknown'
+          text: 'Unknown',
+          bgColor: 'bg-gray-50',
+          borderColor: 'border-gray-200'
         };
     }
   };
 
   const reasonBadge = getReasonBadge(lesson.reason);
-
-  const getActionButton = () => {
-    switch (lesson.reason) {
-      case IncompleteLessonReason.NOT_ATTEMPTED:
-        return {
-          text: 'Start Lesson',
-          handler: () => navigate(`/lessons/${lesson.lesson_id}`)
-        };
-      case IncompleteLessonReason.INCOMPLETE_ASSESSMENT:
-        return {
-          text: 'Continue Assessment',
-          handler: () => navigate(`/assessments/lesson/${lesson.assessment_id}`)
-        };
-      case IncompleteLessonReason.NOT_PASSED:
-        return {
-          text: 'Retake Assessment',
-          handler: () => navigate(`/assessments/lesson/${lesson.assessment_id}`)
-        };
-      default:
-        return {
-          text: 'View Lesson',
-          handler: () => navigate(`/lessons/${lesson.lesson_id}`)
-        };
-    }
-  };
-
-  const actionButton = getActionButton();
 
   const daysOverdue = React.useMemo(() => {
     const scheduledDate = new Date(lesson.scheduled_date);
@@ -92,8 +68,13 @@ const IncompleteLessonCard: React.FC<IncompleteLessonCardProps> = ({
   }, [lesson.scheduled_date]);
 
   return (
-    <Card className={daysOverdue > 7 ? 'border-red-300' : undefined}>
-      <CardHeader>
+    <Card 
+      className={`transition-all hover:shadow-lg cursor-pointer ${
+        daysOverdue > 7 ? 'border-red-300' : ''
+      } ${reasonBadge.borderColor}`}
+      onClick={() => navigate(`/lessons/${lesson.lesson_id}`)}
+    >
+      <CardHeader className={reasonBadge.bgColor}>
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <CardTitle className="text-lg flex items-center gap-2">
@@ -111,22 +92,60 @@ const IncompleteLessonCard: React.FC<IncompleteLessonCardProps> = ({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-4">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Calendar className="h-4 w-4" />
           <span>Scheduled: {formatDate(lesson.scheduled_date)}</span>
         </div>
 
-        {/* ✅ FIXED: Alert now supports variant prop */}
+        {/* Overdue Warning */}
         {daysOverdue > 0 && (
           <Alert variant={daysOverdue > 7 ? 'destructive' : 'default'}>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              This lesson is {daysOverdue} day{daysOverdue !== 1 ? 's' : ''} overdue
+              This lesson is <strong>{daysOverdue} day{daysOverdue !== 1 ? 's' : ''}</strong> overdue
             </AlertDescription>
           </Alert>
         )}
 
+        {/* Additional Info based on reason */}
+        {lesson.reason === IncompleteLessonReason.NOT_ATTEMPTED && (
+          <div className="text-sm bg-red-50 border border-red-200 rounded-lg p-3">
+            <div className="flex items-center gap-2 text-red-800 font-medium mb-1">
+              <AlertCircle className="h-4 w-4" />
+              Assessment Window Closed
+            </div>
+            <p className="text-red-700 text-xs">
+              The grace period for this assessment has ended. Contact your instructor for assistance.
+            </p>
+          </div>
+        )}
+
+        {lesson.reason === IncompleteLessonReason.INCOMPLETE_ASSESSMENT && (
+          <div className="text-sm bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <div className="flex items-center gap-2 text-yellow-800 font-medium mb-1">
+              <AlertCircle className="h-4 w-4" />
+              Late Submission
+            </div>
+            <p className="text-yellow-700 text-xs">
+              Assessment was submitted after the deadline.
+            </p>
+          </div>
+        )}
+
+        {lesson.reason === IncompleteLessonReason.NOT_PASSED && (
+          <div className="text-sm bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center gap-2 text-gray-800 font-medium mb-1">
+              <AlertCircle className="h-4 w-4" />
+              No Submission
+            </div>
+            <p className="text-gray-700 text-xs">
+              No assessment submission was recorded for this lesson.
+            </p>
+          </div>
+        )}
+
+        {/* Score Info (if available) */}
         {lesson.reason === IncompleteLessonReason.NOT_PASSED && lesson.last_score !== undefined && (
           <div className="flex items-center gap-2 text-sm">
             <span className="text-gray-500">Last Score:</span>
@@ -137,6 +156,7 @@ const IncompleteLessonCard: React.FC<IncompleteLessonCardProps> = ({
           </div>
         )}
 
+        {/* Progress Info (if available) */}
         {lesson.reason === IncompleteLessonReason.INCOMPLETE_ASSESSMENT && lesson.questions_answered !== undefined && (
           <div className="flex items-center gap-2 text-sm">
             <span className="text-gray-500">Progress:</span>
@@ -146,34 +166,25 @@ const IncompleteLessonCard: React.FC<IncompleteLessonCardProps> = ({
           </div>
         )}
 
+        {/* Assessment Details (if available) */}
         {lesson.assessment_id && (
-          <div className="text-sm text-gray-500">
-            <div>Assessment: {lesson.total_questions} questions</div>
-            <div>Passing Score: {lesson.passing_score}%</div>
-            {lesson.time_limit_minutes && (
-              <div>Time Limit: {lesson.time_limit_minutes} minutes</div>
-            )}
+          <div className="text-sm text-gray-500 bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="font-medium text-blue-900 mb-1">Assessment Details</div>
+            <div className="space-y-1 text-xs">
+              <div>Total Questions: {lesson.total_questions}</div>
+              <div>Passing Score: {lesson.passing_score}%</div>
+              {lesson.time_limit_minutes && (
+                <div>Time Limit: {lesson.time_limit_minutes} minutes</div>
+              )}
+            </div>
           </div>
         )}
-      </CardContent>
 
-      <CardFooter className="flex justify-between">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate(`/lessons/${lesson.lesson_id}`)}
-        >
-          View Details
-        </Button>
-        <Button
-          onClick={() => {
-            actionButton.handler();
-            onActionComplete?.();
-          }}
-        >
-          {actionButton.text}
-        </Button>
-      </CardFooter>
+        {/* Click to view hint */}
+        <div className="text-xs text-gray-500 italic text-center pt-2 border-t border-gray-200">
+          Click anywhere on this card to view lesson details
+        </div>
+      </CardContent>
     </Card>
   );
 };
