@@ -13,27 +13,38 @@ const StudentLessonTopicsPage: React.FC = () => {
   const { data: profile, isLoading: loadingProfile } = useMyProfile({ enabled: true });
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [materialTypeFilter, setMaterialTypeFilter] = useState<'all' | 'aspirant' | 'regular'>('all');
 
   // ✅ Fetch student's enrolled subjects using the existing hook
   const { data: studentSubjects, isLoading: loadingSubjects } = useGetEnrolledSubjects();
 
-  // ✅ Fetch all lesson topics for the student
+  // ✅ Fetch all lesson topics for the student using their enrolled subject IDs
   const { data: lessons, isLoading: loadingLessons } = useQuery<LessonTopicDto[]>({
-    queryKey: ["student-lessons", profile?.id, selectedSubjectId],
+    queryKey: ["student-lessons", profile?.id, selectedSubjectId, studentSubjects],
     queryFn: async () => {
-      if (!profile?.id) throw new Error("Student profile not found");
+      if (!profile?.id || !studentSubjects || studentSubjects.length === 0) {
+        return [];
+      }
       
-      const url = selectedSubjectId 
-        ? `/lesson-topics/by-student/${profile.id}/subject/${selectedSubjectId}`
-        : `/lesson-topics/by-student/${profile.id}`;
+      // Get subject IDs to query
+      const subjectIds = selectedSubjectId 
+        ? [selectedSubjectId] 
+        : studentSubjects.map((s: any) => s.id);
       
+      // Use the /student endpoint with subjectIds query params
+      const params = new URLSearchParams();
+      subjectIds.forEach(id => params.append('subjectIds', String(id)));
+      params.append('studentType', profile.studentType);
+      
+      const url = `/lesson-topics/student?${params.toString()}`;
       const res = await api.get(url);
+      
       return Array.isArray(res.data) ? res.data : [];
     },
-    enabled: !!studentSubjects && !!profile?.id,
+    enabled: !!studentSubjects && studentSubjects.length > 0 && !!profile?.id,
   });
 
-  // ✅ Filter lessons by search query only (backend already filters by enrolled subjects)
+  // ✅ Filter lessons by search query and material type
   const filteredLessons = useMemo(() => {
     if (!lessons) return [];
     
@@ -49,8 +60,15 @@ const StudentLessonTopicsPage: React.FC = () => {
       );
     }
 
+    // Apply material type filter
+    if (materialTypeFilter === 'aspirant') {
+      filtered = filtered.filter(lesson => lesson.isAspirantMaterial === true);
+    } else if (materialTypeFilter === 'regular') {
+      filtered = filtered.filter(lesson => lesson.isAspirantMaterial === false);
+    }
+
     return filtered;
-  }, [lessons, searchQuery]);
+  }, [lessons, searchQuery, materialTypeFilter]);
 
   // ✅ Group lessons by subject
   const groupedLessons = useMemo(() => {
@@ -142,7 +160,7 @@ const StudentLessonTopicsPage: React.FC = () => {
 
       {/* Search and Filter Bar */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 border border-gray-200 dark:border-gray-700">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -171,11 +189,26 @@ const StudentLessonTopicsPage: React.FC = () => {
               ))}
             </select>
           </div>
+
+          {/* Material Type Filter */}
+          <div className="relative">
+            <select
+              value={materialTypeFilter}
+              onChange={(e) => setMaterialTypeFilter(e.target.value as 'all' | 'aspirant' | 'regular')}
+              className="w-full pl-4 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Materials</option>
+              <option value="aspirant">🎓 ASPIRANT Only</option>
+              <option value="regular">🏫 REGULAR Only</option>
+            </select>
+          </div>
         </div>
 
-        {searchQuery && (
+        {(searchQuery || materialTypeFilter !== 'all') && (
           <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
-            Found {filteredLessons.length} lesson{filteredLessons.length !== 1 ? 's' : ''} matching "{searchQuery}"
+            Found {filteredLessons.length} lesson{filteredLessons.length !== 1 ? 's' : ''}
+            {searchQuery && ` matching "${searchQuery}"`}
+            {materialTypeFilter !== 'all' && ` (${materialTypeFilter === 'aspirant' ? 'ASPIRANT' : 'REGULAR'} materials)`}
           </div>
         )}
       </div>
@@ -195,7 +228,7 @@ const StudentLessonTopicsPage: React.FC = () => {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -210,30 +243,44 @@ const StudentLessonTopicsPage: React.FC = () => {
           </div>
         </div>
         
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 border-2 border-yellow-300 dark:border-yellow-700">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-              <FileText className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+              <span className="text-2xl font-bold">🎯</span>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-yellow-900 dark:text-yellow-200">
+                {filteredLessons.filter(l => l.isAspirantMaterial === true).length}
+              </div>
+              <div className="text-sm text-yellow-700 dark:text-yellow-400 font-bold">ASPIRANT</div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 border-2 border-gray-300 dark:border-gray-600">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+              <span className="text-2xl font-bold">📚</span>
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {filteredLessons.filter(l => l.fileUrl).length}
+                {filteredLessons.filter(l => l.isAspirantMaterial === false).length}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">With Materials</div>
+              <div className="text-sm text-gray-700 dark:text-gray-400 font-bold">REGULAR</div>
             </div>
           </div>
         </div>
         
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-              <Calendar className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+              <Calendar className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {Object.keys(groupedLessons).length}
+                {filteredLessons.filter(l => l.fileUrl).length}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Subjects</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">With Files</div>
             </div>
           </div>
         </div>
@@ -280,13 +327,23 @@ const StudentLessonTopicsPage: React.FC = () => {
                   <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-4 text-white">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
                           <span className="px-2 py-1 bg-white/20 rounded text-xs font-semibold">
                             Week {lesson.weekNumber}
                           </span>
                           {lesson.status === "done" && (
                             <span className="px-2 py-1 bg-green-500 rounded text-xs font-semibold">
                               ✓ Complete
+                            </span>
+                          )}
+                          {/* ✅ Show ASPIRANT Material Badge - Enhanced */}
+                          {lesson.isAspirantMaterial !== undefined && (
+                            <span className={`px-2.5 py-1 rounded-md text-xs font-bold shadow-sm ${
+                              lesson.isAspirantMaterial 
+                                ? 'bg-yellow-400 text-yellow-900' 
+                                : 'bg-gray-200 text-gray-700'
+                            }`}>
+                              {lesson.isAspirantMaterial ? '🎯 ASPIRANT' : '📚 REGULAR'}
                             </span>
                           )}
                         </div>
