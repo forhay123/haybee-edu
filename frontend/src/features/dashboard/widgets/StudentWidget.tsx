@@ -209,21 +209,22 @@ const StudentWidget: React.FC = () => {
     ? (completedCritical / criticalLessons.length) * 100 
     : 0;
 
-  // ✅ Fetch TODAY'S schedules for displaying today's lessons
-  const { data: dailySchedules = [] } = useQuery({
-    queryKey: ['my-daily-schedules', profile?.id, format(new Date(), 'yyyy-MM-dd')],
+  // ✅ Fetch TODAY'S progress for displaying today's lessons with accurate completion status
+  const todayDate = format(new Date(), 'yyyy-MM-dd');
+  const { data: todayProgress } = useQuery({
+    queryKey: ['my-daily-progress', todayDate],
     queryFn: async () => {
-      const today = format(new Date(), 'yyyy-MM-dd');
-      const res = await axiosInstance.get(`/schedules/student/${profile!.id}`, {
+      const res = await axiosInstance.get('/progress/daily/me', {
         params: {
-          fromDate: today,
-          toDate: today
+          date: todayDate
         }
       });
       return res.data;
     },
     enabled: profileLoaded && !isIndividualStudent,
   });
+
+  const dailySchedules = todayProgress?.lessons || [];
 
   const incompleteVideos = watchHistory.filter((item: any) => {
     if (!item) return false;
@@ -262,20 +263,13 @@ const StudentWidget: React.FC = () => {
     })
     .slice(0, 4);
 
-  // ✅ Filter today's lessons from DAILY schedules
+  // ✅ Get today's lessons from daily progress
   const dailyLessons = useMemo(() => {
-    if (!dailySchedules || !Array.isArray(dailySchedules)) return [];
-    
-    const today = format(new Date(), 'yyyy-MM-dd');
-    
-    return dailySchedules.filter((s: any) => {
-      if (!s || !s.scheduledDate) return false;
-      const scheduleDate = format(new Date(s.scheduledDate), 'yyyy-MM-dd');
-      return scheduleDate === today;
-    });
-  }, [dailySchedules]);
+    if (!todayProgress?.lessons || !Array.isArray(todayProgress.lessons)) return [];
+    return todayProgress.lessons;
+  }, [todayProgress]);
 
-  const completedCount = dailyLessons.filter(l => l?.status === 'COMPLETED').length;
+  const completedCount = dailyLessons.filter(l => l?.completed).length;
 
   const displaySessions = upcomingSessions
     .filter(session => session.status === 'LIVE' || session.status === 'SCHEDULED')
@@ -665,52 +659,128 @@ const StudentWidget: React.FC = () => {
 
         {dailyLessons.length > 0 ? (
           <div className="space-y-3">
-            {dailyLessons.slice(0, 3).map((lesson) => (
-              <div
-                key={lesson.id}
-                className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                  lesson.status === 'COMPLETED'
-                    ? 'bg-green-50 border-green-200'
-                    : 'bg-gray-50 border-gray-200 hover:border-blue-300'
-                }`}
-              >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  {lesson.status === 'COMPLETED' ? (
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                  ) : (
-                    <Clock className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">
-                      {lesson.subjectName}
-                    </p>
-                    <p className="text-sm text-gray-600 truncate">
-                      {lesson.lessonTopicTitle || 'Lesson'}
-                    </p>
-                  </div>
-                </div>
-
-                {lesson.status === 'COMPLETED' ? (
+            {dailyLessons.slice(0, 3).map((lesson) => {
+              // Determine status
+              const isCompleted = lesson.completed;
+              const isAccessible = lesson.assessmentAccessible;
+              const now = new Date();
+              const windowStart = lesson.assessmentWindowStart ? new Date(lesson.assessmentWindowStart) : null;
+              const windowEnd = lesson.assessmentWindowEnd ? new Date(lesson.assessmentWindowEnd) : null;
+              
+              // Determine status text and styling
+              let statusBadge = null;
+              let actionButton = null;
+              let bgClass = 'bg-gray-50 border-gray-200';
+              
+              if (isCompleted) {
+                bgClass = 'bg-green-50 border-green-200';
+                statusBadge = (
+                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded">
+                    Completed
+                  </span>
+                );
+                actionButton = (
                   <Link
-                    to={`/subjects/${lesson.subjectId}/lesson-topics/${lesson.lessonTopicId}`}
-                    className="text-sm text-blue-600 font-semibold hover:underline flex-shrink-0 ml-3"
+                    to={`/subjects/${lesson.subjectId}/lesson-topics/${lesson.lessonId}`}
+                    className="text-sm text-blue-600 font-semibold hover:underline flex-shrink-0"
                   >
                     Review
                   </Link>
-                ) : (
+                );
+              } else if (isAccessible) {
+                bgClass = 'bg-blue-50 border-blue-200 hover:border-blue-300';
+                statusBadge = (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded animate-pulse">
+                    Available Now
+                  </span>
+                );
+                actionButton = (
                   <Link
-                    to={`/lesson-topics/${lesson.lessonTopicId}/assessment`}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold flex-shrink-0 ml-3"
+                    to={`/lesson-topics/${lesson.lessonId}/assessment`}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold flex-shrink-0"
                   >
-                    Start
+                    Start Assessment
                   </Link>
-                )}
-              </div>
-            ))}
+                );
+              } else if (windowStart && now < windowStart) {
+                bgClass = 'bg-yellow-50 border-yellow-200';
+                statusBadge = (
+                  <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded">
+                    Upcoming
+                  </span>
+                );
+                actionButton = (
+                  <span className="text-sm text-gray-500 flex-shrink-0">
+                    Available at {format(windowStart, 'h:mm a')}
+                  </span>
+                );
+              } else if (windowEnd && now > windowEnd) {
+                bgClass = 'bg-red-50 border-red-200';
+                statusBadge = (
+                  <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded">
+                    Missed
+                  </span>
+                );
+                actionButton = (
+                  <span className="text-sm text-red-600 font-semibold flex-shrink-0">
+                    Window Closed
+                  </span>
+                );
+              } else {
+                // Default state
+                statusBadge = (
+                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded">
+                    Scheduled
+                  </span>
+                );
+                actionButton = (
+                  <span className="text-sm text-gray-500 flex-shrink-0">
+                    Not yet available
+                  </span>
+                );
+              }
+
+              return (
+                <div
+                  key={lesson.id}
+                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${bgClass}`}
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {isCompleted ? (
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    ) : isAccessible ? (
+                      <Clock className="w-5 h-5 text-blue-600 flex-shrink-0 animate-pulse" />
+                    ) : (
+                      <Clock className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-semibold text-gray-900 truncate">
+                          {lesson.subjectName}
+                        </p>
+                        {statusBadge}
+                      </div>
+                      <p className="text-sm text-gray-600 truncate">
+                        {lesson.lessonTitle || 'Lesson'}
+                      </p>
+                      {lesson.assessmentWindowStart && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Window: {format(new Date(lesson.assessmentWindowStart), 'h:mm a')} - {format(new Date(lesson.assessmentWindowEnd), 'h:mm a')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="ml-3 flex-shrink-0">
+                    {actionButton}
+                  </div>
+                </div>
+              );
+            })}
 
             {dailyLessons.length > 3 && (
               <Link
-                to="/subjects"
+                to="/progress/daily"
                 className="block text-center text-sm text-blue-600 hover:underline font-semibold mt-4"
               >
                 View all {dailyLessons.length} lessons →
