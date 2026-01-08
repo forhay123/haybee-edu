@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import api from "../../../api/axios";
 import { useAuth } from "../../auth/useAuth";
 import { useMyProfile } from "../../studentProfiles/hooks/useStudentProfiles";
-import { useGetEnrolledSubjects } from "../../../features/subjects/api/subjectsApi";
+import { useGetEnrolledSubjects } from "../../subjects/api/subjectsApi";
 import { LessonTopicDto } from "../types/lessonTopicTypes";
 import { BookOpen, FileText, Calendar, Clock, Search, Filter } from "lucide-react";
 
@@ -17,25 +17,27 @@ const StudentLessonTopicsPage: React.FC = () => {
   // ✅ Fetch student's enrolled subjects using the existing hook
   const { data: studentSubjects, isLoading: loadingSubjects } = useGetEnrolledSubjects();
 
-  // ✅ Fetch all lesson topics
+  // ✅ Fetch all lesson topics for the student
   const { data: lessons, isLoading: loadingLessons } = useQuery<LessonTopicDto[]>({
-    queryKey: ["student-lessons", selectedSubjectId],
+    queryKey: ["student-lessons", profile?.id, selectedSubjectId],
     queryFn: async () => {
+      if (!profile?.id) throw new Error("Student profile not found");
+      
       const url = selectedSubjectId 
-        ? `/lesson-topics?subjectId=${selectedSubjectId}`
-        : "/lesson-topics";
+        ? `/lesson-topics/by-student/${profile.id}/subject/${selectedSubjectId}`
+        : `/lesson-topics/by-student/${profile.id}`;
+      
       const res = await api.get(url);
       return Array.isArray(res.data) ? res.data : [];
     },
-    enabled: !!studentSubjects,
+    enabled: !!studentSubjects && !!profile?.id,
   });
 
-  // ✅ Filter lessons to only show student's enrolled subjects
+  // ✅ Filter lessons by search query only (backend already filters by enrolled subjects)
   const filteredLessons = useMemo(() => {
-    if (!lessons || !studentSubjects) return [];
+    if (!lessons) return [];
     
-    const studentSubjectIds = new Set(studentSubjects.map((s: any) => s.id));
-    let filtered = lessons.filter(lesson => studentSubjectIds.has(lesson.subjectId));
+    let filtered = lessons;
 
     // Apply search filter
     if (searchQuery.trim()) {
@@ -48,7 +50,7 @@ const StudentLessonTopicsPage: React.FC = () => {
     }
 
     return filtered;
-  }, [lessons, studentSubjects, searchQuery]);
+  }, [lessons, searchQuery]);
 
   // ✅ Group lessons by subject
   const groupedLessons = useMemo(() => {
