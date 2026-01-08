@@ -65,6 +65,9 @@ export const AspirantProgressOverview: React.FC<AspirantProgressOverviewProps> =
   const highProgress = highPriorityLessons.length > 0 
     ? (completedHigh / highPriorityLessons.length) * 100 
     : 0;
+    
+  // ✅ Only show priority section if there are critical or high priority lessons
+  const hasPriorityLessons = criticalLessons.length > 0 || highPriorityLessons.length > 0;
 
   // Subject breakdown
   const subjectMap = new Map<string, SubjectProgress>();
@@ -157,8 +160,8 @@ export const AspirantProgressOverview: React.FC<AspirantProgressOverviewProps> =
         </div>
       </div>
 
-      {/* Main Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Main Stats Grid - Only show priority cards if there are priority lessons */}
+      <div className={`grid grid-cols-1 gap-4 ${hasPriorityLessons ? 'md:grid-cols-3' : 'md:grid-cols-1'}`}>
         {/* Weighted Progress */}
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg p-6 shadow-lg">
           <div className="flex items-center justify-between mb-3">
@@ -173,33 +176,42 @@ export const AspirantProgressOverview: React.FC<AspirantProgressOverviewProps> =
           </div>
         </div>
 
-        {/* Critical Priority */}
-        <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-lg p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Target size={24} />
-              <h3 className="text-sm font-medium opacity-90">Critical Priority</h3>
-            </div>
-          </div>
-          <div className="text-4xl font-bold mb-2">{criticalProgress.toFixed(0)}%</div>
-          <div className="text-sm opacity-90">
-            {completedCritical} / {criticalLessons.length} lessons
-          </div>
-        </div>
+        {/* Priority Cards - Only show if there are priority lessons */}
+        {hasPriorityLessons && (
+          <>
+            {/* Critical Priority */}
+            {criticalLessons.length > 0 && (
+              <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-lg p-6 shadow-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Target size={24} />
+                    <h3 className="text-sm font-medium opacity-90">Critical Priority</h3>
+                  </div>
+                </div>
+                <div className="text-4xl font-bold mb-2">{criticalProgress.toFixed(0)}%</div>
+                <div className="text-sm opacity-90">
+                  {completedCritical} / {criticalLessons.length} lessons
+                </div>
+              </div>
+            )}
 
-        {/* High Priority */}
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-lg p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <TrendingUp size={24} />
-              <h3 className="text-sm font-medium opacity-90">High Priority</h3>
-            </div>
-          </div>
-          <div className="text-4xl font-bold mb-2">{highProgress.toFixed(0)}%</div>
-          <div className="text-sm opacity-90">
-            {completedHigh} / {highPriorityLessons.length} lessons
-          </div>
-        </div>
+            {/* High Priority */}
+            {highPriorityLessons.length > 0 && (
+              <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-lg p-6 shadow-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp size={24} />
+                    <h3 className="text-sm font-medium opacity-90">High Priority</h3>
+                  </div>
+                </div>
+                <div className="text-4xl font-bold mb-2">{highProgress.toFixed(0)}%</div>
+                <div className="text-sm opacity-90">
+                  {completedHigh} / {highPriorityLessons.length} lessons
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Subject Breakdown */}

@@ -62,6 +62,9 @@ export const DailyPlannerList: React.FC<DailyPlannerListProps> = ({
   const highPriorityLessons = lessons.filter((l) => l.priority === 2);
   const completedCritical = criticalLessons.filter((l) => l.completed).length;
   const completedHigh = highPriorityLessons.filter((l) => l.completed).length;
+  
+  // ✅ Only show priority section if there are critical or high priority lessons
+  const hasPriorityLessons = criticalLessons.length > 0 || highPriorityLessons.length > 0;
 
   // Assessment statistics
   const lessonsWithAssessments = lessons.filter(l => l.assessmentId);
@@ -158,21 +161,23 @@ export const DailyPlannerList: React.FC<DailyPlannerListProps> = ({
             </div>
           </div>
 
-          {/* Priority Stats Grid */}
-          <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <div className="text-xs text-red-600 font-medium mb-1">Critical Priority</div>
-              <div className="text-2xl font-bold text-red-700">
-                {completedCritical} / {criticalLessons.length}
+          {/* Priority Stats Grid - Only show if there are critical/high priority lessons */}
+          {hasPriorityLessons && (
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <div className="text-xs text-red-600 font-medium mb-1">Critical Priority</div>
+                <div className="text-2xl font-bold text-red-700">
+                  {completedCritical} / {criticalLessons.length}
+                </div>
+              </div>
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                <div className="text-xs text-orange-600 font-medium mb-1">High Priority</div>
+                <div className="text-2xl font-bold text-orange-700">
+                  {completedHigh} / {highPriorityLessons.length}
+                </div>
               </div>
             </div>
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-              <div className="text-xs text-orange-600 font-medium mb-1">High Priority</div>
-              <div className="text-2xl font-bold text-orange-700">
-                {completedHigh} / {highPriorityLessons.length}
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* Assessment Access Status */}
           {lessonsWithAssessments.length > 0 && (
