@@ -29,9 +29,10 @@ export const ComprehensiveLessonCard: React.FC<ComprehensiveLessonCardProps> = (
     );
   };
 
-  const handleViewAssessment = () => {
-    if (lesson.assessmentId) {
-      navigate(`/assessments/${lesson.assessmentId}`);
+  const handleViewResults = () => {
+    // ✅ Navigate to submission results page
+    if (lesson.submissionId) {
+      navigate(`/submissions/${lesson.submissionId}/results`);
     }
   };
 
@@ -121,9 +122,33 @@ export const ComprehensiveLessonCard: React.FC<ComprehensiveLessonCardProps> = (
         )}
       </div>
 
-      {/* Assessment Info */}
-      {lesson.hasActiveAssessment && (
-        <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
+      {/* Assessment Info - Only show if completed with submission */}
+      {lesson.status === 'COMPLETED' && lesson.submissionId && (
+        <div className="bg-green-50 border border-green-200 rounded p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-green-900 mb-1">
+                ✅ Assessment Completed
+              </div>
+              {lesson.completedAt && (
+                <div className="text-xs text-green-700">
+                  Submitted on {format(new Date(lesson.completedAt), 'MMM dd, yyyy \'at\' h:mm a')}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={handleViewResults}
+              className="px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded hover:bg-green-700 transition-colors"
+            >
+              View Results
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Assessment Available - Show if not completed */}
+      {lesson.hasActiveAssessment && lesson.status !== 'COMPLETED' && (
+        <div className="bg-blue-50 border border-blue-200 rounded p-3">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold text-blue-900 mb-1">
@@ -131,49 +156,32 @@ export const ComprehensiveLessonCard: React.FC<ComprehensiveLessonCardProps> = (
               </div>
               {lesson.assessmentWindowStart && lesson.assessmentWindowEnd && (
                 <div className="text-xs text-blue-700">
-                  Available: {format(new Date(lesson.assessmentWindowStart), 'MMM dd')} - {format(new Date(lesson.assessmentWindowEnd), 'MMM dd')}
+                  Window: {format(new Date(lesson.assessmentWindowStart), 'MMM dd')} - {format(new Date(lesson.assessmentWindowEnd), 'MMM dd')}
                 </div>
               )}
             </div>
-            {lesson.assessmentId && (
-              <button
-                onClick={handleViewAssessment}
-                className="px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors"
-              >
-                View Assessment
-              </button>
-            )}
           </div>
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex gap-2 pt-3 border-t border-gray-200">
-        {lesson.canStillComplete && (
-          <button
-            className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors"
-            onClick={() => {/* Handle complete action */}}
-          >
-            Mark Complete
-          </button>
-        )}
-        {lesson.assessmentId && (
-          <button
-            onClick={handleViewAssessment}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
-          >
-            Take Assessment
-          </button>
-        )}
-        {lesson.status === 'MISSED' && !lesson.canStillComplete && (
-          <button
-            className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded cursor-not-allowed"
-            disabled
-          >
-            Cannot Complete
-          </button>
-        )}
-      </div>
+      {/* Missed Assessment - No action available */}
+      {lesson.status === 'MISSED' && (
+        <div className="bg-red-50 border border-red-200 rounded p-3">
+          <div className="flex items-center gap-2">
+            <span className="text-red-600">❌</span>
+            <div>
+              <div className="text-sm font-semibold text-red-900">
+                Assessment Window Closed
+              </div>
+              {lesson.incompleteReason && (
+                <div className="text-xs text-red-700 mt-1">
+                  {lesson.incompleteReason}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
