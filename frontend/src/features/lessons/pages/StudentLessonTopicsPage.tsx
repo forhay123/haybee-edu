@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import api from "../../../api/axios";
 import { useAuth } from "../../auth/useAuth";
 import { useMyProfile } from "../../studentProfiles/hooks/useStudentProfiles";
+import { useGetEnrolledSubjects } from "../api/subjectsApi";
 import { LessonTopicDto } from "../types/lessonTopicTypes";
 import { BookOpen, FileText, Calendar, Clock, Search, Filter } from "lucide-react";
 
@@ -13,16 +14,8 @@ const StudentLessonTopicsPage: React.FC = () => {
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // ✅ Fetch student's enrolled subjects
-  const { data: studentSubjects, isLoading: loadingSubjects } = useQuery({
-    queryKey: ["student-subjects", profile?.id],
-    queryFn: async () => {
-      if (!profile?.id) throw new Error("Student profile not found");
-      const res = await api.get(`/subjects/student/${profile.id}`);
-      return res.data;
-    },
-    enabled: !!profile?.id,
-  });
+  // ✅ Fetch student's enrolled subjects using the existing hook
+  const { data: studentSubjects, isLoading: loadingSubjects } = useGetEnrolledSubjects();
 
   // ✅ Fetch all lesson topics
   const { data: lessons, isLoading: loadingLessons } = useQuery<LessonTopicDto[]>({
@@ -48,9 +41,9 @@ const StudentLessonTopicsPage: React.FC = () => {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(lesson => 
-        lesson.title?.toLowerCase().includes(query) ||
+        lesson.topicTitle?.toLowerCase().includes(query) ||
         lesson.subjectName?.toLowerCase().includes(query) ||
-        lesson.topicName?.toLowerCase().includes(query)
+        lesson.description?.toLowerCase().includes(query)
       );
     }
 
@@ -81,8 +74,8 @@ const StudentLessonTopicsPage: React.FC = () => {
 
   // ✅ Handle viewing lesson material
   const handleViewMaterial = (lesson: LessonTopicDto) => {
-    if (lesson.materialUrl) {
-      window.open(lesson.materialUrl, '_blank');
+    if (lesson.fileUrl) {
+      window.open(lesson.fileUrl, '_blank');
     } else {
       alert('No material available for this lesson yet.');
     }
@@ -222,7 +215,7 @@ const StudentLessonTopicsPage: React.FC = () => {
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {filteredLessons.filter(l => l.materialUrl).length}
+                {filteredLessons.filter(l => l.fileUrl).length}
               </div>
               <div className="text-sm text-gray-600 dark:text-gray-400">With Materials</div>
             </div>
@@ -296,7 +289,7 @@ const StudentLessonTopicsPage: React.FC = () => {
                           )}
                         </div>
                         <h3 className="font-semibold text-lg line-clamp-2">
-                          {lesson.title || lesson.topicName || "Untitled Lesson"}
+                          {lesson.topicTitle || "Untitled Lesson"}
                         </h3>
                       </div>
                     </div>
@@ -304,29 +297,25 @@ const StudentLessonTopicsPage: React.FC = () => {
 
                   {/* Card Body */}
                   <div className="p-4 space-y-3">
-                    {/* Topic Name */}
-                    {lesson.topicName && (
+                    {/* Description */}
+                    {lesson.description && (
                       <div className="flex items-start gap-2">
                         <BookOpen className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
                         <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                          {lesson.topicName}
+                          {lesson.description}
                         </p>
                       </div>
                     )}
 
-                    {/* Created Date */}
-                    {lesson.createdAt && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                        <Clock className="w-4 h-4" />
-                        <span>
-                          Added {new Date(lesson.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    )}
+                    {/* Subject Info */}
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <Clock className="w-4 h-4" />
+                      <span>{lesson.subjectName || 'Subject'}</span>
+                    </div>
 
                     {/* Material Status */}
                     <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                      {lesson.materialUrl ? (
+                      {lesson.fileUrl ? (
                         <button
                           onClick={() => handleViewMaterial(lesson)}
                           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition font-medium"
@@ -349,7 +338,7 @@ const StudentLessonTopicsPage: React.FC = () => {
             {/* Subject Summary */}
             <div className="text-sm text-gray-600 dark:text-gray-400 text-center py-2">
               {subjectLessons.length} lesson{subjectLessons.length !== 1 ? "s" : ""} •{" "}
-              {subjectLessons.filter((l) => l.materialUrl).length}{" "}
+              {subjectLessons.filter((l) => l.fileUrl).length}{" "}
               with materials available
             </div>
           </div>
