@@ -162,43 +162,68 @@ const StudentWidget: React.FC = () => {
     return { total, completed, available, pending, missed, completionRate };
   }, [weeklySchedule]);
 
-  // ✅ Fetch DAILY schedules for CLASS students (personalized per student)
+  // ✅ Fetch ASSESSMENT SUBMISSIONS for CLASS students
   const fromDate = format(startOfWeek(new Date()), 'yyyy-MM-dd');
   const toDate = format(endOfWeek(new Date()), 'yyyy-MM-dd');
 
-  const { data: dailySchedules = [], isLoading: loadingHistoryStats } = useQuery({
-    queryKey: ['my-daily-schedules', profile?.id, fromDate, toDate],
+  // Fetch all assessment submissions
+  const { data: allSubmissions = [], isLoading: loadingHistoryStats } = useQuery({
+    queryKey: ['student-submissions', profile?.id],
     queryFn: async () => {
+      if (!profile?.id) {
+        throw new Error('Student profile ID is required');
+      }
+      const res = await axiosInstance.get(`/assessments/student/${profile.id}/submissions`);
+      return res.data;
+    },
+    enabled: profileLoaded && !isIndividualStudent,
+  });
+
+  // Filter submissions for this week
+  const weekStart = new Date(fromDate);
+  const weekEnd = new Date(toDate);
+  weekEnd.setHours(23, 59, 59, 999); // Include end of day
+  
+  const weekSubmissions = allSubmissions.filter((s: any) => {
+    const submittedDate = new Date(s.submittedAt);
+    return submittedDate >= weekStart && submittedDate <= weekEnd;
+  });
+
+  // ✅ Calculate summary statistics from ASSESSMENT SUBMISSIONS
+  const totalLessons = weekSubmissions.length;
+  const completedLessons = weekSubmissions.filter((s: any) => s.passed).length;
+  const completionRate = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
+
+  // Calculate average score as weighted rate
+  const scores = weekSubmissions
+    .filter((s: any) => s.percentage != null)
+    .map((s: any) => s.percentage);
+  const weightedRate = scores.length > 0
+    ? scores.reduce((sum: number, score: number) => sum + score, 0) / scores.length
+    : 0;
+
+  // Calculate excellent performance rate (above 80%) as "critical"
+  const criticalLessons = weekSubmissions.filter((s: any) => s.percentage != null);
+  const completedCritical = criticalLessons.filter((s: any) => s.percentage >= 80).length;
+  const criticalRate = criticalLessons.length > 0 
+    ? (completedCritical / criticalLessons.length) * 100 
+    : 0;
+
+  // ✅ Fetch TODAY'S schedules for displaying today's lessons
+  const { data: dailySchedules = [] } = useQuery({
+    queryKey: ['my-daily-schedules', profile?.id, format(new Date(), 'yyyy-MM-dd')],
+    queryFn: async () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
       const res = await axiosInstance.get(`/schedules/student/${profile!.id}`, {
         params: {
-          fromDate: fromDate,
-          toDate: toDate
+          fromDate: today,
+          toDate: today
         }
       });
       return res.data;
     },
     enabled: profileLoaded && !isIndividualStudent,
   });
-
-  // Use dailySchedules instead of weekly templates
-  const history = dailySchedules;
-
-  // ✅ Calculate summary statistics from DAILY schedules
-  const totalLessons = history.length;
-  const completedLessons = history.filter((l: any) => l.status === 'COMPLETED').length; // ✅ FIXED
-  const completionRate = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
-
-  const totalWeight = history.reduce((sum: number, l: any) => sum + (l.weight || 1), 0);
-  const completedWeight = history
-    .filter((l: any) => l.status === 'COMPLETED') // ✅ FIXED
-    .reduce((sum: number, l: any) => sum + (l.weight || 1), 0);
-  const weightedRate = totalWeight > 0 ? (completedWeight / totalWeight) * 100 : 0;
-
-  const criticalLessons = history.filter((l: any) => l.priority === 1);
-  const completedCritical = criticalLessons.filter((l: any) => l.status === 'COMPLETED').length; // ✅ FIXED
-  const criticalRate = criticalLessons.length > 0 
-    ? (completedCritical / criticalLessons.length) * 100 
-    : 0;
 
   const incompleteVideos = watchHistory.filter((item: any) => {
     if (!item) return false;
@@ -556,7 +581,7 @@ const StudentWidget: React.FC = () => {
   return (
     <div className="space-y-6 w-full">
 
-      {/* ✅ WEEKLY PROGRESS SUMMARY - CLASS STUDENTS */}
+      {/* ✅ WEEKLY ASSESSMENT PROGRESS SUMMARY - CLASS STUDENTS */}
       {loadingHistoryStats ? (
         <div className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl shadow-sm border border-indigo-200">
           <div className="animate-pulse space-y-3">
@@ -576,8 +601,8 @@ const StudentWidget: React.FC = () => {
               <TrendingUp className="w-5 h-5 text-indigo-600" />
               This Week's Progress
             </h3>
-            <Link to="/progress/history" className="text-sm text-indigo-600 hover:underline font-semibold">
-              View full history
+            <Link to="/assessments/student" className="text-sm text-indigo-600 hover:underline font-semibold">
+              View all results →
             </Link>
           </div>
 
@@ -585,7 +610,7 @@ const StudentWidget: React.FC = () => {
             <div className="bg-white/80 border border-indigo-200/50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Calendar size={18} className="text-gray-600" />
-                <div className="text-sm text-gray-600">Total Lessons</div>
+                <div className="text-sm text-gray-600">Assessments Taken</div>
               </div>
               <div className="text-3xl font-bold text-gray-800">{totalLessons}</div>
             </div>
@@ -593,7 +618,7 @@ const StudentWidget: React.FC = () => {
             <div className="bg-white/80 border border-indigo-200/50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <CheckCircle2 size={18} className="text-green-600" />
-                <div className="text-sm text-gray-600">Completed</div>
+                <div className="text-sm text-gray-600">Passed</div>
               </div>
               <div className="text-3xl font-bold text-green-600">{completedLessons}</div>
               <div className="text-xs text-gray-500 mt-1">{completionRate.toFixed(1)}%</div>
@@ -602,22 +627,22 @@ const StudentWidget: React.FC = () => {
             <div className="bg-white/80 border border-indigo-200/50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Award size={18} className="text-blue-600" />
-                <div className="text-sm text-gray-600">Weighted Rate</div>
+                <div className="text-sm text-gray-600">Average Score</div>
               </div>
               <div className="text-3xl font-bold text-blue-600">{weightedRate.toFixed(1)}%</div>
               <div className="text-xs text-gray-500 mt-1">
-                {completedWeight.toFixed(1)} / {totalWeight.toFixed(1)} pts
+                Across all assessments
               </div>
             </div>
             
             <div className="bg-white/80 border border-indigo-200/50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
-                <TrendingUp size={18} className="text-red-600" />
-                <div className="text-sm text-gray-600">Critical Priority</div>
+                <TrendingUp size={18} className="text-purple-600" />
+                <div className="text-sm text-gray-600">Excellence Rate</div>
               </div>
-              <div className="text-3xl font-bold text-red-600">{criticalRate.toFixed(0)}%</div>
+              <div className="text-3xl font-bold text-purple-600">{criticalRate.toFixed(0)}%</div>
               <div className="text-xs text-gray-500 mt-1">
-                {completedCritical} / {criticalLessons.length} lessons
+                Scored 80% or above
               </div>
             </div>
           </div>
@@ -644,13 +669,13 @@ const StudentWidget: React.FC = () => {
               <div
                 key={lesson.id}
                 className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                  lesson.status === 'COMPLETED'  // ✅ CHANGED
+                  lesson.status === 'COMPLETED'
                     ? 'bg-green-50 border-green-200'
                     : 'bg-gray-50 border-gray-200 hover:border-blue-300'
                 }`}
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  {lesson.status === 'COMPLETED' ? (  // ✅ CHANGED
+                  {lesson.status === 'COMPLETED' ? (
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
                   ) : (
                     <Clock className="w-5 h-5 text-gray-400 flex-shrink-0" />
@@ -665,16 +690,16 @@ const StudentWidget: React.FC = () => {
                   </div>
                 </div>
 
-                {lesson.status === 'COMPLETED' ? (  // ✅ CHANGED
+                {lesson.status === 'COMPLETED' ? (
                   <Link
-                    to={`/subjects/${lesson.subjectId}/lesson-topics/${lesson.lessonTopicId}`}  // ✅ CHANGED
+                    to={`/subjects/${lesson.subjectId}/lesson-topics/${lesson.lessonTopicId}`}
                     className="text-sm text-blue-600 font-semibold hover:underline flex-shrink-0 ml-3"
                   >
                     Review
                   </Link>
                 ) : (
                   <Link
-                    to={`/lesson-topics/${lesson.lessonTopicId}/assessment`}  // ✅ CHANGED
+                    to={`/lesson-topics/${lesson.lessonTopicId}/assessment`}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold flex-shrink-0 ml-3"
                   >
                     Start
