@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import api from "../../../api/axios";
 import { useAuth } from "../../auth/useAuth";
 import { useMyProfile } from "../../studentProfiles/hooks/useStudentProfiles";
-import { useGetEnrolledSubjects } from "../api/subjectsApi";
+import { useGetEnrolledSubjects } from "../../../features/subjects/api/subjectsApi";
 import { LessonTopicDto } from "../types/lessonTopicTypes";
 import { BookOpen, FileText, Calendar, Clock, Search, Filter } from "lucide-react";
 
