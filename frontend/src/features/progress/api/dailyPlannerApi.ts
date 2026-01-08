@@ -1,12 +1,9 @@
-// ============================================================
-// FILE 2: dailyPlannerApi.ts (COMPLETE WITH assessmentId)
-// Location: frontend/src/features/progress/api/dailyPlannerApi.ts
-// ============================================================
+// src/features/progress/api/dailyPlannerApi.ts
 
 import axiosInstance from '../../../api/axios';
 
 /**
- * ✅ UPDATED: Added assessmentId
+ * ✅ COMPLETE: All fields from backend including assessment window and incomplete tracking
  */
 export interface LessonProgressDto {
   id: number;
@@ -21,7 +18,17 @@ export interface LessonProgressDto {
   completedAt?: string; // ISO datetime
   priority?: number; // 1-4
   weight?: number; // Weight multiplier
-  assessmentId?: number; // ✅ ADDED: ID of associated assessment
+  assessmentId?: number; // ID of associated assessment
+  
+  // ✅ Assessment window fields
+  assessmentAccessible?: boolean;
+  assessmentWindowStart?: string; // ISO datetime
+  assessmentWindowEnd?: string; // ISO datetime
+  gracePeriodEnd?: string; // ISO datetime
+  
+  // ✅ Incomplete tracking
+  incomplete?: boolean;
+  incompleteReason?: string; // e.g., "MISSED_GRACE_PERIOD"
 }
 
 export interface DailyProgressDto {
@@ -90,4 +97,3 @@ export const dailyPlannerApi = {
 };
 
 export default dailyPlannerApi;
-

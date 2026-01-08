@@ -3,7 +3,7 @@
 import React from 'react';
 import { LessonProgressDto } from '../api/dailyPlannerApi';
 import { useAssessmentAccess } from '@/features/assessments/hooks/useAssessmentAccess';
-import { CheckCircle, Clock, BookOpen, Lock, AlertCircle, Calendar } from 'lucide-react';
+import { CheckCircle, Clock, BookOpen, Lock, AlertCircle, Calendar, XCircle } from 'lucide-react';
 import { CustomBadge as Badge } from '@/components/ui/custom-badge';
 import { useNavigate } from 'react-router-dom';
 
@@ -32,6 +32,17 @@ export const DailyLessonCard: React.FC<DailyLessonCardProps> = ({
     studentProfileId,
     30000 // Poll every 30 seconds
   );
+
+  // ✅ Detect missed status
+  const now = new Date();
+  const isIncomplete = lesson.incomplete;
+  const isMissed = lesson.incompleteReason === 'MISSED_GRACE_PERIOD';
+  const windowEnd = lesson.assessmentWindowEnd ? new Date(lesson.assessmentWindowEnd) : null;
+  const gracePeriodEnd = lesson.gracePeriodEnd ? new Date(lesson.gracePeriodEnd) : windowEnd;
+  
+  // Check if lesson is truly missed (grace period ended and not completed)
+  const isMissedByTime = !lesson.completed && windowEnd && now > (gracePeriodEnd || windowEnd);
+  const showMissedStatus = isMissed || isIncomplete || isMissedByTime;
 
   const handleAccessAssessment = () => {
     if (lesson.assessmentId && canAccess) {
@@ -62,8 +73,12 @@ export const DailyLessonCard: React.FC<DailyLessonCardProps> = ({
       className={`border rounded-lg p-4 transition-all ${
         lesson.completed
           ? 'bg-green-50 border-green-200'
+          : showMissedStatus
+          ? 'bg-red-50 border-red-200'
           : isLocked
           ? 'bg-gray-50 border-gray-300'
+          : canAccess
+          ? 'bg-blue-50 border-blue-300'
           : 'bg-white border-gray-200 hover:shadow-md'
       }`}
     >
@@ -85,15 +100,18 @@ export const DailyLessonCard: React.FC<DailyLessonCardProps> = ({
               </span>
             )}
             
-            {/* Assessment Status Badge */}
+            {/* ✅ Assessment Status Badge - Updated with Missed */}
             {hasAssessment && (
               <Badge variant={
                 lesson.completed ? 'success' : 
+                showMissedStatus ? 'destructive' :
                 canAccess ? 'default' : 
                 'secondary'
               }>
-                {lesson.completed ? 'Completed' : 
-                 canAccess ? 'Available Now' : 
+                {lesson.completed ? '✓ Completed' : 
+                 showMissedStatus ? '❌ Missed' :
+                 canAccess ? '🔵 Available Now' : 
+                 minutesUntilOpen && minutesUntilOpen > 0 ? '⏰ Upcoming' :
                  'Scheduled'}
               </Badge>
             )}
@@ -126,8 +144,37 @@ export const DailyLessonCard: React.FC<DailyLessonCardProps> = ({
                 </div>
               )}
 
+              {/* ✅ NEW: Missed State */}
+              {showMissedStatus && (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200">
+                  <XCircle size={16} />
+                  <span className="font-medium">
+                    {lesson.incompleteReason === 'MISSED_GRACE_PERIOD' 
+                      ? 'Assessment window and grace period have ended'
+                      : 'Assessment window has closed'}
+                  </span>
+                </div>
+              )}
+
+              {/* Assessment Window Info */}
+              {(lesson.assessmentWindowStart || lesson.assessmentWindowEnd) && !lesson.completed && !showMissedStatus && (
+                <div className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded">
+                  <div className="flex items-center gap-2">
+                    <Clock size={14} />
+                    <span>
+                      Window: {lesson.assessmentWindowStart && new Date(lesson.assessmentWindowStart).toLocaleTimeString()} - {lesson.assessmentWindowEnd && new Date(lesson.assessmentWindowEnd).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  {lesson.gracePeriodEnd && (
+                    <div className="mt-1 text-gray-500">
+                      Grace period ends: {new Date(lesson.gracePeriodEnd).toLocaleTimeString()}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Locked State - Not Yet Available */}
-              {!lesson.completed && isLocked && (
+              {!lesson.completed && !showMissedStatus && isLocked && (
                 <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-100 px-3 py-2 rounded">
                   <Lock size={16} />
                   <span>
@@ -142,9 +189,9 @@ export const DailyLessonCard: React.FC<DailyLessonCardProps> = ({
               )}
 
               {/* Available Now */}
-              {!lesson.completed && canAccess && (
+              {!lesson.completed && !showMissedStatus && canAccess && (
                 <>
-                  <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-3 py-2 rounded">
+                  <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-3 py-2 rounded border border-blue-200">
                     <Calendar size={16} />
                     <span className="font-medium">Assessment is available now!</span>
                   </div>
@@ -163,14 +210,6 @@ export const DailyLessonCard: React.FC<DailyLessonCardProps> = ({
                     </div>
                   )}
                 </>
-              )}
-
-              {/* Missed Assessment Warning */}
-              {!lesson.completed && !canAccess && !isLocked && minutesUntilOpen === null && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
-                  <AlertCircle size={16} />
-                  <span>Assessment window has closed. Contact your instructor for assistance.</span>
-                </div>
               )}
             </div>
           )}
@@ -197,7 +236,7 @@ export const DailyLessonCard: React.FC<DailyLessonCardProps> = ({
         {/* Action Button */}
         <div className="ml-4 flex flex-col gap-2">
           {/* Start Assessment Button */}
-          {hasAssessment && canAccess && !lesson.completed && (
+          {hasAssessment && canAccess && !lesson.completed && !showMissedStatus && (
             <button
               onClick={handleAccessAssessment}
               disabled={isChecking}
@@ -221,8 +260,15 @@ export const DailyLessonCard: React.FC<DailyLessonCardProps> = ({
             </div>
           )}
 
+          {/* ✅ NEW: Missed Indicator */}
+          {showMissedStatus && (
+            <div className="flex items-center justify-center p-2 rounded-full bg-red-100">
+              <XCircle size={28} className="text-red-600" />
+            </div>
+          )}
+
           {/* Locked Indicator */}
-          {!lesson.completed && !canAccess && hasAssessment && (
+          {!lesson.completed && !showMissedStatus && !canAccess && hasAssessment && (
             <div className="flex items-center justify-center p-2 rounded-full bg-gray-100">
               <Lock size={28} className="text-gray-400" />
             </div>
