@@ -1,5 +1,5 @@
 // ============================================================
-// FILE: AssessmentAccessCard.tsx (CORRECTED)
+// FILE: AssessmentAccessCard.tsx (UPDATED - Better Expired Display)
 // Location: frontend/src/features/assessments/components/AssessmentAccessCard.tsx
 // ============================================================
 
@@ -10,7 +10,7 @@ import { AccessCheckAlert } from '../../../components/ui/accessCheckAlert';
 import { AssessmentStatusBadge } from '../../../components/ui/assessmentStatusBadge';
 import { CountdownTimer } from '../../../components/ui/countdownTimer';
 import { useAssessmentAccess } from '../hooks/useAssessmentAccess';
-import { Lock, Unlock, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Lock, Unlock, RefreshCw, AlertTriangle, XCircle } from 'lucide-react';
 import type { Assessment } from '../types/assessmentTypes';
 
 interface AssessmentAccessCardProps {
@@ -37,6 +37,8 @@ export const AssessmentAccessCard: React.FC<AssessmentAccessCardProps> = ({
     canAccess,
     isLocked,
     isAlreadySubmitted,
+    isExpired,
+    isNotYetOpen,
     isLoading,
     refetch,
     isRefetching
@@ -143,7 +145,7 @@ export const AssessmentAccessCard: React.FC<AssessmentAccessCardProps> = ({
         </div>
       </div>
 
-      {/* Countdown Timer (if available) */}
+      {/* Countdown Timer (if available and accessible) */}
       {canAccess && accessData?.windowEnd && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <CountdownTimer
@@ -165,6 +167,17 @@ export const AssessmentAccessCard: React.FC<AssessmentAccessCardProps> = ({
         </div>
       )}
 
+      {/* ✅ NEW: Expired Warning */}
+      {isExpired && !isAlreadySubmitted && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+          <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-red-800">
+            <strong>Assessment Window Closed</strong>
+            <p className="mt-1">This assessment is no longer available. The submission window has expired.</p>
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="flex gap-3">
         {/* Start Assessment Button */}
@@ -172,9 +185,21 @@ export const AssessmentAccessCard: React.FC<AssessmentAccessCardProps> = ({
           <Button
             onClick={handleStart}
             disabled={!canAccess || isLoading}
-            className={`flex-1 ${canAccess ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400'}`}
+            className={`flex-1 ${
+              canAccess 
+                ? 'bg-green-600 hover:bg-green-700' 
+                : isExpired
+                ? 'bg-red-400 cursor-not-allowed'
+                : 'bg-gray-400 cursor-not-allowed'
+            }`}
           >
-            {isLocked ? (
+            {/* ✅ UPDATED: Better button states */}
+            {isExpired ? (
+              <>
+                <XCircle className="w-4 h-4 mr-2" />
+                Expired
+              </>
+            ) : isNotYetOpen ? (
               <>
                 <Lock className="w-4 h-4 mr-2" />
                 Locked
@@ -185,7 +210,10 @@ export const AssessmentAccessCard: React.FC<AssessmentAccessCardProps> = ({
                 Start Assessment
               </>
             ) : (
-              'Not Available'
+              <>
+                <Lock className="w-4 h-4 mr-2" />
+                Not Available
+              </>
             )}
           </Button>
         )}
@@ -221,10 +249,13 @@ export const CompactAssessmentAccessCard: React.FC<{
   onClick?: () => void;
   className?: string;
 }> = ({ assessment, studentProfileId, onClick, className = '' }) => {
-  const { accessData, canAccess, isAlreadySubmitted } = useAssessmentAccess(
-    assessment.id,
-    studentProfileId
-  );
+  const { 
+    accessData, 
+    canAccess, 
+    isAlreadySubmitted,
+    isExpired,
+    isNotYetOpen 
+  } = useAssessmentAccess(assessment.id, studentProfileId);
 
   return (
     <div
@@ -238,7 +269,22 @@ export const CompactAssessmentAccessCard: React.FC<{
             {assessment.subjectName} • {assessment.questionCount} questions
           </p>
           
-          {canAccess && accessData?.windowEnd && (
+          {/* ✅ UPDATED: Show status-specific info */}
+          {isExpired && !isAlreadySubmitted && (
+            <div className="mt-2 flex items-center gap-1 text-xs text-red-600">
+              <XCircle className="w-3 h-3" />
+              <span>Expired</span>
+            </div>
+          )}
+          
+          {isNotYetOpen && (
+            <div className="mt-2 flex items-center gap-1 text-xs text-gray-600">
+              <Lock className="w-3 h-3" />
+              <span>Opens soon</span>
+            </div>
+          )}
+          
+          {canAccess && accessData?.windowEnd && !isAlreadySubmitted && (
             <div className="mt-2">
               <CountdownTimer
                 endTime={accessData.windowEnd}

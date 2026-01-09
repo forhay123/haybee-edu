@@ -1,5 +1,5 @@
 // ============================================================
-// FILE: useAssessmentAccess.ts (COMPLETE & FIXED)
+// FILE: useAssessmentAccess.ts (UPDATED - Better Expired Detection)
 // Location: frontend/src/features/assessments/hooks/useAssessmentAccess.ts
 // ============================================================
 
@@ -67,8 +67,10 @@ export const useAssessmentAccess = (
     }
   }, [query.data]);
 
-  // ✅ Use statusCode for better accuracy
+  // ✅ IMPROVED: Better status detection
   const alreadySubmitted = isAlreadySubmitted(query.data);
+  const isExpired = query.data?.statusCode === 'EXPIRED';
+  const isNotYetOpen = query.data?.statusCode === 'NOT_YET_OPEN';
 
   return {
     // React Query properties
@@ -79,10 +81,11 @@ export const useAssessmentAccess = (
     
     // Access flags
     canAccess: query.data?.canAccess ?? false,
-    isLocked: !query.data?.canAccess && !alreadySubmitted,
+    isLocked: isNotYetOpen, // ✅ FIXED: Locked = not yet open (not expired)
     isOpen: query.data?.canAccess && !alreadySubmitted,
     isAlreadySubmitted: alreadySubmitted,
-    isExpired: query.data?.statusCode === 'EXPIRED',
+    isExpired: isExpired, // ✅ FIXED: Better expired detection
+    isNotYetOpen: isNotYetOpen, // ✅ NEW: Separate state for not-yet-open
     
     // Time tracking
     minutesUntilOpen,
