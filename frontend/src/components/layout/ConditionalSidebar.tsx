@@ -197,7 +197,7 @@ const links: Record<Role, NavSection[]> = {
       links: [
         { name: "Dashboard", path: "/dashboard", icon: "🏠" },
         { name: "My Profile", path: "/student-profiles/student", icon: "🧑‍🎓" },
-        { name: "My Assessments", path: "/assessments/students", icon: "📝" },
+        { name: "My Assessments", path: "/assessments/student", icon: "📝" },
       ],
     },
     {
