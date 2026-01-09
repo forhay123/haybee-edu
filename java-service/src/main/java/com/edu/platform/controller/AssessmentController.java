@@ -24,6 +24,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+
+import com.edu.platform.repository.assessment.AssessmentSubmissionRepository;
+import com.edu.platform.service.EnrollmentService;
+
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +47,8 @@ public class AssessmentController {
     private final StudentProfileRepository studentProfileRepository; 
     private final AssessmentAccessService assessmentAccessService;
     private final LessonAIQuestionService lessonAIQuestionService;
+    private final AssessmentSubmissionRepository submissionRepository;
+    private final EnrollmentService enrollmentService;
 
     /**
      * ✅ Helper method to get current authenticated user
@@ -738,6 +744,80 @@ public class AssessmentController {
         log.info("✅ Returning {} gradebook assessments for student", assessments.size());
         
         return ResponseEntity.ok(assessments);
+    }
+    
+    
+    /**
+     * ✅ Manual trigger for testing missed assessment processing
+     */
+    @PostMapping("/admin/process-missed-assessments")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+        summary = "Process missed assessments",
+        description = "Manually trigger processing of missed gradebook assessments (creates zero scores)"
+    )
+    public ResponseEntity<Map<String, Object>> processMissedAssessments() {
+        
+        User admin = getCurrentUser();
+        log.info("🔧 Manual trigger: Processing missed assessments - initiated by {}", admin.getEmail());
+        
+        LocalDateTime now = LocalDateTime.now();
+        
+        List<AssessmentType> gradebookTypes = List.of(
+            AssessmentType.QUIZ,
+            AssessmentType.CLASSWORK,
+            AssessmentType.TEST1,
+            AssessmentType.TEST2,
+            AssessmentType.ASSIGNMENT,
+            AssessmentType.EXAM
+        );
+        
+        List<Assessment> overdueAssessments = assessmentRepository.findAll().stream()
+            .filter(a -> a.getPublished())
+            .filter(a -> gradebookTypes.contains(a.getType()))
+            .filter(a -> a.getDueDate() != null && a.getDueDate().isBefore(now))
+            .collect(Collectors.toList());
+        
+        int zeroSubmissionsCreated = 0;
+        int assessmentsProcessed = 0;
+        
+        for (Assessment assessment : overdueAssessments) {
+            try {
+                List<Long> enrolledStudentIds = enrollmentService
+                    .getStudentProfileIdsBySubjectId(assessment.getSubject().getId());
+                
+                for (Long studentId : enrolledStudentIds) {
+                    boolean hasSubmitted = submissionRepository
+                        .existsByAssessmentIdAndStudentId(assessment.getId(), studentId);
+                    
+                    if (!hasSubmitted) {
+                        if (assessment.isCustomAssessment() && 
+                            assessment.getTargetStudentId() != null &&
+                            !assessment.getTargetStudentId().equals(studentId)) {
+                            continue;
+                        }
+                        
+                        assessmentService.createZeroScoreSubmission(
+                            assessment.getId(),
+                            studentId,
+                            "Missed deadline - manual processing"
+                        );
+                        zeroSubmissionsCreated++;
+                    }
+                }
+                assessmentsProcessed++;
+            } catch (Exception e) {
+                log.error("Failed to process assessment {}: {}", assessment.getId(), e.getMessage());
+            }
+        }
+        
+        return ResponseEntity.ok(Map.of(
+            "message", "Processing complete",
+            "overdueAssessments", overdueAssessments.size(),
+            "assessmentsProcessed", assessmentsProcessed,
+            "zeroSubmissionsCreated", zeroSubmissionsCreated,
+            "processedBy", admin.getEmail()
+        ));
     }
     
 }

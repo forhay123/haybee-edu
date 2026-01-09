@@ -100,4 +100,45 @@ public class EnrollmentService {
 
         return userIds;
     }
+    
+    /**
+     * ✅ Get all student profile IDs enrolled in a specific subject
+     * Used by MissedAssessmentScheduler to create zero-score submissions
+     * 
+     * @param subjectId Subject ID
+     * @return List of student profile IDs
+     */
+    @SuppressWarnings("unchecked")
+    public List<Long> getStudentProfileIdsBySubjectId(Long subjectId) {
+        log.info("📚 Getting student profile IDs for subject ID: {}", subjectId);
+        
+        // Native SQL query to get student profile IDs
+        String sql = """
+            SELECT DISTINCT sp.id AS student_profile_id
+            FROM academic.enrollments e
+            JOIN academic.student_profiles sp ON e.student_profile_id = sp.id
+            JOIN academic.subjects s ON s.class_id = e.class_id
+            WHERE s.id = :subjectId
+            AND e.active = true
+            ORDER BY sp.id
+            """;
+        
+        Query query = entityManager.createNativeQuery(sql);
+        query.setParameter("subjectId", subjectId);
+        
+        List<Long> studentProfileIds = (List<Long>) query.getResultList().stream()
+                .map(result -> {
+                    if (result instanceof Number) {
+                        return ((Number) result).longValue();
+                    }
+                    return null;
+                })
+                .filter(id -> id != null)
+                .toList();
+        
+        log.info("✅ Found {} student profiles enrolled in subject {}", studentProfileIds.size(), subjectId);
+        log.debug("Student profile IDs: {}", studentProfileIds);
+        
+        return studentProfileIds;
+    }
 }

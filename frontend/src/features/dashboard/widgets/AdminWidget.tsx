@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import axiosInstance from "../../../api/axios";
 import {
   Calendar,
@@ -13,10 +13,13 @@ import {
   BarChart3,
   Settings,
   Eye,
+  AlertCircle,
+  CheckCircle,
 } from "lucide-react";
 import { format, isValid, parseISO } from "date-fns";
 import { useSelector } from "react-redux";
 import { RootState } from "@/store/store";
+import toast from "react-hot-toast";
 
 // ----------------------
 // INTERFACES
@@ -126,6 +129,42 @@ const AdminWidget: React.FC = () => {
   const user = useSelector((state: RootState) => state.auth.user);
   const userRoles = user?.roles || [];
   const isAdmin = userRoles.includes("ADMIN");
+  const [processingMissed, setProcessingMissed] = useState(false);
+
+  // ✅ Mutation for processing missed assessments
+  const processMissedMutation = useMutation({
+    mutationFn: async () => {
+      const response = await axiosInstance.post('/assessments/admin/process-missed-assessments');
+      return response.data;
+    },
+    onSuccess: (data) => {
+      toast.success(
+        `✅ Processed ${data.assessmentsProcessed} assessments. Created ${data.zeroSubmissionsCreated} zero-score submissions.`,
+        { duration: 5000 }
+      );
+      setProcessingMissed(false);
+    },
+    onError: (error: any) => {
+      toast.error(
+        `❌ Failed to process missed assessments: ${error.response?.data?.message || error.message}`,
+        { duration: 5000 }
+      );
+      setProcessingMissed(false);
+    }
+  });
+
+  const handleProcessMissedAssessments = () => {
+    if (processingMissed) return;
+    
+    const confirmed = window.confirm(
+      'This will create zero-score submissions for all students who missed gradebook assessment deadlines. Continue?'
+    );
+    
+    if (confirmed) {
+      setProcessingMissed(true);
+      processMissedMutation.mutate();
+    }
+  };
 
   // ----------------------
   // QUERY: Today's all live sessions
@@ -543,6 +582,39 @@ const AdminWidget: React.FC = () => {
       {/* ---------------------- */}
       <div className="p-6 bg-white rounded-lg shadow-md border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Admin Actions</h3>
+
+        {/* ✅ Process Missed Assessments Button */}
+        <div className="mb-4 p-4 bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-orange-600" />
+                Process Missed Assessments
+              </h4>
+              <p className="text-sm text-gray-600 mb-3">
+                Automatically create zero-score submissions for students who missed gradebook assessment deadlines.
+                This normally runs hourly, but you can trigger it manually here.
+              </p>
+              <button
+                onClick={handleProcessMissedAssessments}
+                disabled={processingMissed}
+                className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition text-sm font-semibold flex items-center gap-2"
+              >
+                {processingMissed ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Process Now
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Link
