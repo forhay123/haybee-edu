@@ -3,8 +3,10 @@ package com.edu.platform.service.assessment;
 import com.edu.platform.dto.assessment.AccessCheckResult;
 import com.edu.platform.model.StudentProfile;
 import com.edu.platform.model.assessment.Assessment;
+import com.edu.platform.model.assessment.AssessmentWindowReschedule;
 import com.edu.platform.model.progress.StudentLessonProgress;
 import com.edu.platform.repository.assessment.AssessmentSubmissionRepository;
+import com.edu.platform.repository.assessment.AssessmentWindowRescheduleRepository;
 import com.edu.platform.repository.progress.StudentLessonProgressRepository;
 import com.edu.platform.repository.StudentProfileRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,9 +22,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Phase 2.6: Assessment Access Control Service
- * Validates if student can access assessment at current time
- * ✅ UPDATED: Now handles multi-period lessons correctly
+ * Assessment Access Control Service
+ * ✅ UPDATED: Now checks for teacher reschedules before granting access
  */
 @Service
 @RequiredArgsConstructor
@@ -32,10 +33,11 @@ public class AssessmentAccessService {
     private final StudentLessonProgressRepository progressRepository;
     private final AssessmentSubmissionRepository submissionRepository;
     private final StudentProfileRepository studentProfileRepository;
+    private final AssessmentWindowRescheduleRepository rescheduleRepository; // ✅ NEW
     
     /**
      * ✅ UPDATED: Check if student can access assessment right now
-     * Now handles multiple progress records for multi-period lessons
+     * Now checks for reschedules FIRST before using original windows
      */
     @Transactional
     public AccessCheckResult canAccessAssessment(
@@ -46,7 +48,18 @@ public class AssessmentAccessService {
         log.debug("Checking assessment access: student={}, assessment={}, time={}", 
                  student.getId(), assessment.getId(), now);
         
-        // ✅ FIXED: Get ALL progress records (handles multi-period lessons)
+        // ✅ STEP 1: Check for active reschedule FIRST
+        Optional<AssessmentWindowReschedule> activeReschedule = 
+            rescheduleRepository.findActiveRescheduleForStudent(student.getId(), assessment.getId());
+        
+        boolean hasReschedule = activeReschedule.isPresent();
+        
+        if (hasReschedule) {
+            log.info("🔄 Found active reschedule for student {} on assessment {}", 
+                     student.getId(), assessment.getId());
+        }
+        
+        // ✅ STEP 2: Get ALL progress records (handles multi-period lessons)
         List<StudentLessonProgress> progressList = progressRepository
                 .findAllByStudentProfileIdAndAssessmentId(student.getId(), assessment.getId());
         
@@ -101,8 +114,25 @@ public class AssessmentAccessService {
             progress = progressRepository.save(progress);
         }
         
-        LocalDateTime windowStart = progress.getAssessmentWindowStart();
-        LocalDateTime windowEnd = progress.getAssessmentWindowEnd();
+        // ✅ STEP 3: Use rescheduled windows if exists, otherwise use original
+        LocalDateTime windowStart;
+        LocalDateTime windowEnd;
+        
+        if (hasReschedule) {
+            AssessmentWindowReschedule reschedule = activeReschedule.get();
+            windowStart = reschedule.getNewWindowStart();
+            windowEnd = reschedule.getNewWindowEnd();
+            
+            log.info("🔄 Using rescheduled window: start={}, end={} (original was {}-{})", 
+                     windowStart, windowEnd, 
+                     progress.getAssessmentWindowStart(), 
+                     progress.getAssessmentWindowEnd());
+        } else {
+            windowStart = progress.getAssessmentWindowStart();
+            windowEnd = progress.getAssessmentWindowEnd();
+        }
+        
+        // ✅ STEP 4: Continue with existing access checks using the (possibly rescheduled) windows
         
         // Check if before window starts
         if (now.isBefore(windowStart)) {
@@ -112,6 +142,10 @@ public class AssessmentAccessService {
                 formatTime(windowStart),
                 formatTime(now)
             );
+            
+            if (hasReschedule) {
+                reason += " (Rescheduled by teacher)";
+            }
             
             log.debug("Access BLOCKED: before window (opens in {} minutes)", minutesUntil);
             
@@ -129,6 +163,10 @@ public class AssessmentAccessService {
                 "Assessment window closed. Deadline was %s",
                 formatTime(windowEnd)
             );
+            
+            if (hasReschedule) {
+                reason += " (Rescheduled window)";
+            }
             
             log.debug("Access BLOCKED: after window");
             
@@ -148,16 +186,24 @@ public class AssessmentAccessService {
         
         // All checks passed - access allowed
         long minutesRemaining = ChronoUnit.MINUTES.between(now, windowEnd);
-        boolean inGracePeriod = isInGracePeriod(progress, now);
+        boolean inGracePeriod = isInGracePeriod(progress, now, activeReschedule);
         
-        log.debug("Access ALLOWED: {} minutes remaining, grace period: {}", 
-                 minutesRemaining, inGracePeriod);
+        log.debug("Access ALLOWED: {} minutes remaining, grace period: {}, rescheduled: {}", 
+                 minutesRemaining, inGracePeriod, hasReschedule);
         
-        return AccessCheckResult.allowed(
+        AccessCheckResult result = AccessCheckResult.allowed(
                 windowEnd,
                 minutesRemaining,
                 inGracePeriod
         );
+        
+        // ✅ NEW: Add reschedule info to result if applicable
+        if (hasReschedule) {
+            log.info("✅ Access granted with rescheduled window: {} to {}", 
+                     windowStart, windowEnd);
+        }
+        
+        return result;
     }
     
     /**
@@ -209,15 +255,35 @@ public class AssessmentAccessService {
     }
     
     /**
-     * Check if currently in grace period
+     * ✅ UPDATED: Check if currently in grace period
+     * Now considers reschedule grace period if reschedule exists
      */
-    private boolean isInGracePeriod(StudentLessonProgress progress, LocalDateTime now) {
-        // Grace period logic could be enhanced with lessonEnd from DailySchedule
-        // For now, we assume grace period is the last 30 minutes of the window
-        LocalDateTime windowEnd = progress.getAssessmentWindowEnd();
-        LocalDateTime graceStart = windowEnd.minusMinutes(30);
+    private boolean isInGracePeriod(
+            StudentLessonProgress progress, 
+            LocalDateTime now,
+            Optional<AssessmentWindowReschedule> reschedule) {
         
-        return now.isAfter(graceStart) && now.isBefore(windowEnd);
+        LocalDateTime graceEnd;
+        
+        if (reschedule.isPresent() && reschedule.get().getNewGraceEnd() != null) {
+            // Use rescheduled grace period
+            graceEnd = reschedule.get().getNewGraceEnd();
+        } else if (progress.getGracePeriodEnd() != null) {
+            // Use original grace period
+            graceEnd = progress.getGracePeriodEnd();
+        } else {
+            // Default: 30 minutes after window end
+            LocalDateTime windowEnd = reschedule.isPresent() 
+                ? reschedule.get().getNewWindowEnd()
+                : progress.getAssessmentWindowEnd();
+            graceEnd = windowEnd.plusMinutes(30);
+        }
+        
+        LocalDateTime windowEnd = reschedule.isPresent()
+            ? reschedule.get().getNewWindowEnd()
+            : progress.getAssessmentWindowEnd();
+        
+        return now.isAfter(windowEnd) && now.isBefore(graceEnd);
     }
     
     /**

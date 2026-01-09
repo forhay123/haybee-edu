@@ -149,6 +149,31 @@ individual:
     notify:
       teacher: true
 
+# ============================================================
+# ✅ ASSESSMENT WINDOW RESCHEDULING (Teacher Control)
+# Allows teachers to proactively reschedule assessments BEFORE they start
+# Prevents cheating by cancelling original window
+# ============================================================
+
+assessment-reschedule:
+  # Require reason for rescheduling
+  require-reason: true
+  
+  # Minimum reason length (characters)
+  min-reason-length: 10
+  
+  # Maximum future time for rescheduling (months)
+  # Cannot reschedule more than 3 months ahead
+  max-future-months: 3
+  
+  # Window duration (hours) - FIXED at 1 hour
+  # All rescheduled assessments get exactly 1 hour
+  window-duration-hours: 1
+  
+  # Grace period after window end (minutes)
+  # Student gets 30 extra minutes after window closes
+  grace-period-minutes: 30
+
 # 📊 Logging Configuration
 logging:
   level:
@@ -160,6 +185,7 @@ logging:
     com.edu.platform.service.individual.AssessmentWindowCalculator: DEBUG
     com.edu.platform.service.individual.AssessmentAccessibilityService: DEBUG
     com.edu.platform.service.individual.GracePeriodExpiryService: DEBUG
+    com.edu.platform.service.assessment.AssessmentWindowRescheduleService: DEBUG
     com.edu.platform.scheduler.AssessmentWindowOpenerTask: INFO
     com.edu.platform.scheduler.GracePeriodExpiryTask: INFO
 

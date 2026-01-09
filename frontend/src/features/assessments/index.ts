@@ -6,6 +6,9 @@
 export * from './types/assessmentTypes';
 export * from './types/customAssessmentTypes';
 
+// ⭐ NEW: Window Reschedule Types
+export * from './types/rescheduleTypes';
+
 // ================================
 // ⚙️ API Services
 // ================================
@@ -18,6 +21,10 @@ export { adminAssessmentsApi } from './api/adminAssessmentsApi';
 // ⭐ NEW: Custom Period Assessment APIs
 export * from './api/customAssessmentsApi';
 export * from './api/multiPeriodApi';
+
+// ⭐ NEW: Window Reschedule API
+// ⭐ NEW: Window Reschedule API
+export { windowRescheduleApi } from './api/windowRescheduleApi';
 
 // ================================
 // 🔁 React Query Hooks
@@ -104,6 +111,23 @@ export { usePeriodDependency } from './hooks/usePeriodDependency';
 export { useMultiPeriodProgress } from './hooks/useMultiPeriodProgress';
 export { useSubmissionAnalysis } from './hooks/useSubmissionAnalysis';
 
+// ⭐ NEW: Window Reschedule Hooks
+export {
+  useTeacherReschedules,
+  useMyReschedules,
+  useAdminReschedules,
+  useRescheduleDetail,
+  useActiveRescheduleForLesson,
+  useRescheduleAssessment,
+  useCancelReschedule,
+  useHasActiveReschedule,
+  useReschedulesForStudent,
+  useActiveReschedulesCount,
+  usePrefetchStudentReschedules,
+  useOptimisticRescheduleUpdate,
+  rescheduleKeys
+} from './hooks/useWindowReschedule';
+
 // ================================
 // 🧰 Utility Exports
 // ================================
@@ -135,6 +159,22 @@ export {
   groupPeriodsByStatus,
   sortPeriodsBySequence
 } from './api/multiPeriodApi';
+
+// ⭐ NEW: Window Reschedule Utility Functions
+export {
+  hasActiveReschedule,
+  canCancelReschedule,
+  validateRescheduleTime,
+  validateReason,
+  formatTimeDifference,
+  calculateNewWindowEnd,
+  calculateGraceEnd,
+  formatForApi,
+  isRescheduleActive,
+  getRescheduleStatusConfig,
+  RESCHEDULE_CONSTRAINTS,
+  RESCHEDULE_MESSAGES
+} from './types/rescheduleTypes';
 
 // ================================
 // 📄 Page Exports
@@ -184,6 +224,11 @@ export { QuestionForm } from './components/QuestionForm';
 export { SubmissionResults } from './components/SubmissionResults';
 export { TeacherQuestionBank } from './components/TeacherQuestionBank';
 export { default as CreateLessonAssessmentForm } from './components/CreateLessonAssessmentForm';
+
+// ⭐ NEW: Window Reschedule Components
+export { RescheduleBadge } from './components/RescheduleBadge';
+export { RescheduleModal } from './components/RescheduleModal';
+export { RescheduleListView } from './components/RescheduleListView';
 
 // ⭐ TODO: Add these components when created
 // export { PendingAssessmentCard } from './components/PendingAssessmentCard';
