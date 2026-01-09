@@ -1,3 +1,8 @@
+// ============================================================
+// FILE: Add this to useStudentProfiles.ts
+// Location: frontend/src/features/studentProfiles/hooks/useStudentProfiles.ts
+// ============================================================
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { studentProfilesApi, StudentProfileDto } from "../api/studentProfilesApi";
 
@@ -76,5 +81,29 @@ export const useMyProfile = (options?: { enabled?: boolean }) =>
     queryKey: ["myProfile"],
     queryFn: () => studentProfilesApi.getMe(),
     retry: false,
-    enabled: options?.enabled ?? true, // ✅ Allow disabling the query
+    enabled: options?.enabled ?? true,
   });
+
+// ============================================================
+// ✅ NEW: Hook to get just the student profile ID
+// ============================================================
+
+/**
+ * Hook to get current student's profile ID
+ * Returns the ID and loading state for the current authenticated student
+ * 
+ * Works for ALL student types: SCHOOL, HOME, ASPIRANT, INDIVIDUAL
+ * 
+ * @example
+ * const { studentProfileId, isLoading } = useCurrentStudentProfileId();
+ */
+export const useCurrentStudentProfileId = () => {
+  const { data: profile, isLoading, error } = useMyProfile();
+
+  return {
+    studentProfileId: profile?.id,
+    isLoading,
+    error,
+    profile, // Include full profile for convenience
+  };
+};
