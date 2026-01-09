@@ -127,7 +127,7 @@ export const CreateAssessmentPage: React.FC = () => {
     try {
       await createAssessment.mutateAsync(request);
       toast.success('Assessment created successfully!');
-      navigate(`/teacher/subjects/${formData.subjectId}/assessments`);
+      navigate('/assessments/teacher');
     } catch (error: any) {
       console.error('Assessment creation error:', error);
       toast.error(error.response?.data?.message || 'Failed to create assessment');
