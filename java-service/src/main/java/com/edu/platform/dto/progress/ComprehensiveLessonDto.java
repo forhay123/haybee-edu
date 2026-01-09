@@ -214,30 +214,46 @@ public class ComprehensiveLessonDto {
     }
     
     /**
-     * ✅ Compute lesson status from progress entity
+     * ✅ FIXED: Compute lesson status from progress entity
+     * Status logic:
+     * 1. COMPLETED - Lesson is marked as completed
+     * 2. MISSED - Grace period has expired OR has incomplete reason
+     * 3. IN_PROGRESS - Assessment window has started but grace period not expired
+     * 4. SCHEDULED - Assessment window hasn't started yet
      */
     private static String computeStatus(StudentLessonProgress progress) {
         var now = java.time.LocalDateTime.now();
         
+        // 1. If completed
         if (progress.isCompleted()) {
             return "COMPLETED";
         }
         
+        // 2. If has incomplete reason or grace period expired → MISSED
         if (progress.getIncompleteReason() != null) {
             return "MISSED";
         }
         
-        if (progress.getAssessmentWindowEnd() != null && 
-            progress.getAssessmentWindowEnd().isBefore(now)) {
+        if (progress.getGracePeriodEnd() != null && 
+            progress.getGracePeriodEnd().isBefore(now)) {
             return "MISSED";
         }
         
+        // 3. If assessment window has STARTED (but grace period not expired) → IN_PROGRESS
+        if (progress.getAssessmentWindowStart() != null && 
+            now.isAfter(progress.getAssessmentWindowStart()) &&
+            (progress.getGracePeriodEnd() == null || now.isBefore(progress.getGracePeriodEnd()))) {
+            return "IN_PROGRESS";
+        }
+        
+        // 4. If scheduled date is today or in the future → SCHEDULED
         if (progress.getScheduledDate() != null &&
-            progress.getScheduledDate().isAfter(java.time.LocalDate.now())) {
+            !progress.getScheduledDate().isBefore(java.time.LocalDate.now())) {
             return "SCHEDULED";
         }
         
-        return "IN_PROGRESS";
+        // 5. Fallback for old uncompleted lessons → MISSED
+        return "MISSED";
     }
     
     /**
