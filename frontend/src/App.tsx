@@ -889,9 +889,8 @@ const App = () => {
                 </ProtectedRoute>
               }
             />
-            // ✅ CORRECTED ROUTES STRUCTURE
+           
 
-            // 1. List all assessments available to student
             <Route
               path="/assessments/student"
               element={
@@ -914,7 +913,6 @@ const App = () => {
               }
             />
 
-            // 2. Take a specific assessment
             <Route
               path="/assessments/student/:assessmentId"
               element={
@@ -926,7 +924,6 @@ const App = () => {
               }
             />
 
-            // 3. View all student's assessment results (summary page)
             <Route
               path="/assessments/results"
               element={
@@ -938,8 +935,7 @@ const App = () => {
               }
             />
 
-            // 4. View specific submission result (detailed view)
-            <Route
+             <Route
               path="/submissions/:submissionId/results"
               element={
                 <ProtectedRoute roles={["STUDENT", "TEACHER", "ADMIN"]}>
