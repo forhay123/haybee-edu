@@ -913,6 +913,17 @@ const App = () => {
                 </ProtectedRoute>
               }
             />
+            
+            <Route
+              path="/assessments/:assessmentId/take"
+              element={
+                <ProtectedRoute roles={["STUDENT"]}>
+                  <AppLayout>
+                    <StudentAssessmentTakePage /> {/* New component */}
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
 
             // 3. View all student's assessment results (summary page)
             <Route
