@@ -41,7 +41,7 @@ export const GradebookAssessmentCard: React.FC<GradebookAssessmentCardProps> = (
   const handleStart = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (assessment.isAccessible && !assessment.hasSubmitted) {
-      navigate(`/assessments/${assessment.id}`);
+      navigate(`/assessments/take/${assessment.id}`)
     }
   };
 
