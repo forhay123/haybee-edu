@@ -1,5 +1,5 @@
 // ============================================================
-// FILE: AssessmentAccessCard.tsx (UPDATED - Better Expired Display)
+// FILE: AssessmentAccessCard.tsx (FIXED - Navigation Issue)
 // Location: frontend/src/features/assessments/components/AssessmentAccessCard.tsx
 // ============================================================
 
@@ -51,26 +51,42 @@ export const AssessmentAccessCard: React.FC<AssessmentAccessCardProps> = ({
   };
 
   const handleStart = (e?: React.MouseEvent) => {
-    if (e && onClick) {
+    console.log('🎯 handleStart called', { 
+      canAccess, 
+      isAlreadySubmitted, 
+      hasCallback: !!onStartAssessment,
+      assessmentId: assessment.id 
+    });
+    
+    if (e) {
       e.stopPropagation();
     }
     
-    if (canAccess && !isAlreadySubmitted && onStartAssessment) {
+    // Always try onStartAssessment first if available
+    if (onStartAssessment && canAccess && !isAlreadySubmitted) {
+      console.log('✅ Calling onStartAssessment');
       onStartAssessment();
-    } else if (onClick) {
-      onClick();
+    } else {
+      console.log('❌ Cannot start:', { canAccess, isAlreadySubmitted, hasCallback: !!onStartAssessment });
     }
   };
 
   const handleViewResults = (e?: React.MouseEvent) => {
-    if (e && onClick) {
+    console.log('🎯 handleViewResults called', { 
+      isAlreadySubmitted, 
+      hasCallback: !!onViewResults 
+    });
+    
+    if (e) {
       e.stopPropagation();
     }
     
-    if (isAlreadySubmitted && onViewResults) {
+    // Always try onViewResults first if available
+    if (onViewResults && isAlreadySubmitted) {
+      console.log('✅ Calling onViewResults');
       onViewResults();
-    } else if (onClick) {
-      onClick();
+    } else {
+      console.log('❌ Cannot view results:', { isAlreadySubmitted, hasCallback: !!onViewResults });
     }
   };
 
