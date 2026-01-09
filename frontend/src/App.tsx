@@ -879,19 +879,9 @@ const App = () => {
             />
 
             {/* 🧠 Assessments */}
-            <Route
-              path="/assessments/student"
-              element={
-                <ProtectedRoute roles={["STUDENT"]}>
-                  <AppLayout>
-                    <StudentAssessmentListPage />  {/* NEW COMPONENT */}
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
            
             <Route
-              path="/assessments/:assessmentId/take"
+              path="/assessments/take/:assessmentId"
               element={
                 <ProtectedRoute roles={["STUDENT"]}>
                   <AppLayout>
@@ -908,6 +898,19 @@ const App = () => {
                 <ProtectedRoute roles={["STUDENT"]}>
                   <AppLayout>
                     <StudentAssessmentResultsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+
+
+            
+            <Route
+              path="/assessments/student"
+              element={
+                <ProtectedRoute roles={["STUDENT"]}>
+                  <AppLayout>
+                    <StudentAssessmentListPage />  {/* NEW COMPONENT */}
                   </AppLayout>
                 </ProtectedRoute>
               }

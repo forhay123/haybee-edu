@@ -172,7 +172,7 @@ export const StudentAssessmentListPage: React.FC = () => {
     <div className="container mx-auto px-4 py-8 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">My Assessmentsss</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">My Assessments</h1>
         <p className="text-gray-600">
           View and manage your lesson and gradebook assessments
         </p>
@@ -323,19 +323,11 @@ export const StudentAssessmentListPage: React.FC = () => {
                   assessment={assessment}
                   studentProfileId={studentProfileId}
                   onStartAssessment={() => {
-                    console.log('🚀 START ASSESSMENT CLICKED:', {
-                      id: assessment.id,
-                      title: assessment.title,
-                      navigatingTo: `/assessments/${assessment.id}/take`
-                    });
-                    navigate(`/assessments/${assessment.id}/take`);
-                  }}
-                  onViewResults={() => {
-                    console.log('📊 VIEW RESULTS CLICKED:', {
-                      submissionId: assessment.submissionId
-                    });
+                  navigate(`/assessments/take/${assessment.id}`);
+                }}
+                  onViewResults={() => 
                     navigate(`/submissions/${assessment.submissionId}/results`)
-                  }}
+                  }
                 />
               ) : (
                 <GradebookAssessmentCard assessment={assessment} />
