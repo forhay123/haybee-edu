@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface WeeklyScheduleRepository extends JpaRepository<WeeklySchedule, Long> {
@@ -79,4 +80,18 @@ public interface WeeklyScheduleRepository extends JpaRepository<WeeklySchedule, 
            "WHERE ws.classEntity.id IN :classIds " +
            "ORDER BY ws.weekNumber ASC, ws.dayOfWeek ASC, ws.periodNumber ASC")
     List<WeeklySchedule> findByClassIdIn(@Param("classIds") List<Long> classIds);
+    
+    /**
+     * ✅ NEW: Find schedule entry by lesson topic and day of week
+     * Used for determining assessment windows from actual timetable
+     * Returns the first period if lesson appears multiple times same day
+     */
+    @Query("SELECT ws FROM WeeklySchedule ws " +
+           "WHERE ws.lessonTopic.id = :lessonTopicId " +
+           "AND ws.dayOfWeek = :dayOfWeek " +
+           "ORDER BY ws.periodNumber ASC")
+    Optional<WeeklySchedule> findByLessonTopicIdAndDayOfWeek(
+            @Param("lessonTopicId") Long lessonTopicId,
+            @Param("dayOfWeek") DayOfWeek dayOfWeek
+    );
 }

@@ -2,9 +2,11 @@ package com.edu.platform.service.assessment;
 
 import com.edu.platform.dto.assessment.AccessCheckResult;
 import com.edu.platform.model.StudentProfile;
+import com.edu.platform.model.WeeklySchedule;
 import com.edu.platform.model.assessment.Assessment;
 import com.edu.platform.model.assessment.AssessmentWindowReschedule;
 import com.edu.platform.model.progress.StudentLessonProgress;
+import com.edu.platform.repository.WeeklyScheduleRepository;
 import com.edu.platform.repository.assessment.AssessmentRepository;
 import com.edu.platform.repository.assessment.AssessmentSubmissionRepository;
 import com.edu.platform.repository.assessment.AssessmentWindowRescheduleRepository;
@@ -15,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -24,7 +27,7 @@ import java.util.Optional;
 
 /**
  * Assessment Access Control Service
- * ✅ FIXED: Now properly handles assessment access with reschedules
+ * ✅ FIXED: Now uses ACTUAL scheduled times from timetable
  */
 @Service
 @RequiredArgsConstructor
@@ -36,10 +39,11 @@ public class AssessmentAccessService {
     private final StudentProfileRepository studentProfileRepository;
     private final AssessmentWindowRescheduleRepository rescheduleRepository;
     private final AssessmentRepository assessmentRepository;
+    private final WeeklyScheduleRepository weeklyScheduleRepository; // ✅ NEW
     
     /**
      * ✅ FIXED: Check if student can access assessment right now
-     * Properly handles null assessment by fetching it from progress
+     * Now properly rejects unscheduled assessments
      */
     @Transactional
     public AccessCheckResult canAccessAssessment(
@@ -99,19 +103,28 @@ public class AssessmentAccessService {
             }
         }
         
-        // ✅ NEW: If still no progress, create one automatically
+        // ✅ UPDATED: If no progress found, assessment is not scheduled (don't auto-create!)
         if (progress == null) {
-            log.warn("⚠️ No progress record found. Creating automatic progress for student {} and assessment {}", 
+            log.warn("❌ No progress record found for student {} and assessment {}. Lesson not scheduled.", 
                     student.getId(), assessment.getId());
             
-            progress = createAutoProgressRecord(student, assessment, now.toLocalDate());
+            return AccessCheckResult.blocked(
+                "This assessment is not currently scheduled for you. " +
+                "Please check your timetable or contact your administrator."
+            );
         }
         
-        // ✅ NEW: Ensure assessment window is configured
+        // ✅ UPDATED: Ensure assessment window is configured with ACTUAL times
         if (progress.getAssessmentWindowStart() == null || progress.getAssessmentWindowEnd() == null) {
             log.info("⚙️ Configuring assessment window for progress {}", progress.getId());
-            configureAssessmentWindow(progress, now.toLocalDate());
-            progress = progressRepository.save(progress);
+            
+            try {
+                configureAssessmentWindow(progress, now.toLocalDate());
+                progress = progressRepository.save(progress);
+            } catch (IllegalStateException e) {
+                log.error("❌ Failed to configure assessment window: {}", e.getMessage());
+                return AccessCheckResult.blocked(e.getMessage());
+            }
         }
         
         // ✅ CRITICAL FIX: Ensure assessmentAccessible is set to true
@@ -213,49 +226,47 @@ public class AssessmentAccessService {
     }
     
     /**
-     * ✅ NEW: Create automatic progress record for assessment access
-     */
-    private StudentLessonProgress createAutoProgressRecord(
-            StudentProfile student,
-            Assessment assessment,
-            LocalDate date) {
-        
-        log.info("🔧 Creating automatic progress record for student {} and assessment {}", 
-                student.getId(), assessment.getId());
-        
-        StudentLessonProgress progress = StudentLessonProgress.builder()
-            .studentProfile(student)
-            .lessonTopic(assessment.getLessonTopic())
-            .subject(assessment.getSubject())
-            .assessment(assessment)
-            .scheduledDate(date)
-            .date(date)
-            .completed(false)
-            .periodNumber(1)
-            .priority(3)
-            .weight(1.0)
-            .assessmentAccessible(true)
-            .build();
-        
-        configureAssessmentWindow(progress, date);
-        
-        progress = progressRepository.save(progress);
-        
-        log.info("✅ Created automatic progress record: {}", progress.getId());
-        return progress;
-    }
-    
-    /**
-     * ✅ NEW: Configure assessment window with default values
+     * ✅ FIXED: Configure assessment window using ACTUAL scheduled times from timetable
+     * No more fake all-day windows!
      */
     private void configureAssessmentWindow(StudentLessonProgress progress, LocalDate date) {
-        LocalDateTime windowStart = date.atStartOfDay();
-        LocalDateTime windowEnd = date.atTime(23, 59, 59);
+        log.info("⚙️ Configuring assessment window for progress {} on date {}", 
+                 progress.getId(), date);
+        
+        // Get lesson topic
+        if (progress.getLessonTopic() == null) {
+            log.error("❌ Cannot configure window: progress has no lesson topic");
+            throw new IllegalStateException("Progress record missing lesson topic");
+        }
+        
+        // Find the weekly schedule entry for this lesson
+        DayOfWeek dayOfWeek = date.getDayOfWeek();
+        Optional<WeeklySchedule> scheduleOpt = weeklyScheduleRepository
+            .findByLessonTopicIdAndDayOfWeek(
+                progress.getLessonTopic().getId(),
+                dayOfWeek
+            );
+        
+        if (scheduleOpt.isEmpty()) {
+            log.warn("⚠️ No weekly schedule found for lesson topic {} on {}", 
+                     progress.getLessonTopic().getId(), dayOfWeek);
+            
+            throw new IllegalStateException(
+                String.format("Lesson '%s' is not scheduled for %s. Please check your timetable.", 
+                             progress.getLessonTopic().getTitle(), dayOfWeek));
+        }
+        
+        WeeklySchedule schedule = scheduleOpt.get();
+        
+        // ✅ Use ACTUAL scheduled times from timetable
+        LocalDateTime windowStart = LocalDateTime.of(date, schedule.getStartTime());
+        LocalDateTime windowEnd = LocalDateTime.of(date, schedule.getEndTime());
         
         progress.setAssessmentWindowStart(windowStart);
         progress.setAssessmentWindowEnd(windowEnd);
         
-        log.info("⚙️ Configured assessment window: {} to {}", windowStart, windowEnd);
+        log.info("✅ Configured window from schedule: {} to {} (Period {}, {})", 
+                 windowStart, windowEnd, schedule.getPeriodNumber(), schedule.getDayOfWeek());
     }
     
     /**
