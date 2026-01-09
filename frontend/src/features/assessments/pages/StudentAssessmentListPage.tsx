@@ -322,7 +322,15 @@ export const StudentAssessmentListPage: React.FC = () => {
                 <AssessmentAccessCard
                   assessment={assessment}
                   studentProfileId={studentProfileId}
-                  onStartAssessment={() => navigate(`/assessments/${assessment.id}/take`)}
+                  onStartAssessment={() => {
+                    // Make sure to use lessonTopicId if available
+                    if (assessment.lessonTopicId) {
+                      navigate(`/lesson-topics/${assessment.lessonTopicId}/assessment`);
+                    } else {
+                      // Fallback or show error
+                      console.error('No lessonTopicId available for assessment', assessment);
+                    }
+                  }}
                   onViewResults={() => 
                     navigate(`/submissions/${assessment.submissionId}/results`)
                   }
