@@ -14,11 +14,13 @@ export enum AssessmentType {
   EXAM = 'EXAM'
 }
 
+// ✅ UPDATED: Added FILL_IN_THE_BLANK
 export enum QuestionType {
   MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
   TRUE_FALSE = 'TRUE_FALSE',
   SHORT_ANSWER = 'SHORT_ANSWER',
-  ESSAY = 'ESSAY'
+  ESSAY = 'ESSAY',
+  FILL_IN_THE_BLANK = 'FILL_IN_THE_BLANK'
 }
 
 export interface Assessment {
@@ -110,6 +112,7 @@ export interface AssessmentSubmission {
   answers: AssessmentAnswer[];
 }
 
+// ✅ UPDATED: Added aiQuestionIds
 export interface CreateAssessmentRequest {
   title: string;
   description?: string;
@@ -125,6 +128,7 @@ export interface CreateAssessmentRequest {
   dueDate?: string;
   numberOfAIQuestions?: number;
   teacherQuestionIds?: number[];
+  aiQuestionIds?: number[]; // ✅ NEW: Specific AI questions selected by teacher
   mixAIAndTeacherQuestions?: boolean;
   
   // Custom period assessment fields
@@ -132,6 +136,22 @@ export interface CreateAssessmentRequest {
   targetStudentProfileId?: number;
   periodNumber?: number;
   parentAssessmentId?: number;
+}
+
+// ✅ NEW: AssessmentDto interface
+export interface AssessmentDto extends CreateAssessmentRequest {
+  id: number;
+  teacherId: number;
+  createdAt: string;
+  updatedAt: string;
+  
+  // Additional metadata
+  subjectName?: string;
+  lessonTopicTitle?: string;
+  termName?: string;
+  questionCount?: number;
+  studentCompletionCount?: number;
+  averageScore?: number;
 }
 
 export interface SubmitAssessmentRequest {

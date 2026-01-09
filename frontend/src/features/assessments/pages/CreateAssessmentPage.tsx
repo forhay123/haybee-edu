@@ -3,19 +3,18 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useCreateAssessment } from '../hooks/useAssessments';
 import { useQuestionsBySubject } from '../hooks/useTeacherQuestions';
 import { useLessonTopics } from '../../lessons/hooks/useLessonTopics';
+import { useAIQuestionsByLessonTopic } from '../../../features/lessons/hooks/useAIQuestionsByLessonTopic';
 import { useGetSubject, useTeacherSubjects } from '../../subjects/hooks/useSubjects';
 import { AssessmentType, QuestionType, CreateAssessmentRequest } from '../types/assessmentTypes';
-import { ArrowLeft, Save, Wand2, BookOpen, Calendar } from 'lucide-react';
+import { ArrowLeft, Save, Wand2, BookOpen, Calendar, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export const CreateAssessmentPage: React.FC = () => {
-  // ✅ Get subjectId from URL params OR from form selection
   const { subjectId: urlSubjectId } = useParams<{ subjectId: string }>();
   const navigate = useNavigate();
   
   const createAssessment = useCreateAssessment();
   
-  // ✅ Get all teacher subjects for selection
   const { data: teacherSubjects = [], isLoading: loadingSubjects } = useTeacherSubjects({ 
     enabled: true 
   });
@@ -32,15 +31,18 @@ export const CreateAssessmentPage: React.FC = () => {
     durationMinutes: 30,
     autoGrade: true,
     published: false,
-    numberOfAIQuestions: 0, // ✅ Default to 0 instead of undefined
+    numberOfAIQuestions: 0,
     teacherQuestionIds: [],
+    aiQuestionIds: [], // ✅ NEW: Selected AI question IDs
     mixAIAndTeacherQuestions: false
   });
 
-  const [selectedQuestions, setSelectedQuestions] = useState<Set<number>>(new Set());
-  const [showQuestionSelector, setShowQuestionSelector] = useState(false);
+  const [selectedTeacherQuestions, setSelectedTeacherQuestions] = useState<Set<number>>(new Set());
+  const [selectedAIQuestions, setSelectedAIQuestions] = useState<Set<number>>(new Set()); // ✅ NEW
+  const [showTeacherQuestionSelector, setShowTeacherQuestionSelector] = useState(false);
+  const [showAIQuestionSelector, setShowAIQuestionSelector] = useState(false); // ✅ NEW
 
-  // ✅ Get data based on selected subject
+  // Get data based on selected subject
   const { data: teacherQuestions = [] } = useQuestionsBySubject(formData.subjectId);
   const { data: subject } = useGetSubject(formData.subjectId);
   
@@ -48,10 +50,14 @@ export const CreateAssessmentPage: React.FC = () => {
   const lessonTopicsQuery = useLessonTopics(formData.subjectId);
   const lessonTopics = lessonTopicsQuery.getAll.data || [];
 
-  // Only LESSON_TOPIC_ASSESSMENT requires a lesson topic
+  // ✅ NEW: Fetch AI questions when lesson topic is selected
+  const { 
+    data: aiQuestions = [], 
+    isLoading: loadingAIQuestions 
+  } = useAIQuestionsByLessonTopic(formData.lessonTopicId);
+
   const isLessonAssessment = formData.type === AssessmentType.LESSON_TOPIC_ASSESSMENT;
   
-  // Broader assessments (Exams, Tests) don't require lesson topics
   const isBroadAssessment = [
     AssessmentType.EXAM,
     AssessmentType.TEST1,
@@ -72,13 +78,19 @@ export const CreateAssessmentPage: React.FC = () => {
     }
   }, [formData.lessonTopicId, formData.type, lessonTopics]);
 
-  // ✅ Reset lesson topic when subject changes
+  // Reset when subject changes
   useEffect(() => {
     if (formData.subjectId) {
       setFormData(prev => ({ ...prev, lessonTopicId: undefined }));
-      setSelectedQuestions(new Set());
+      setSelectedTeacherQuestions(new Set());
+      setSelectedAIQuestions(new Set()); // ✅ Reset AI selection too
     }
   }, [formData.subjectId]);
+
+  // ✅ Reset AI question selection when lesson topic changes
+  useEffect(() => {
+    setSelectedAIQuestions(new Set());
+  }, [formData.lessonTopicId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,24 +111,17 @@ export const CreateAssessmentPage: React.FC = () => {
       return;
     }
 
-    // ✅ Use || operator and default to 0
-    const aiQuestions = formData.numberOfAIQuestions || 0;
-    
-    if (aiQuestions === 0 && selectedQuestions.size === 0) {
-      toast.error('Please add at least one question (AI or from your question bank)');
-      return;
-    }
-
-    // AI questions require a lesson topic
-    if (aiQuestions > 0 && !formData.lessonTopicId) {
-      toast.error('AI questions require a lesson topic to be selected');
+    // ✅ Updated validation: Check for at least one question
+    if (selectedAIQuestions.size === 0 && selectedTeacherQuestions.size === 0) {
+      toast.error('Please select at least one question (AI or from your question bank)');
       return;
     }
 
     const request: CreateAssessmentRequest = {
       ...formData,
-      numberOfAIQuestions: aiQuestions,
-      teacherQuestionIds: Array.from(selectedQuestions)
+      aiQuestionIds: Array.from(selectedAIQuestions), // ✅ NEW
+      teacherQuestionIds: Array.from(selectedTeacherQuestions),
+      numberOfAIQuestions: 0 // Not using auto-generation when selecting specific questions
     };
 
     try {
@@ -129,14 +134,35 @@ export const CreateAssessmentPage: React.FC = () => {
     }
   };
 
-  const toggleQuestionSelection = (questionId: number) => {
-    const newSelection = new Set(selectedQuestions);
+  const toggleTeacherQuestionSelection = (questionId: number) => {
+    const newSelection = new Set(selectedTeacherQuestions);
     if (newSelection.has(questionId)) {
       newSelection.delete(questionId);
     } else {
       newSelection.add(questionId);
     }
-    setSelectedQuestions(newSelection);
+    setSelectedTeacherQuestions(newSelection);
+  };
+
+  // ✅ NEW: Toggle AI question selection
+  const toggleAIQuestionSelection = (questionId: number) => {
+    const newSelection = new Set(selectedAIQuestions);
+    if (newSelection.has(questionId)) {
+      newSelection.delete(questionId);
+    } else {
+      newSelection.add(questionId);
+    }
+    setSelectedAIQuestions(newSelection);
+  };
+
+  // ✅ Helper function for difficulty colors
+  const getDifficultyColor = (difficulty?: string) => {
+    switch (difficulty?.toUpperCase()) {
+      case 'EASY': return 'bg-green-100 text-green-700';
+      case 'MEDIUM': return 'bg-yellow-100 text-yellow-700';
+      case 'HARD': return 'bg-red-100 text-red-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
   };
 
   return (
@@ -162,7 +188,7 @@ export const CreateAssessmentPage: React.FC = () => {
         <div className="bg-white rounded-lg shadow-md p-6 space-y-4">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Basic Information</h2>
 
-          {/* ✅ Subject Selection - NEW */}
+          {/* Subject Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Subject <span className="text-red-500">*</span>
@@ -214,17 +240,12 @@ export const CreateAssessmentPage: React.FC = () => {
             </select>
             {isLessonAssessment && (
               <p className="mt-1 text-xs text-blue-600">
-                💡 Lesson assessments are linked to specific lesson topics and test one topic
-              </p>
-            )}
-            {isBroadAssessment && (
-              <p className="mt-1 text-xs text-purple-600">
-                💡 {formData.type.replace(/_/g, ' ')}s typically cover multiple topics from the term
+                💡 Lesson assessments are linked to specific lesson topics
               </p>
             )}
           </div>
 
-          {/* Lesson Topic Selection - REQUIRED for Lesson Assessments */}
+          {/* Lesson Topic Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <div className="flex items-center gap-2">
@@ -251,26 +272,19 @@ export const CreateAssessmentPage: React.FC = () => {
                   ? 'Select a subject first'
                   : isLessonAssessment 
                   ? 'Select a lesson topic' 
-                  : isBroadAssessment
-                  ? 'All topics (or select specific topic)'
-                  : 'No specific lesson (optional)'
+                  : 'Select a lesson topic (optional)'
                 }
               </option>
               {lessonTopics.map((topic) => (
                 <option key={topic.id} value={topic.id}>
                   Week {topic.weekNumber}: {topic.topicTitle}
+                  {topic.questionCount ? ` (${topic.questionCount} AI questions)` : ''}
                 </option>
               ))}
             </select>
-            {isLessonAssessment && !formData.lessonTopicId && (
-              <p className="mt-1 text-xs text-red-600">
-                ⚠️ Lesson topic is required for lesson assessments
-              </p>
-            )}
-            {/* ✅ Fixed: Use || 0 to handle undefined */}
-            {(formData.numberOfAIQuestions || 0) > 0 && !formData.lessonTopicId && (
-              <p className="mt-1 text-xs text-orange-600">
-                ⚠️ AI questions require a lesson topic to be selected
+            {formData.lessonTopicId && aiQuestions.length > 0 && (
+              <p className="mt-1 text-xs text-purple-600">
+                ✨ {aiQuestions.length} AI-generated questions available for selection
               </p>
             )}
           </div>
@@ -379,57 +393,166 @@ export const CreateAssessmentPage: React.FC = () => {
         <div className="bg-white rounded-lg shadow-md p-6 space-y-4">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Questions</h2>
 
-          {/* AI Questions */}
-          <div className={`border rounded-lg p-4 ${
-            formData.lessonTopicId ? 'border-blue-200 bg-blue-50' : 'border-gray-300 bg-gray-50'
+          {/* ✅ AI Questions Selector - NEW */}
+          <div className={`border rounded-lg ${
+            formData.lessonTopicId ? 'border-purple-200 bg-purple-50' : 'border-gray-300 bg-gray-50'
           }`}>
-            <div className="flex items-center gap-2 mb-3">
-              <Wand2 className={`w-5 h-5 ${formData.lessonTopicId ? 'text-blue-600' : 'text-gray-400'}`} />
-              <h3 className="font-semibold text-gray-900">AI-Generated Questions</h3>
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className={`w-5 h-5 ${formData.lessonTopicId ? 'text-purple-600' : 'text-gray-400'}`} />
+                  <h3 className="font-semibold text-gray-900">
+                    AI-Generated Questions
+                    {formData.lessonTopicId && aiQuestions.length > 0 && (
+                      <span className="ml-2 text-sm text-purple-600">
+                        ({aiQuestions.length} available)
+                      </span>
+                    )}
+                  </h3>
+                </div>
+                {formData.lessonTopicId && aiQuestions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAIQuestionSelector(!showAIQuestionSelector)}
+                    className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 flex items-center gap-2"
+                  >
+                    {showAIQuestionSelector ? (
+                      <>
+                        <ChevronUp className="w-4 h-4" />
+                        Hide Questions
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="w-4 h-4" />
+                        Select Questions
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {!formData.lessonTopicId && (
+                <p className="text-sm text-gray-600">
+                  ⚠️ Select a lesson topic above to view AI-generated questions
+                </p>
+              )}
+
+              {formData.lessonTopicId && loadingAIQuestions && (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                  <p className="ml-3 text-sm text-gray-600">Loading AI questions...</p>
+                </div>
+              )}
+
+              {formData.lessonTopicId && !loadingAIQuestions && aiQuestions.length === 0 && (
+                <p className="text-sm text-amber-600">
+                  📝 No AI questions available for this lesson yet. They may still be generating, or you can create questions manually.
+                </p>
+              )}
+
+              {selectedAIQuestions.size > 0 && (
+                <div className="mb-3 px-3 py-2 bg-purple-100 rounded-lg">
+                  <p className="text-sm text-purple-700 font-medium">
+                    ✓ {selectedAIQuestions.size} AI question(s) selected
+                  </p>
+                </div>
+              )}
+
+              {showAIQuestionSelector && aiQuestions.length > 0 && (
+                <div className="max-h-96 overflow-y-auto space-y-2 mt-4">
+                  {aiQuestions.map((question) => (
+                    <label
+                      key={question.id}
+                      className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                        selectedAIQuestions.has(question.id)
+                          ? 'border-purple-500 bg-purple-100 shadow-sm'
+                          : 'border-gray-200 hover:border-purple-300 bg-white hover:bg-purple-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedAIQuestions.has(question.id)}
+                        onChange={() => toggleAIQuestionSelection(question.id)}
+                        className="mt-1 w-4 h-4 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                      />
+                      <div className="flex-1">
+                        <p className="text-gray-900 font-medium mb-2">{question.questionText}</p>
+                        
+                        {/* Show MCQ options if available */}
+                        {(question.optionA || question.optionB) && (
+                          <div className="ml-4 mb-2 space-y-1 text-sm text-gray-600">
+                            {question.optionA && <p>A) {question.optionA}</p>}
+                            {question.optionB && <p>B) {question.optionB}</p>}
+                            {question.optionC && <p>C) {question.optionC}</p>}
+                            {question.optionD && <p>D) {question.optionD}</p>}
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          {question.difficulty && (
+                            <span className={`text-xs px-2 py-1 rounded ${getDifficultyColor(question.difficulty)}`}>
+                              {question.difficulty}
+                            </span>
+                          )}
+                          {question.maxScore && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                              {question.maxScore} marks
+                            </span>
+                          )}
+                          {(question.optionA || question.optionB) && (
+                            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
+                              MCQ
+                            </span>
+                          )}
+                          {question.correctOption && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                              Answer: {question.correctOption}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
-            <p className="text-sm text-gray-600 mb-3">
-              {formData.lessonTopicId 
-                ? 'Generate questions automatically from the selected lesson content'
-                : isBroadAssessment
-                ? '⚠️ For broad assessments (Exams/Tests), you can use your question bank or create questions manually'
-                : '⚠️ Select a lesson topic above to enable AI question generation'
-              }
-            </p>
-            <input
-              type="number"
-              value={formData.numberOfAIQuestions || 0}
-              onChange={(e) => setFormData({ ...formData, numberOfAIQuestions: Number(e.target.value) })}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-              min="0"
-              max="20"
-              placeholder="Number of AI questions (0-20)"
-              disabled={!formData.lessonTopicId}
-            />
           </div>
 
           {/* Teacher Questions */}
-          <div className="border border-gray-200 rounded-lg p-4">
+          <div className="border border-gray-200 rounded-lg p-4 bg-white">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-gray-900">
                 Your Question Bank ({teacherQuestions.length} available)
               </h3>
               <button
                 type="button"
-                onClick={() => setShowQuestionSelector(!showQuestionSelector)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                onClick={() => setShowTeacherQuestionSelector(!showTeacherQuestionSelector)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
                 disabled={!formData.subjectId}
               >
-                {showQuestionSelector ? 'Hide' : 'Select Questions'}
+                {showTeacherQuestionSelector ? (
+                  <>
+                    <ChevronUp className="w-4 h-4" />
+                    Hide Questions
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4" />
+                    Select Questions
+                  </>
+                )}
               </button>
             </div>
 
-            {selectedQuestions.size > 0 && (
-              <p className="text-sm text-green-600 mb-3">
-                ✓ {selectedQuestions.size} question(s) selected
-              </p>
+            {selectedTeacherQuestions.size > 0 && (
+              <div className="mb-3 px-3 py-2 bg-green-50 rounded-lg">
+                <p className="text-sm text-green-700 font-medium">
+                  ✓ {selectedTeacherQuestions.size} question(s) selected
+                </p>
+              </div>
             )}
 
-            {showQuestionSelector && (
+            {showTeacherQuestionSelector && (
               <div className="max-h-96 overflow-y-auto space-y-2 mt-4">
                 {teacherQuestions.length === 0 ? (
                   <div className="text-center py-8">
@@ -448,17 +571,17 @@ export const CreateAssessmentPage: React.FC = () => {
                   teacherQuestions.map((question) => (
                     <label
                       key={question.id}
-                      className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                        selectedQuestions.has(question.id)
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
+                      className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                        selectedTeacherQuestions.has(question.id)
+                          ? 'border-blue-500 bg-blue-50 shadow-sm'
+                          : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
                       }`}
                     >
                       <input
                         type="checkbox"
-                        checked={selectedQuestions.has(question.id)}
-                        onChange={() => toggleQuestionSelection(question.id)}
-                        className="mt-1"
+                        checked={selectedTeacherQuestions.has(question.id)}
+                        onChange={() => toggleTeacherQuestionSelection(question.id)}
+                        className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                       />
                       <div className="flex-1">
                         <p className="text-gray-900 font-medium">{question.questionText}</p>
@@ -467,13 +590,7 @@ export const CreateAssessmentPage: React.FC = () => {
                             {question.questionType.replace(/_/g, ' ')}
                           </span>
                           {question.difficultyLevel && (
-                            <span className={`text-xs px-2 py-1 rounded ${
-                              question.difficultyLevel === 'EASY'
-                                ? 'bg-green-100 text-green-700'
-                                : question.difficultyLevel === 'MEDIUM'
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-red-100 text-red-700'
-                            }`}>
+                            <span className={`text-xs px-2 py-1 rounded ${getDifficultyColor(question.difficultyLevel)}`}>
                               {question.difficultyLevel}
                             </span>
                           )}
@@ -492,20 +609,27 @@ export const CreateAssessmentPage: React.FC = () => {
           </div>
 
           {/* Question Summary */}
-          {/* ✅ Fixed: Use || 0 to handle undefined */}
-          {((formData.numberOfAIQuestions || 0) > 0 || selectedQuestions.size > 0) && (
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <h4 className="font-medium text-gray-900 mb-2">Question Summary</h4>
-              <div className="space-y-1 text-sm text-gray-600">
-                {(formData.numberOfAIQuestions || 0) > 0 && (
-                  <p>• {formData.numberOfAIQuestions} AI-generated questions</p>
+          {(selectedAIQuestions.size > 0 || selectedTeacherQuestions.size > 0) && (
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200">
+              <h4 className="font-medium text-gray-900 mb-2">📊 Question Summary</h4>
+              <div className="space-y-1 text-sm text-gray-700">
+                {selectedAIQuestions.size > 0 && (
+                  <p className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-600" />
+                    <span>{selectedAIQuestions.size} AI-generated questions</span>
+                  </p>
                 )}
-                {selectedQuestions.size > 0 && (
-                  <p>• {selectedQuestions.size} questions from your question bank</p>
+                {selectedTeacherQuestions.size > 0 && (
+                  <p className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-blue-600" />
+                    <span>{selectedTeacherQuestions.size} questions from your question bank</span>
+                  </p>
                 )}
-                <p className="font-medium text-gray-900 mt-2">
-                  Total: {(formData.numberOfAIQuestions || 0) + selectedQuestions.size} questions
-                </p>
+                <div className="pt-2 mt-2 border-t border-gray-300">
+                  <p className="font-semibold text-gray-900">
+                    Total: {selectedAIQuestions.size + selectedTeacherQuestions.size} questions
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -516,14 +640,14 @@ export const CreateAssessmentPage: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={createAssessment.isPending}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2"
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
           >
             <Save className="w-5 h-5" />
             {createAssessment.isPending ? 'Creating...' : 'Create Assessment'}
