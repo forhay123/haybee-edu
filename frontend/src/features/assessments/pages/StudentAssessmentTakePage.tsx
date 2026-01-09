@@ -5,7 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../api/axios';
 import { QuestionCard } from '../components/QuestionCard';
-import { ArrowLeft, Send, BookOpen, Brain, CheckCircle, Lock, Clock } from 'lucide-react';
+import { ArrowLeft, Send, BookOpen, Brain, CheckCircle, Lock, Clock, XCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
   useAssessmentQuestions,
@@ -22,6 +22,7 @@ interface Assessment {
   id: number;
   title: string;
   description?: string;
+  type: string; // ✅ ADDED: Assessment type (LESSON_TOPIC_ASSESSMENT, QUIZ, ASSIGNMENT, etc.)
   subjectId: number;
   subjectName: string;
   lessonTopicId: number | null;
@@ -32,7 +33,14 @@ interface Assessment {
   questionCount: number;
   isCustomPeriodAssessment: boolean;
   periodNumber: number | null;
+  dueDate?: string; // ✅ ADDED: For gradebook assessments
 }
+
+// ✅ Helper to check if assessment is gradebook type
+const GRADEBOOK_TYPES = ['QUIZ', 'CLASSWORK', 'TEST1', 'TEST2', 'ASSIGNMENT', 'EXAM'];
+const isGradebookAssessment = (type: string): boolean => {
+  return GRADEBOOK_TYPES.includes(type);
+};
 
 const StudentAssessmentTakePage: React.FC = () => {
   const { assessmentId } = useParams<{ assessmentId: string }>();
@@ -53,6 +61,9 @@ const StudentAssessmentTakePage: React.FC = () => {
     enabled: !!assessmentId,
   });
 
+  // ✅ Determine assessment type
+  const isGradebook = assessment?.type ? isGradebookAssessment(assessment.type) : false;
+
   // Check if already submitted
   const { data: existingSubmission } = useCheckSubmissionByAssessment(
     Number(assessmentId), 
@@ -68,21 +79,37 @@ const StudentAssessmentTakePage: React.FC = () => {
   // Submit mutation
   const submitMutation = useSubmitAssessmentById();
 
-  // Check assessment access
+  // ✅ FIXED: Only check access for lesson assessments
   const {
-    canAccess: assessmentCanAccess,
+    canAccess: lessonCanAccess,
     isLocked: assessmentLocked,
+    isExpired: lessonExpired,
     minutesRemaining,
     accessData
   } = useAssessmentAccess(
     Number(assessmentId) || 0,
     studentProfileId || 0,
-    60000 // Update every minute
+    isGradebook ? 0 : 60000 // ✅ Disable polling for gradebook (0 = no polling)
   );
 
-  // Start polling for access status
+  // ✅ NEW: For gradebook assessments, use due date logic
+  const gradebookCanAccess = React.useMemo(() => {
+    if (!isGradebook || !assessment?.dueDate) return false;
+    return new Date() < new Date(assessment.dueDate);
+  }, [isGradebook, assessment?.dueDate]);
+
+  const gradebookExpired = React.useMemo(() => {
+    if (!isGradebook || !assessment?.dueDate) return false;
+    return new Date() >= new Date(assessment.dueDate);
+  }, [isGradebook, assessment?.dueDate]);
+
+  // ✅ Final access determination based on type
+  const assessmentCanAccess = isGradebook ? gradebookCanAccess : lessonCanAccess;
+  const assessmentExpired = isGradebook ? gradebookExpired : lessonExpired;
+
+  // ✅ FIXED: Start polling ONLY for lesson assessments
   useEffect(() => {
-    if (!studentProfileId || !assessmentId) return;
+    if (!studentProfileId || !assessmentId || isGradebook) return;
 
     assessmentAccessService.startPolling(
       {
@@ -101,7 +128,7 @@ const StudentAssessmentTakePage: React.FC = () => {
     return () => {
       assessmentAccessService.stopPolling(Number(assessmentId), studentProfileId);
     };
-  }, [assessmentId, studentProfileId]);
+  }, [assessmentId, studentProfileId, isGradebook]);
 
   // Redirect if already submitted
   useEffect(() => {
@@ -128,9 +155,14 @@ const StudentAssessmentTakePage: React.FC = () => {
       return;
     }
 
-    // Check access before submitting
+    // ✅ Check access before submitting (works for both types)
     if (!assessmentCanAccess) {
       toast.error('Assessment window is closed. You can no longer submit.');
+      return;
+    }
+
+    if (assessmentExpired) {
+      toast.error('This assessment has expired. You can no longer submit.');
       return;
     }
 
@@ -160,7 +192,8 @@ const StudentAssessmentTakePage: React.FC = () => {
       console.log('Submitting assessment:', {
         assessmentId: assessment.id,
         studentProfileId,
-        answersCount: answers.size
+        answersCount: answers.size,
+        type: assessment.type
       });
 
       // Submit assessment
@@ -231,8 +264,8 @@ const StudentAssessmentTakePage: React.FC = () => {
     );
   }
 
-  // Block access if assessment window closed
-  if (assessment && assessmentLocked) {
+  // ✅ FIXED: Block access with different messages for different types
+  if (assessment && (assessmentExpired || assessmentLocked)) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
         <button
@@ -242,7 +275,39 @@ const StudentAssessmentTakePage: React.FC = () => {
           <ArrowLeft className="w-5 h-5" />
           Back
         </button>
-        <AccessCheckAlert accessData={accessData} />
+
+        {isGradebook ? (
+          // ✅ Gradebook assessment - show due date message
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <div className="flex items-start gap-4">
+              <XCircle className="w-8 h-8 text-red-600 flex-shrink-0" />
+              <div>
+                <h3 className="text-lg font-semibold text-red-900 mb-2">
+                  Assessment Deadline Passed
+                </h3>
+                <p className="text-red-700 mb-4">
+                  This {assessment.type.toLowerCase()} is past its due date and can no longer be submitted.
+                </p>
+                {assessment.dueDate && (
+                  <div className="p-3 bg-red-100 rounded-lg mb-4">
+                    <p className="text-sm text-red-800">
+                      <strong>Due date was:</strong> {new Date(assessment.dueDate).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+                <button
+                  onClick={() => navigate('/assessments/student')}
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  View Other Assessments
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // ✅ Lesson assessment - show access check alert
+          <AccessCheckAlert accessData={accessData} />
+        )}
       </div>
     );
   }
@@ -264,16 +329,25 @@ const StudentAssessmentTakePage: React.FC = () => {
             {assessment.lessonTopicTitle && (
               <p className="text-sm text-gray-500">{assessment.lessonTopicTitle}</p>
             )}
-            {assessment.isCustomPeriodAssessment && (
-              <span className="inline-block mt-2 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
-                Period {assessment.periodNumber} Custom Assessment
-              </span>
-            )}
+            
+            {/* ✅ Show assessment type badge */}
+            <div className="flex items-center gap-2 mt-2">
+              {assessment.isCustomPeriodAssessment && (
+                <span className="inline-block px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+                  Period {assessment.periodNumber} Custom Assessment
+                </span>
+              )}
+              {isGradebook && (
+                <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                  {assessment.type}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Time remaining banner */}
-        {assessmentCanAccess && minutesRemaining !== null && minutesRemaining > 0 && (
+        {/* ✅ Time remaining banner - different for each type */}
+        {assessmentCanAccess && !isGradebook && minutesRemaining !== null && minutesRemaining > 0 && (
           <div className={`p-3 rounded-lg mb-4 flex items-center gap-3 ${
             minutesRemaining <= 5 
               ? 'bg-red-50 border border-red-200' 
@@ -288,6 +362,21 @@ const StudentAssessmentTakePage: React.FC = () => {
                 {minutesRemaining <= 5 
                   ? 'Hurry! Submit before the window closes.' 
                   : 'Complete and submit within the time window.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ✅ Due date banner for gradebook assessments */}
+        {assessmentCanAccess && isGradebook && assessment.dueDate && (
+          <div className="p-3 rounded-lg mb-4 flex items-center gap-3 bg-yellow-50 border border-yellow-200">
+            <Clock className="w-5 h-5 text-yellow-600" />
+            <div>
+              <p className="font-medium text-yellow-800">
+                Due: {new Date(assessment.dueDate).toLocaleString()}
+              </p>
+              <p className="text-sm text-yellow-700">
+                Submit before the deadline to receive credit.
               </p>
             </div>
           </div>
@@ -384,7 +473,7 @@ const StudentAssessmentTakePage: React.FC = () => {
             ) : !assessmentCanAccess ? (
               <>
                 <Lock className="w-5 h-5" />
-                Assessment Window Closed
+                {isGradebook ? 'Past Due Date' : 'Assessment Window Closed'}
               </>
             ) : (
               <>
