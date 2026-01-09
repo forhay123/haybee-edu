@@ -6,9 +6,12 @@ import { useWatchHistory } from "../../videos/hooks/useVideoLessons";
 import { useUpcomingSessions } from "../../live/hooks/useLiveSessions";
 import { useQuery } from "@tanstack/react-query";
 import axiosInstance from "../../../api/axios";
-import { BookOpen, Clock, CheckCircle, Video, TrendingUp, Calendar, PlayCircle, Eye, Users, AlertCircle, Award, CheckCircle2, XCircle } from "lucide-react";
+import { BookOpen, Clock, CheckCircle, Video, TrendingUp, Calendar, PlayCircle, Eye, Users, AlertCircle, Award, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { format, isValid, parseISO, startOfWeek, endOfWeek } from "date-fns";
 import ProfilePendingScreen from "../../individual/components/student/ProfilePendingScreen";
+import { useGradebookAssessments } from "../../assessments/hooks/useGradebookAssessments";
+import { GradebookAccessStatus } from "../../assessments/types/gradebookTypes";
+import { formatDueDate } from "../../assessments/types/gradebookTypes";
 import { useAuth } from "../../auth/useAuth";
 
 // ----------------------
@@ -233,6 +236,60 @@ const StudentWidget: React.FC = () => {
     if (!todayProgress?.lessons || !Array.isArray(todayProgress.lessons)) return [];
     return todayProgress.lessons;
   }, [todayProgress]);
+    
+  // ✅ NEW: Fetch gradebook assessments
+  const { data: gradebookAssessments = [], isLoading: loadingGradebook } = useGradebookAssessments();
+
+  // ✅ Filter gradebook assessments due today or urgent
+  const todayGradebookAssessments = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    return gradebookAssessments.filter(assessment => {
+      // Include if not submitted
+      if (assessment.hasSubmitted) return false;
+      
+      // Include if overdue or due soon
+      if (assessment.accessStatus === GradebookAccessStatus.OVERDUE ||
+          assessment.accessStatus === GradebookAccessStatus.DUE_SOON) {
+        return true;
+      }
+      
+      // Include if due today
+      if (assessment.dueDate) {
+        const dueDate = new Date(assessment.dueDate);
+        dueDate.setHours(0, 0, 0, 0);
+        return dueDate.getTime() === today.getTime();
+      }
+      
+      return false;
+    }).sort((a, b) => {
+      // Sort by urgency: OVERDUE > DUE_SOON > OPEN
+      const urgencyOrder = {
+        [GradebookAccessStatus.OVERDUE]: 0,
+        [GradebookAccessStatus.DUE_SOON]: 1,
+        [GradebookAccessStatus.OPEN]: 2,
+        [GradebookAccessStatus.COMPLETED]: 3,
+      };
+      
+      const urgencyA = urgencyOrder[a.accessStatus] ?? 999;
+      const urgencyB = urgencyOrder[b.accessStatus] ?? 999;
+      
+      if (urgencyA !== urgencyB) {
+        return urgencyA - urgencyB;
+      }
+      
+      // Then sort by due date (soonest first)
+      if (a.dueDate && b.dueDate) {
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      }
+      
+      return 0;
+    });
+  }, [gradebookAssessments]);
 
   // ✅ NEW: Fetch access check results for all lessons
   const { data: accessChecks } = useQuery({
@@ -410,26 +467,32 @@ const StudentWidget: React.FC = () => {
         </div>
       )}
 
-      {/* ✅ FIXED: TODAY'S SCHEDULE - Now uses backend access checks */}
+
+
+      {/* ✅ UPDATED: TODAY'S SCHEDULE - Now includes both lesson and gradebook assessments */}
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-blue-600" />
-            Today's Schedule
+            Today's Assessments
           </h3>
-          {dailyLessons.length > 0 && (
+          {(dailyLessons.length > 0 || todayGradebookAssessments.length > 0) && (
             <span className="bg-green-100 text-green-800 px-3 py-1 rounded-lg font-semibold text-sm">
-              {completedCount}/{dailyLessons.length}
+              {completedCount}/{dailyLessons.length + todayGradebookAssessments.length}
             </span>
           )}
         </div>
 
-        {dailyLessons.length > 0 ? (
+        {(loadingGradebook && dailyLessons.length === 0) ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+            <p className="text-gray-500 text-sm">Loading assessments...</p>
+          </div>
+        ) : (dailyLessons.length > 0 || todayGradebookAssessments.length > 0) ? (
           <div className="space-y-3">
-            {dailyLessons.slice(0, 3).map((lesson) => {
+            {/* Lesson Assessments */}
+            {dailyLessons.slice(0, 2).map((lesson) => {
               const isCompleted = lesson.completed;
-              
-              // ✅ FIX: Use backend access check result instead of client-side calculation
               const accessCheck = accessChecks?.[lesson.assessmentId];
               const isAccessible = accessCheck?.canAccess === true;
               const statusCode = accessCheck?.statusCode || 'UNKNOWN';
@@ -441,7 +504,8 @@ const StudentWidget: React.FC = () => {
               if (isCompleted) {
                 bgClass = 'bg-green-50 border-green-200';
                 statusBadge = (
-                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded">
+                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
                     Completed
                   </span>
                 );
@@ -456,7 +520,8 @@ const StudentWidget: React.FC = () => {
               } else if (isAccessible) {
                 bgClass = 'bg-blue-50 border-blue-200 hover:border-blue-300';
                 statusBadge = (
-                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded animate-pulse">
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded animate-pulse flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
                     Available Now
                   </span>
                 );
@@ -465,77 +530,63 @@ const StudentWidget: React.FC = () => {
                     to={`/lesson-topics/${lesson.lessonId}/assessment`}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold flex-shrink-0"
                   >
-                    Start Assessment
+                    Start
                   </Link>
                 );
               } else if (statusCode === 'NOT_YET_OPEN') {
                 bgClass = 'bg-yellow-50 border-yellow-200';
                 statusBadge = (
-                  <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded">
+                  <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
                     Upcoming
                   </span>
                 );
                 actionButton = (
                   <span className="text-sm text-gray-500 flex-shrink-0">
-                    {accessCheck?.windowStart && `Available at ${format(new Date(accessCheck.windowStart), 'h:mm a')}`}
-                  </span>
-                );
-              } else if (statusCode === 'EXPIRED' || statusCode === 'ALREADY_SUBMITTED') {
-                bgClass = 'bg-red-50 border-red-200';
-                statusBadge = (
-                  <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded">
-                    {statusCode === 'ALREADY_SUBMITTED' ? 'Submitted' : 'Missed'}
-                  </span>
-                );
-                actionButton = (
-                  <span className="text-sm text-red-600 font-semibold flex-shrink-0">
-                    {statusCode === 'ALREADY_SUBMITTED' ? 'Already submitted' : 'Window Closed'}
+                    {accessCheck?.windowStart && `${format(new Date(accessCheck.windowStart), 'h:mm a')}`}
                   </span>
                 );
               } else {
+                bgClass = 'bg-red-50 border-red-200';
                 statusBadge = (
-                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded">
-                    Scheduled
-                  </span>
-                );
-                actionButton = (
-                  <span className="text-sm text-gray-500 flex-shrink-0">
-                    Not yet available
+                  <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded flex items-center gap-1">
+                    <XCircle className="w-3 h-3" />
+                    {statusCode === 'ALREADY_SUBMITTED' ? 'Submitted' : 'Missed'}
                   </span>
                 );
               }
 
               return (
                 <div
-                  key={lesson.id}
+                  key={`lesson-${lesson.id}`}
                   className={`flex items-center justify-between p-4 rounded-xl border transition-all ${bgClass}`}
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {isCompleted ? (
-                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    ) : isAccessible ? (
-                      <Clock className="w-5 h-5 text-blue-600 flex-shrink-0 animate-pulse" />
-                    ) : (
-                      <Clock className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                    )}
+                    <BookOpen className={`w-5 h-5 flex-shrink-0 ${
+                      isCompleted ? 'text-green-600' : 
+                      isAccessible ? 'text-blue-600' : 
+                      'text-gray-400'
+                    }`} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <p className="font-semibold text-gray-900 truncate">
                           {lesson.subjectName}
                         </p>
                         {statusBadge}
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                          Lesson
+                        </span>
                       </div>
                       <p className="text-sm text-gray-600 truncate">
-                        {lesson.lessonTitle || 'Lesson'}
+                        {lesson.lessonTitle || 'Lesson Assessment'}
                       </p>
                       {lesson.assessmentWindowStart && (
                         <p className="text-xs text-gray-500 mt-1">
-                          Window: {format(new Date(lesson.assessmentWindowStart), 'h:mm a')} - {format(new Date(lesson.assessmentWindowEnd), 'h:mm a')}
+                          {format(new Date(lesson.assessmentWindowStart), 'h:mm a')} - {format(new Date(lesson.assessmentWindowEnd), 'h:mm a')}
                         </p>
                       )}
                     </div>
                   </div>
-
                   <div className="ml-3 flex-shrink-0">
                     {actionButton}
                   </div>
@@ -543,24 +594,117 @@ const StudentWidget: React.FC = () => {
               );
             })}
 
-            {dailyLessons.length > 3 && (
+            {/* Gradebook Assessments */}
+            {todayGradebookAssessments.slice(0, 3).map((assessment) => {
+              let bgClass = 'bg-gray-50 border-gray-200';
+              let statusBadge = null;
+              let actionButton = null;
+
+              if (assessment.accessStatus === GradebookAccessStatus.OVERDUE) {
+                bgClass = 'bg-red-50 border-red-200';
+                statusBadge = (
+                  <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded flex items-center gap-1">
+                    <XCircle className="w-3 h-3" />
+                    Overdue
+                  </span>
+                );
+                actionButton = (
+                  <Link
+                    to={`/assessments/take/${assessment.id}`}
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition text-sm font-semibold flex-shrink-0"
+                  >
+                    Submit Now
+                  </Link>
+                );
+              } else if (assessment.accessStatus === GradebookAccessStatus.DUE_SOON) {
+                bgClass = 'bg-yellow-50 border-yellow-200';
+                statusBadge = (
+                  <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded flex items-center gap-1 animate-pulse">
+                    <AlertTriangle className="w-3 h-3" />
+                    Due Soon
+                  </span>
+                );
+                actionButton = (
+                  <Link
+                    to={`/assessments/take/${assessment.id}`}
+                    className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition text-sm font-semibold flex-shrink-0"
+                  >
+                    Start
+                  </Link>
+                );
+              } else {
+                bgClass = 'bg-blue-50 border-blue-200';
+                statusBadge = (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    Open
+                  </span>
+                );
+                actionButton = (
+                  <Link
+                    to={`/assessments/take/${assessment.id}`}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold flex-shrink-0"
+                  >
+                    Start
+                  </Link>
+                );
+              }
+
+              return (
+                <div
+                  key={`gradebook-${assessment.id}`}
+                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${bgClass}`}
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <FileText className={`w-5 h-5 flex-shrink-0 ${
+                      assessment.accessStatus === GradebookAccessStatus.OVERDUE ? 'text-red-600' :
+                      assessment.accessStatus === GradebookAccessStatus.DUE_SOON ? 'text-yellow-600' :
+                      'text-blue-600'
+                    }`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <p className="font-semibold text-gray-900 truncate">
+                          {assessment.title}
+                        </p>
+                        {statusBadge}
+                        <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded font-medium">
+                          {assessment.type}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 truncate">
+                        {assessment.subjectName}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Due: {formatDueDate(assessment.dueDate)} • {assessment.timeMessage}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="ml-3 flex-shrink-0">
+                    {actionButton}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Show more link */}
+            {(dailyLessons.length > 2 || todayGradebookAssessments.length > 3) && (
               <Link
-                to="/progress/daily"
-                className="block text-center text-sm text-blue-600 hover:underline font-semibold mt-4"
+                to="/assessments/student"
+                className="block text-center text-sm text-blue-600 hover:underline font-semibold mt-4 py-2"
               >
-                View all {dailyLessons.length} lessons →
+                View all {dailyLessons.length + todayGradebookAssessments.length} assessments →
               </Link>
             )}
           </div>
         ) : (
           <div className="text-center py-8">
             <div className="text-4xl mb-3">📚</div>
-            <p className="text-gray-600 mb-3">No lessons scheduled for today</p>
+            <p className="text-gray-600 mb-3">No assessments due today</p>
             <Link
-              to="/subjects"
+              to="/assessments/student"
               className="text-blue-600 hover:underline text-sm font-semibold"
             >
-              Browse Available Subjects
+              View All Assessments
             </Link>
           </div>
         )}
