@@ -179,6 +179,7 @@ public class ComprehensiveLessonService {
 
     /**
      * ✅ FIXED: Get all lessons for teacher's subjects with filters
+     * Now correctly uses StudentLessonProgress as source of truth
      */
     @Transactional(readOnly = true)
     public List<ComprehensiveLessonDto> getTeacherComprehensiveLessons(
@@ -192,42 +193,74 @@ public class ComprehensiveLessonService {
 
         log.info("📚 TEACHER: Fetching lessons for teacher {} with filters", teacherId);
 
-        // ✅ FIX: Use findById to get teacher by profile ID (not user ID)
         TeacherProfile teacher = teacherProfileRepository.findById(teacherId)
                 .orElseThrow(() -> new EntityNotFoundException("Teacher profile not found: " + teacherId));
 
         log.info("✅ Teacher profile found: {} (User: {})", 
                  teacher.getId(), teacher.getUser() != null ? teacher.getUser().getEmail() : "N/A");
 
-        if (toDate == null) toDate = LocalDate.now();
-        if (fromDate == null) fromDate = toDate.withDayOfMonth(1);
+        // ✅ FIX: Make these variables final by setting defaults upfront
+        final LocalDate finalToDate = (toDate == null) ? LocalDate.now() : toDate;
+        final LocalDate finalFromDate = (fromDate == null) ? finalToDate.withDayOfMonth(1) : fromDate;
 
-        // Get all progress records for teacher's subjects
+        // ✅ CRITICAL FIX: Get teacher's subject IDs first
+        Set<Long> teacherSubjectIds = teacher.getSubjects().stream()
+                .map(Subject::getId)
+                .collect(Collectors.toSet());
+        
+        if (teacherSubjectIds.isEmpty()) {
+            log.warn("⚠️ Teacher {} has no subjects assigned", teacherId);
+            return List.of();
+        }
+        
+        log.info("✅ Teacher teaches {} subjects: {}", teacherSubjectIds.size(), teacherSubjectIds);
+
+        // Get all progress records based on filters
         List<StudentLessonProgress> allProgress;
         
         if (studentId != null) {
-            // Filter by specific student
+            // ✅ Filter by specific student AND teacher's subjects
             StudentProfile student = studentProfileRepository.findById(studentId)
                     .orElseThrow(() -> new EntityNotFoundException("Student not found: " + studentId));
             allProgress = progressRepository
-                    .findByStudentProfileAndScheduledDateBetweenWithSubject(student, fromDate, toDate);
-        } else if (classId != null) {
-            // Filter by class - get all students in class
-            allProgress = progressRepository
-                    .findByClassIdAndScheduledDateBetween(classId, fromDate, toDate);
+                    .findByStudentProfileAndScheduledDateBetweenWithSubject(student, finalFromDate, finalToDate);
+            
+            // Filter to only teacher's subjects
+            allProgress = allProgress.stream()
+                    .filter(p -> p.getSubject() != null && teacherSubjectIds.contains(p.getSubject().getId()))
+                    .collect(Collectors.toList());
+                    
         } else if (subjectId != null) {
-            // Filter by specific subject
+            // ✅ Filter by specific subject (must be teacher's subject)
+            if (!teacherSubjectIds.contains(subjectId)) {
+                log.warn("⚠️ Teacher {} doesn't teach subject {}", teacherId, subjectId);
+                return List.of();
+            }
             allProgress = progressRepository
-                    .findBySubjectIdAndScheduledDateBetween(subjectId, fromDate, toDate);
+                    .findBySubjectIdAndScheduledDateBetween(subjectId, finalFromDate, finalToDate);
+                    
+        } else if (classId != null) {
+            // ✅ Filter by class AND teacher's subjects
+            allProgress = progressRepository
+                    .findByClassIdAndScheduledDateBetween(classId, finalFromDate, finalToDate);
+            
+            // Filter to only teacher's subjects
+            allProgress = allProgress.stream()
+                    .filter(p -> p.getSubject() != null && teacherSubjectIds.contains(p.getSubject().getId()))
+                    .collect(Collectors.toList());
+                    
         } else {
-            // Get all lessons for teacher's subjects
-            allProgress = progressRepository
-                    .findByTeacherIdAndScheduledDateBetween(teacherId, fromDate, toDate);
+            // ✅ Get all lessons for ALL teacher's subjects
+            allProgress = teacherSubjectIds.stream()
+                    .flatMap(sid -> progressRepository
+                            .findBySubjectIdAndScheduledDateBetween(sid, finalFromDate, finalToDate)
+                            .stream())
+                    .collect(Collectors.toList());
         }
 
         log.info("✅ Retrieved {} progress records for teacher", allProgress.size());
 
-        // Convert to DTOs
+        // Convert to DTOs with student info
         List<ComprehensiveLessonDto> lessons = allProgress.stream()
                 .map(progress -> {
                     ComprehensiveLessonDto dto = ComprehensiveLessonDto.fromEntity(progress);
@@ -249,7 +282,13 @@ public class ComprehensiveLessonService {
         lessons.sort((a, b) -> {
             if (a.getScheduledDate() == null) return 1;
             if (b.getScheduledDate() == null) return -1;
-            return b.getScheduledDate().compareTo(a.getScheduledDate());
+            int dateCompare = b.getScheduledDate().compareTo(a.getScheduledDate());
+            if (dateCompare != 0) return dateCompare;
+            // Secondary sort by period number
+            return Integer.compare(
+                    a.getPeriodNumber() != null ? a.getPeriodNumber() : 0,
+                    b.getPeriodNumber() != null ? b.getPeriodNumber() : 0
+            );
         });
 
         log.info("✅ Returning {} lessons for teacher", lessons.size());
@@ -293,8 +332,9 @@ public class ComprehensiveLessonService {
 
         log.info("📚 ADMIN: Fetching all lessons with filters");
 
-        if (toDate == null) toDate = LocalDate.now();
-        if (fromDate == null) fromDate = toDate.withDayOfMonth(1);
+        // ✅ FIX: Make these variables final
+        final LocalDate finalToDate = (toDate == null) ? LocalDate.now() : toDate;
+        final LocalDate finalFromDate = (fromDate == null) ? finalToDate.withDayOfMonth(1) : fromDate;
 
         // Get progress records based on filters
         List<StudentLessonProgress> allProgress;
@@ -303,17 +343,17 @@ public class ComprehensiveLessonService {
             StudentProfile student = studentProfileRepository.findById(studentId)
                     .orElseThrow(() -> new EntityNotFoundException("Student not found: " + studentId));
             allProgress = progressRepository
-                    .findByStudentProfileAndScheduledDateBetweenWithSubject(student, fromDate, toDate);
+                    .findByStudentProfileAndScheduledDateBetweenWithSubject(student, finalFromDate, finalToDate);
         } else if (classId != null) {
             allProgress = progressRepository
-                    .findByClassIdAndScheduledDateBetween(classId, fromDate, toDate);
+                    .findByClassIdAndScheduledDateBetween(classId, finalFromDate, finalToDate);
         } else if (subjectId != null) {
             allProgress = progressRepository
-                    .findBySubjectIdAndScheduledDateBetween(subjectId, fromDate, toDate);
+                    .findBySubjectIdAndScheduledDateBetween(subjectId, finalFromDate, finalToDate);
         } else {
             // Get ALL lessons in the system
             allProgress = progressRepository
-                    .findByScheduledDateBetween(fromDate, toDate);
+                    .findByScheduledDateBetween(finalFromDate, finalToDate);
         }
 
         log.info("✅ Retrieved {} progress records for admin", allProgress.size());
