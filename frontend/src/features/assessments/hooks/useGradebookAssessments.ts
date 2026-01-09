@@ -1,6 +1,6 @@
 // src/features/assessments/hooks/useGradebookAssessments.ts
 
-import { useQuery } from '@tantml/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { assessmentsApi } from '../api/assessmentsApi';
 import type { GradebookAssessmentDto } from '../types/gradebookTypes';
 import { GradebookAccessStatus } from '../types/gradebookTypes';
