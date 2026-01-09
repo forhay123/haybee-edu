@@ -265,7 +265,8 @@ const StudentAssessmentTakePage: React.FC = () => {
   }
 
   // ✅ FIXED: Block access with different messages for different types
-  if (assessment && (assessmentExpired || assessmentLocked)) {
+  // Only check assessmentLocked for lesson assessments (not gradebook)
+  if (assessment && (assessmentExpired || (!isGradebook && assessmentLocked))) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
         <button
