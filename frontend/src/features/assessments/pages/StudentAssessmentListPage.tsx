@@ -323,11 +323,19 @@ export const StudentAssessmentListPage: React.FC = () => {
                   assessment={assessment}
                   studentProfileId={studentProfileId}
                   onStartAssessment={() => {
+                    console.log('🚀 START ASSESSMENT CLICKED:', {
+                      id: assessment.id,
+                      title: assessment.title,
+                      navigatingTo: `/assessments/${assessment.id}/take`
+                    });
                     navigate(`/assessments/${assessment.id}/take`);
                   }}
-                  onViewResults={() => 
+                  onViewResults={() => {
+                    console.log('📊 VIEW RESULTS CLICKED:', {
+                      submissionId: assessment.submissionId
+                    });
                     navigate(`/submissions/${assessment.submissionId}/results`)
-                  }
+                  }}
                 />
               ) : (
                 <GradebookAssessmentCard assessment={assessment} />

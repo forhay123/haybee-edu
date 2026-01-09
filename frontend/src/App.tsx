@@ -903,6 +903,17 @@ const App = () => {
               }
             />
 
+            <Route
+              path="/assessments/:assessmentId/take"
+              element={
+                <ProtectedRoute roles={["STUDENT"]}>
+                  <AppLayout>
+                    <StudentAssessmentTakePage /> {/* New component */}
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+
             // 2. Take a specific assessment
             <Route
               path="/assessments/student/:assessmentId"
@@ -910,17 +921,6 @@ const App = () => {
                 <ProtectedRoute roles={["STUDENT"]}>
                   <AppLayout>
                     <StudentAssessmentPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/assessments/:assessmentId/take"
-              element={
-                <ProtectedRoute roles={["STUDENT"]}>
-                  <AppLayout>
-                    <StudentAssessmentTakePage /> {/* New component */}
                   </AppLayout>
                 </ProtectedRoute>
               }
