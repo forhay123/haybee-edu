@@ -53,7 +53,7 @@ public class AssessmentAccessService {
         // ✅ FIX: Handle case where assessment is null
         if (assessment == null) {
             log.warn("Assessment is null, cannot check access");
-            return AccessCheckResult.notFound("Assessment not found");
+            return AccessCheckResult.blocked("Assessment not found");
         }
         
         // ✅ STEP 1: Check for active reschedule FIRST
