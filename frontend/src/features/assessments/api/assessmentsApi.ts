@@ -7,6 +7,8 @@ import type {
   SubmitAssessmentRequest
 } from '../types/assessmentTypes';
 import type { PeriodProgressDto } from '../types/customAssessmentTypes';
+import type { GradebookAssessmentDto } from '../types/gradebookTypes';
+
 
 const API_BASE = '/assessments';
 
@@ -138,6 +140,18 @@ export const assessmentsApi = {
     return response.data;
   },
 
+
+  /**
+ * ✅ NEW: Get gradebook assessments for current student
+ * Returns QUIZ, CLASSWORK, TEST1, TEST2, ASSIGNMENT, EXAM
+ */
+getGradebookAssessments: async (): Promise<GradebookAssessmentDto[]> => {
+  const response = await axiosInstance.get<GradebookAssessmentDto[]>(
+    `${API_BASE}/student/gradebook-assessments`
+  );
+  return response.data;
+},
+
   // ========================================
   // ✅ NEW: MULTI-PERIOD / CUSTOM ASSESSMENT ENDPOINTS
   // ========================================
@@ -215,6 +229,7 @@ export const assessmentsApi = {
     return response.data;
   },
 };
+
 
 // ========================================
 // ✅ UTILITY FUNCTIONS

@@ -1352,4 +1352,195 @@ public class AssessmentService {
 	    
 	    return submission.getId();
 	}
+	
+	
+	
+	// Add to AssessmentService.java
+
+	/**
+	 * ✅ NEW: Get gradebook assessments for student
+	 * Returns ONLY: QUIZ, CLASSWORK, TEST1, TEST2, ASSIGNMENT, EXAM
+	 * Excludes: LESSON_TOPIC_ASSESSMENT (handled by progress API)
+	 * 
+	 * @param studentProfileId Student profile ID
+	 * @return List of gradebook assessments with access status
+	 */
+	@Transactional(readOnly = true)
+	public List<GradebookAssessmentDto> getGradebookAssessmentsForStudent(Long studentProfileId) {
+	    log.info("📚 Fetching gradebook assessments for student profile {}", studentProfileId);
+	    
+	    // Get student profile
+	    StudentProfile studentProfile = studentProfileRepository.findById(studentProfileId)
+	            .orElseThrow(() -> new ResourceNotFoundException(
+	                    "Student profile not found: " + studentProfileId));
+	    
+	    // Get subject IDs for this student
+	    List<Long> subjectIds = getSubjectIdsForStudent(studentProfile);
+	    
+	    if (subjectIds.isEmpty()) {
+	        log.warn("⚠️ Student {} has no subject enrollments", studentProfileId);
+	        return List.of();
+	    }
+	    
+	    log.info("🔍 Student enrolled in {} subjects: {}", subjectIds.size(), subjectIds);
+	    
+	    // Define gradebook assessment types
+	    List<AssessmentType> gradebookTypes = List.of(
+	        AssessmentType.QUIZ,
+	        AssessmentType.CLASSWORK,
+	        AssessmentType.TEST1,
+	        AssessmentType.TEST2,
+	        AssessmentType.ASSIGNMENT,
+	        AssessmentType.EXAM
+	    );
+	    
+	    // Get all published assessments for these subjects
+	    List<Assessment> allAssessments = assessmentRepository
+	            .findBySubject_IdInAndPublishedTrue(subjectIds);
+	    
+	    log.info("📋 Found {} total published assessments", allAssessments.size());
+	    
+	    // Filter to only gradebook types and exclude custom assessments not for this student
+	    List<Assessment> gradebookAssessments = allAssessments.stream()
+	            .filter(a -> gradebookTypes.contains(a.getType()))
+	            .filter(a -> {
+	                // Include non-custom assessments
+	                if (!a.isCustomAssessment()) {
+	                    return true;
+	                }
+	                
+	                // For custom assessments, only include if targeted to this student
+	                if (a.getTargetStudentId() != null && 
+	                    a.getTargetStudentId().equals(studentProfileId)) {
+	                    log.debug("✅ Including custom assessment {} for student {}", 
+	                            a.getId(), studentProfileId);
+	                    return true;
+	                }
+	                
+	                log.debug("🔒 Filtering out custom assessment {} not for student {}", 
+	                        a.getId(), studentProfileId);
+	                return false;
+	            })
+	            .collect(Collectors.toList());
+	    
+	    log.info("✅ Filtered to {} gradebook assessments", gradebookAssessments.size());
+	    
+	    // Convert to DTOs with access status
+	    LocalDateTime now = LocalDateTime.now();
+	    
+	    List<GradebookAssessmentDto> dtos = gradebookAssessments.stream()
+	            .map(assessment -> convertToGradebookDto(assessment, studentProfileId, now))
+	            .collect(Collectors.toList());
+	    
+	    // Log summary by type
+	    Map<AssessmentType, Long> countByType = dtos.stream()
+	            .collect(Collectors.groupingBy(
+	                    GradebookAssessmentDto::getType, 
+	                    Collectors.counting()));
+	    
+	    countByType.forEach((type, count) -> 
+	        log.info("  📊 {}: {} assessment(s)", type, count));
+	    
+	    return dtos;
+	}
+
+	/**
+	 * ✅ Convert Assessment entity to GradebookAssessmentDto with enriched data
+	 */
+	private GradebookAssessmentDto convertToGradebookDto(
+	        Assessment assessment, 
+	        Long studentProfileId, 
+	        LocalDateTime now) {
+	    
+	    // Get submission if exists
+	    Optional<AssessmentSubmission> submissionOpt = submissionRepository
+	            .findByAssessmentIdAndStudentId(assessment.getId(), studentProfileId);
+	    
+	    // Calculate time until due
+	    Long hoursUntilDue = null;
+	    Long daysUntilDue = null;
+	    
+	    if (assessment.getDueDate() != null) {
+	        long hours = java.time.Duration.between(now, assessment.getDueDate()).toHours();
+	        long days = java.time.Duration.between(now, assessment.getDueDate()).toDays();
+	        hoursUntilDue = hours;
+	        daysUntilDue = days;
+	    }
+	    
+	    // Build DTO
+	    GradebookAssessmentDto.GradebookAssessmentDtoBuilder builder = GradebookAssessmentDto.builder()
+	            .id(assessment.getId())
+	            .title(assessment.getTitle())
+	            .description(assessment.getDescription())
+	            .type(assessment.getType())
+	            .subjectId(assessment.getSubject().getId())
+	            .subjectName(assessment.getSubject().getName())
+	            .subjectCode(assessment.getSubject().getCode())
+	            .totalMarks(assessment.getTotalMarks())
+	            .passingMarks(assessment.getPassingMarks())
+	            .durationMinutes(assessment.getDurationMinutes())
+	            .questionCount((int) questionRepository.countByAssessmentId(assessment.getId()))
+	            .autoGrade(assessment.getAutoGrade())
+	            .published(assessment.getPublished())
+	            .dueDate(assessment.getDueDate())
+	            .createdAt(assessment.getCreatedAt())
+	            .hoursUntilDue(hoursUntilDue)
+	            .daysUntilDue(daysUntilDue)
+	            .gradebookWeight(GradebookAssessmentDto.getGradebookWeight(assessment.getType()));
+	    
+	    // Add term info if exists
+	    if (assessment.getTerm() != null) {
+	        builder.termId(assessment.getTerm().getId())
+	               .termName(assessment.getTerm().getName());
+	    }
+	    
+	    // Add creator info if exists
+	    if (assessment.getCreatedBy() != null) {
+	        builder.createdById(assessment.getCreatedBy().getId())
+	               .createdByName(assessment.getCreatedBy().getFullName());
+	    }
+	    
+	    // Add submission info if exists
+	    if (submissionOpt.isPresent()) {
+	        AssessmentSubmission submission = submissionOpt.get();
+	        builder.hasSubmitted(true)
+	               .submissionId(submission.getId())
+	               .score(submission.getScore())
+	               .percentage(submission.getPercentage())
+	               .passed(submission.getPassed())
+	               .submittedAt(submission.getSubmittedAt())
+	               .graded(submission.getGraded());
+	    } else {
+	        builder.hasSubmitted(false);
+	    }
+	    
+	    GradebookAssessmentDto dto = builder.build();
+	    
+	    // Calculate access status
+	    dto.setAccessStatus(GradebookAssessmentDto.calculateAccessStatus(
+	            assessment.getDueDate(), 
+	            dto.getHasSubmitted(), 
+	            now));
+	    
+	    // Set accessibility flag
+	    dto.setIsAccessible(
+	            dto.getAccessStatus() == GradebookAssessmentDto.AccessStatus.OPEN ||
+	            dto.getAccessStatus() == GradebookAssessmentDto.AccessStatus.DUE_SOON
+	    );
+	    
+	    // Generate time message
+	    dto.setTimeMessage(GradebookAssessmentDto.generateTimeMessage(
+	            assessment.getDueDate(), 
+	            dto.getHasSubmitted(), 
+	            now));
+	    
+	    log.debug("📝 Assessment {}: type={}, status={}, due={}, submitted={}", 
+	            assessment.getId(), 
+	            assessment.getType(), 
+	            dto.getAccessStatus(), 
+	            assessment.getDueDate(), 
+	            dto.getHasSubmitted());
+	    
+	    return dto;
+	}
 }

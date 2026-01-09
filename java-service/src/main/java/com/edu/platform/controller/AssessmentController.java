@@ -705,4 +705,39 @@ public class AssessmentController {
         }
     }
     
+    
+    /**
+     * ✅ NEW: Get gradebook assessments for student
+     * Returns QUIZ, CLASSWORK, TEST1, TEST2, ASSIGNMENT, EXAM assessments
+     * These are due-date based assessments (not lesson-based)
+     * 
+     * Separate from /student/my-assessments which returns ALL assessment types
+     */
+    @GetMapping("/student/gradebook-assessments")
+    @PreAuthorize("hasRole('STUDENT')")
+    @Operation(
+        summary = "Get gradebook assessments", 
+        description = "Get student's gradebook assessments (QUIZ, CLASSWORK, TEST1, TEST2, ASSIGNMENT, EXAM). " +
+                      "These are filtered by student's enrolled subjects and published status."
+    )
+    public ResponseEntity<List<GradebookAssessmentDto>> getGradebookAssessments() {
+        
+        // Get authenticated student
+        User student = getCurrentUser();
+        
+        StudentProfile studentProfile = studentProfileRepository.findByUserId(student.getId())
+                .orElseThrow(() -> new RuntimeException("Student profile not found for user: " + student.getEmail()));
+        
+        log.info("📚 Student {} ({}) fetching gradebook assessments for profile {}", 
+                student.getFullName(), student.getId(), studentProfile.getId());
+        
+        // Get gradebook assessments from service
+        List<GradebookAssessmentDto> assessments = 
+                assessmentService.getGradebookAssessmentsForStudent(studentProfile.getId());
+        
+        log.info("✅ Returning {} gradebook assessments for student", assessments.size());
+        
+        return ResponseEntity.ok(assessments);
+    }
+    
 }
