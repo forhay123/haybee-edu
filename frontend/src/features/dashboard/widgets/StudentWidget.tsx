@@ -6,7 +6,7 @@ import { useWatchHistory } from "../../videos/hooks/useVideoLessons";
 import { useUpcomingSessions } from "../../live/hooks/useLiveSessions";
 import { useQuery } from "@tanstack/react-query";
 import axiosInstance from "../../../api/axios";
-import { BookOpen, Clock, CheckCircle, Video, TrendingUp, Calendar, PlayCircle, Eye, Users, AlertCircle, Award, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { BookOpen, Clock, CheckCircle, Video, TrendingUp, Calendar, PlayCircle, Eye, Users, AlertCircle, Award, CheckCircle2, XCircle, AlertTriangle, FileText } from "lucide-react";
 import { format, isValid, parseISO, startOfWeek, endOfWeek } from "date-fns";
 import ProfilePendingScreen from "../../individual/components/student/ProfilePendingScreen";
 import { useGradebookAssessments } from "../../assessments/hooks/useGradebookAssessments";
