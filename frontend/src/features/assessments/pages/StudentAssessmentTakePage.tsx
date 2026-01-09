@@ -5,7 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../api/axios';
 import { QuestionCard } from '../components/QuestionCard';
-import { ArrowLeft, Send, BookOpen, Brain, CheckCircle, Lock, Clock } from 'lucide-react';
+import { ArrowLeft, Send, BookOpen, Brain, CheckCircle, Lock, Clock, XCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
   useAssessmentQuestions,
@@ -68,10 +68,12 @@ const StudentAssessmentTakePage: React.FC = () => {
   // Submit mutation
   const submitMutation = useSubmitAssessmentById();
 
-  // Check assessment access
+  // ✅ FIXED: Check assessment access with expired state
   const {
     canAccess: assessmentCanAccess,
     isLocked: assessmentLocked,
+    isExpired: assessmentExpired,
+    isNotYetOpen: assessmentNotYetOpen,
     minutesRemaining,
     accessData
   } = useAssessmentAccess(
@@ -125,6 +127,12 @@ const StudentAssessmentTakePage: React.FC = () => {
 
     if (!studentProfileId) {
       toast.error('Student profile not found. Please log in again.');
+      return;
+    }
+
+    // ✅ FIXED: Check for expired state
+    if (assessmentExpired) {
+      toast.error('This assessment has expired. You can no longer submit.');
       return;
     }
 
@@ -231,8 +239,8 @@ const StudentAssessmentTakePage: React.FC = () => {
     );
   }
 
-  // Block access if assessment window closed
-  if (assessment && assessmentLocked) {
+  // ✅ FIXED: Block access if EXPIRED or LOCKED (not yet open)
+  if (assessment && (assessmentExpired || assessmentLocked)) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
         <button
@@ -242,7 +250,38 @@ const StudentAssessmentTakePage: React.FC = () => {
           <ArrowLeft className="w-5 h-5" />
           Back
         </button>
-        <AccessCheckAlert accessData={accessData} />
+
+        {/* ✅ NEW: Different messages for expired vs locked */}
+        {assessmentExpired ? (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <div className="flex items-start gap-4">
+              <XCircle className="w-8 h-8 text-red-600 flex-shrink-0" />
+              <div>
+                <h3 className="text-lg font-semibold text-red-900 mb-2">
+                  Assessment Window Closed
+                </h3>
+                <p className="text-red-700 mb-4">
+                  This assessment is no longer available. The submission window has expired and you can no longer take this assessment.
+                </p>
+                <div className="p-3 bg-red-100 rounded-lg">
+                  <p className="text-sm text-red-800">
+                    <strong>Window ended:</strong> {accessData?.windowEnd 
+                      ? new Date(accessData.windowEnd).toLocaleString() 
+                      : 'N/A'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/assessments/student/my-assessments')}
+                  className="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  View Other Assessments
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <AccessCheckAlert accessData={accessData} />
+        )}
       </div>
     );
   }
@@ -341,7 +380,7 @@ const StudentAssessmentTakePage: React.FC = () => {
                 questionNumber={index + 1}
                 selectedAnswer={answers.get(question.id)}
                 onAnswerChange={handleAnswerChange}
-                disabled={!assessmentCanAccess}
+                disabled={!assessmentCanAccess || assessmentExpired}
               />
             ))}
           </div>
@@ -373,13 +412,18 @@ const StudentAssessmentTakePage: React.FC = () => {
         <div className="bg-white rounded-lg shadow-md p-6">
           <button
             onClick={handleSubmit}
-            disabled={submitMutation.isPending || answers.size === 0 || !assessmentCanAccess}
+            disabled={submitMutation.isPending || answers.size === 0 || !assessmentCanAccess || assessmentExpired}
             className="w-full px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-3 text-lg font-semibold transition shadow-lg hover:shadow-xl"
           >
             {submitMutation.isPending ? (
               <>
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                 Submitting...
+              </>
+            ) : assessmentExpired ? (
+              <>
+                <XCircle className="w-5 h-5" />
+                Assessment Expired
               </>
             ) : !assessmentCanAccess ? (
               <>
