@@ -105,6 +105,13 @@ export const ComprehensiveLessonCard: React.FC<ComprehensiveLessonCardProps> = (
               {lesson.lessonTopicTitle}
             </h3>
             <div className="flex items-center gap-3 text-sm text-gray-600 flex-wrap">
+              {/* Show student name for teachers viewing multiple students */}
+              {lesson.studentName && (
+                <span className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-medium">
+                  <span>👤</span>
+                  <span>{lesson.studentName}</span>
+                </span>
+              )}
               <span className="flex items-center gap-1">
                 <span>📖</span>
                 <span>{lesson.subjectName}</span>
