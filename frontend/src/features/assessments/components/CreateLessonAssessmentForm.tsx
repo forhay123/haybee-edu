@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../api/axios';
 import { toast } from 'react-hot-toast';
-import { Brain, User, CheckSquare, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Brain, User, CheckSquare, Plus, Trash2, ChevronDown, ChevronUp, Search } from 'lucide-react';
 
 interface LessonTopic {
   id: number;
@@ -70,7 +70,8 @@ const CreateLessonAssessmentForm: React.FC<CreateLessonAssessmentFormProps> = ({
   const [selectedAIQuestions, setSelectedAIQuestions] = useState<number[]>([]);
   const [selectedTeacherQuestions, setSelectedTeacherQuestions] = useState<number[]>([]);
   const [expandedAIQuestions, setExpandedAIQuestions] = useState<Set<number>>(new Set());
-  const [showAllAIQuestions, setShowAllAIQuestions] = useState(false);
+  const [showAIQuestionSelector, setShowAIQuestionSelector] = useState(false);
+  const [aiSearchTerm, setAISearchTerm] = useState('');
 
   // Fetch lesson topic details
   const { data: lessonTopic } = useQuery<LessonTopic>({
@@ -116,6 +117,11 @@ const CreateLessonAssessmentForm: React.FC<CreateLessonAssessmentFormProps> = ({
       }));
     }
   }, [lessonTopic]);
+
+  // Filter AI questions based on search
+  const filteredAIQuestions = aiQuestions.filter(q =>
+    q.questionText.toLowerCase().includes(aiSearchTerm.toLowerCase())
+  );
 
   // Create assessment mutation
   const createMutation = useMutation({
@@ -163,10 +169,10 @@ const CreateLessonAssessmentForm: React.FC<CreateLessonAssessmentFormProps> = ({
   };
 
   const selectAllAIQuestions = () => {
-    if (selectedAIQuestions.length === aiQuestions.length) {
+    if (selectedAIQuestions.length === filteredAIQuestions.length) {
       setSelectedAIQuestions([]);
     } else {
-      setSelectedAIQuestions(aiQuestions.map(q => q.id));
+      setSelectedAIQuestions(filteredAIQuestions.map(q => q.id));
     }
   };
 
@@ -193,7 +199,7 @@ const CreateLessonAssessmentForm: React.FC<CreateLessonAssessmentFormProps> = ({
     }
 
     // Calculate estimated total marks
-    const aiMarks = selectedAIQuestions.length * 2; // Assuming 2 marks per AI question
+    const aiMarks = selectedAIQuestions.length * 2;
     const teacherMarks = selectedTeacherQuestions.length * 2;
     const totalMarks = aiMarks + teacherMarks;
 
@@ -216,11 +222,11 @@ const CreateLessonAssessmentForm: React.FC<CreateLessonAssessmentFormProps> = ({
   };
 
   if (!lessonTopic) {
-    return <div>Loading...</div>;
+    return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>;
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-5xl mx-auto p-6">
       <div className="bg-white rounded-lg shadow-lg p-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-6">
           Create Assessment for: {lessonTopic.topicTitle}
@@ -298,135 +304,206 @@ const CreateLessonAssessmentForm: React.FC<CreateLessonAssessmentFormProps> = ({
             </div>
           </div>
 
-          {/* AI Questions Section */}
+          {/* Questions Section Header */}
           <div className="border-t pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Questions</h3>
+          </div>
+
+          {/* AI Questions Section */}
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
                 <Brain className="w-6 h-6 text-purple-600" />
-                <h3 className="text-lg font-semibold text-gray-900">
-                  AI-Generated Questions
-                </h3>
-                <span className="text-sm text-gray-500">
-                  ({aiQuestions.length} available)
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900">
+                    AI-Generated Questions
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    Generate questions automatically from the selected lesson content
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-sm font-medium text-purple-700">
+                  {aiQuestions.length} available
                 </span>
               </div>
-              {aiQuestions.length > 0 && (
-                <button
-                  type="button"
-                  onClick={selectAllAIQuestions}
-                  className="text-sm text-purple-600 hover:text-purple-700 font-medium"
-                >
-                  {selectedAIQuestions.length === aiQuestions.length ? 'Deselect All' : 'Select All'}
-                </button>
-              )}
             </div>
 
             {loadingAI ? (
-              <div className="text-center py-4 text-gray-500">Loading AI questions...</div>
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-2"></div>
+                <p className="text-sm text-gray-600">Loading AI questions...</p>
+              </div>
             ) : aiQuestions.length === 0 ? (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-                ⚠️ No AI questions available for this lesson. Generate questions first or use only teacher questions.
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800">
+                  ⚠️ No AI questions available for this lesson. Generate questions first.
+                </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="bg-purple-50 rounded-lg p-3 text-sm text-purple-900 mb-3">
-                  <p className="font-medium">
-                    {selectedAIQuestions.length} of {aiQuestions.length} AI questions selected
-                  </p>
-                </div>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowAIQuestionSelector(!showAIQuestionSelector)}
+                  className="w-full mt-3 px-4 py-3 bg-white border-2 border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 font-medium transition flex items-center justify-between"
+                >
+                  <span className="flex items-center gap-2">
+                    <CheckSquare className="w-5 h-5" />
+                    {selectedAIQuestions.length > 0 
+                      ? `${selectedAIQuestions.length} AI Question${selectedAIQuestions.length !== 1 ? 's' : ''} Selected`
+                      : 'Select Questions'
+                    }
+                  </span>
+                  {showAIQuestionSelector ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </button>
 
-                <div className="max-h-96 overflow-y-auto space-y-2 border border-gray-200 rounded-lg p-3">
-                  {aiQuestions.slice(0, showAllAIQuestions ? undefined : 5).map((question, idx) => (
-                    <div
-                      key={question.id}
-                      className={`rounded-lg border transition ${
-                        selectedAIQuestions.includes(question.id)
-                          ? 'bg-purple-50 border-2 border-purple-300'
-                          : 'bg-gray-50 border border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <label className="flex items-start gap-3 p-3 cursor-pointer">
+                {showAIQuestionSelector && (
+                  <div className="mt-4 bg-white rounded-lg border-2 border-purple-200 p-4">
+                    {/* Search and Actions */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                         <input
-                          type="checkbox"
-                          checked={selectedAIQuestions.includes(question.id)}
-                          onChange={() => toggleAIQuestion(question.id)}
-                          className="mt-1 w-4 h-4 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                          type="text"
+                          placeholder="Search questions..."
+                          value={aiSearchTerm}
+                          onChange={(e) => setAISearchTerm(e.target.value)}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
                         />
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-medium text-gray-900">
-                              {idx + 1}. {question.questionText}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                toggleAIQuestionExpand(question.id);
-                              }}
-                              className="text-purple-600 hover:text-purple-700"
-                            >
-                              {expandedAIQuestions.has(question.id) ? (
-                                <ChevronUp className="w-4 h-4" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4" />
-                              )}
-                            </button>
-                          </div>
-                          
-                          {expandedAIQuestions.has(question.id) && (
-                            <div className="mt-2 space-y-1 text-sm text-gray-700">
-                              {question.optionA && <div className="pl-4">A. {question.optionA}</div>}
-                              {question.optionB && <div className="pl-4">B. {question.optionB}</div>}
-                              {question.optionC && <div className="pl-4">C. {question.optionC}</div>}
-                              {question.optionD && <div className="pl-4">D. {question.optionD}</div>}
-                              {question.correctOption && (
-                                <div className="mt-2 pl-4 text-green-700 font-medium">
-                                  ✓ Correct: {question.correctOption}
-                                </div>
-                              )}
-                              {question.maxScore && (
-                                <div className="mt-1 pl-4 text-purple-700">
-                                  Points: {question.maxScore}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={selectAllAIQuestions}
+                        className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-lg transition"
+                      >
+                        {selectedAIQuestions.length === filteredAIQuestions.length ? 'Deselect All' : 'Select All'}
+                      </button>
                     </div>
-                  ))}
-                </div>
 
-                {aiQuestions.length > 5 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllAIQuestions(!showAllAIQuestions)}
-                    className="w-full py-2 text-sm text-purple-600 hover:text-purple-700 font-medium"
-                  >
-                    {showAllAIQuestions ? 'Show Less' : `Show All ${aiQuestions.length} Questions`}
-                  </button>
+                    {/* Question List */}
+                    <div className="max-h-[500px] overflow-y-auto space-y-2">
+                      {filteredAIQuestions.length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">No questions match your search</p>
+                      ) : (
+                        filteredAIQuestions.map((question, idx) => (
+                          <div
+                            key={question.id}
+                            className={`rounded-lg border-2 transition ${
+                              selectedAIQuestions.includes(question.id)
+                                ? 'bg-purple-50 border-purple-400 shadow-sm'
+                                : 'bg-white border-gray-200 hover:border-purple-300'
+                            }`}
+                          >
+                            <div className="p-4">
+                              <label className="flex items-start gap-3 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedAIQuestions.includes(question.id)}
+                                  onChange={() => toggleAIQuestion(question.id)}
+                                  className="mt-1 w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="text-sm font-medium text-gray-900 leading-relaxed">
+                                      <span className="text-purple-600 font-semibold">Q{idx + 1}.</span> {question.questionText}
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        toggleAIQuestionExpand(question.id);
+                                      }}
+                                      className="flex-shrink-0 p-1 text-purple-600 hover:bg-purple-100 rounded transition"
+                                    >
+                                      {expandedAIQuestions.has(question.id) ? (
+                                        <ChevronUp className="w-5 h-5" />
+                                      ) : (
+                                        <ChevronDown className="w-5 h-5" />
+                                      )}
+                                    </button>
+                                  </div>
+                                  
+                                  {expandedAIQuestions.has(question.id) && (
+                                    <div className="mt-3 pt-3 border-t border-purple-200">
+                                      <div className="space-y-2 text-sm">
+                                        {question.optionA && (
+                                          <div className={`p-2 rounded ${question.correctOption === 'A' ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                                            <span className="font-semibold text-gray-700">A.</span> {question.optionA}
+                                            {question.correctOption === 'A' && <span className="ml-2 text-green-600 font-semibold">✓</span>}
+                                          </div>
+                                        )}
+                                        {question.optionB && (
+                                          <div className={`p-2 rounded ${question.correctOption === 'B' ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                                            <span className="font-semibold text-gray-700">B.</span> {question.optionB}
+                                            {question.correctOption === 'B' && <span className="ml-2 text-green-600 font-semibold">✓</span>}
+                                          </div>
+                                        )}
+                                        {question.optionC && (
+                                          <div className={`p-2 rounded ${question.correctOption === 'C' ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                                            <span className="font-semibold text-gray-700">C.</span> {question.optionC}
+                                            {question.correctOption === 'C' && <span className="ml-2 text-green-600 font-semibold">✓</span>}
+                                          </div>
+                                        )}
+                                        {question.optionD && (
+                                          <div className={`p-2 rounded ${question.correctOption === 'D' ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                                            <span className="font-semibold text-gray-700">D.</span> {question.optionD}
+                                            {question.correctOption === 'D' && <span className="ml-2 text-green-600 font-semibold">✓</span>}
+                                          </div>
+                                        )}
+                                        {question.maxScore && (
+                                          <div className="mt-2 pt-2 border-t border-purple-100">
+                                            <span className="text-purple-700 font-medium">Points: {question.maxScore}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </label>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-purple-200">
+                      <p className="text-sm text-purple-900 font-medium">
+                        {selectedAIQuestions.length} of {aiQuestions.length} questions selected
+                      </p>
+                    </div>
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </div>
 
           {/* Teacher Questions Section */}
-          <div className="border-t pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
+          <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border border-blue-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
                 <User className="w-6 h-6 text-blue-600" />
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Teacher Questions
-                </h3>
-                <span className="text-sm text-gray-500">
-                  ({teacherQuestions.length} available)
-                </span>
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900">
+                    Your Question Bank
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    {teacherQuestions.length > 0 
+                      ? `${teacherQuestions.length} question${teacherQuestions.length !== 1 ? 's' : ''} available`
+                      : 'No questions in your bank yet'
+                    }
+                  </p>
+                </div>
               </div>
               {teacherQuestions.length > 0 && (
                 <button
                   type="button"
                   onClick={selectAllTeacherQuestions}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  className="text-sm font-medium text-blue-600 hover:text-blue-700"
                 >
                   {selectedTeacherQuestions.length === teacherQuestions.length ? 'Deselect All' : 'Select All'}
                 </button>
@@ -434,45 +511,44 @@ const CreateLessonAssessmentForm: React.FC<CreateLessonAssessmentFormProps> = ({
             </div>
 
             {loadingTeacher ? (
-              <div className="text-center py-4 text-gray-500">Loading teacher questions...</div>
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                <p className="text-sm text-gray-600">Loading your questions...</p>
+              </div>
             ) : teacherQuestions.length === 0 ? (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-                ⚠️ No teacher questions available. Add questions to your question bank first.
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800">
+                  ⚠️ No questions in your bank. Add questions first.
+                </p>
               </div>
             ) : (
-              <div className="space-y-2">
-                <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-900 mb-3">
-                  <p className="font-medium">
-                    {selectedTeacherQuestions.length} of {teacherQuestions.length} teacher questions selected
-                  </p>
-                </div>
-
-                <div className="max-h-64 overflow-y-auto space-y-2 border border-gray-200 rounded-lg p-3">
+              <div className="mt-3 bg-white rounded-lg border-2 border-blue-200 p-4">
+                <div className="max-h-80 overflow-y-auto space-y-2">
                   {teacherQuestions.map((question) => (
                     <label
                       key={question.id}
-                      className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition ${
+                      className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border-2 ${
                         selectedTeacherQuestions.includes(question.id)
-                          ? 'bg-blue-50 border-2 border-blue-300'
-                          : 'bg-gray-50 border border-gray-200 hover:border-gray-300'
+                          ? 'bg-blue-50 border-blue-400 shadow-sm'
+                          : 'bg-white border-gray-200 hover:border-blue-300'
                       }`}
                     >
                       <input
                         type="checkbox"
                         checked={selectedTeacherQuestions.includes(question.id)}
                         onChange={() => toggleTeacherQuestion(question.id)}
-                        className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        className="mt-1 w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                       />
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-900">
                           {question.questionText}
                         </p>
-                        <div className="flex gap-2 mt-1">
-                          <span className="text-xs px-2 py-1 bg-gray-200 rounded">
+                        <div className="flex gap-2 mt-2">
+                          <span className="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded font-medium">
                             {question.questionType}
                           </span>
                           {question.difficultyLevel && (
-                            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded font-medium">
                               {question.difficultyLevel}
                             </span>
                           )}
@@ -481,52 +557,57 @@ const CreateLessonAssessmentForm: React.FC<CreateLessonAssessmentFormProps> = ({
                     </label>
                   ))}
                 </div>
+                <div className="mt-4 pt-4 border-t border-blue-200">
+                  <p className="text-sm text-blue-900 font-medium">
+                    {selectedTeacherQuestions.length} of {teacherQuestions.length} questions selected
+                  </p>
+                </div>
               </div>
             )}
           </div>
 
           {/* Summary */}
-          <div className="border-t pt-6 bg-gray-50 rounded-lg p-4">
-            <h4 className="font-semibold text-gray-900 mb-3">Assessment Summary</h4>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-gray-600">AI Questions:</p>
-                <p className="font-semibold text-purple-600">{selectedAIQuestions.length}</p>
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200 p-6">
+            <h4 className="font-bold text-gray-900 mb-4 text-lg">📊 Assessment Summary</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-lg p-4 border border-purple-200">
+                <p className="text-xs text-gray-600 mb-1">AI Questions</p>
+                <p className="text-2xl font-bold text-purple-600">{selectedAIQuestions.length}</p>
               </div>
-              <div>
-                <p className="text-gray-600">Teacher Questions:</p>
-                <p className="font-semibold text-blue-600">{selectedTeacherQuestions.length}</p>
+              <div className="bg-white rounded-lg p-4 border border-blue-200">
+                <p className="text-xs text-gray-600 mb-1">Teacher Questions</p>
+                <p className="text-2xl font-bold text-blue-600">{selectedTeacherQuestions.length}</p>
               </div>
-              <div>
-                <p className="text-gray-600">Total Questions:</p>
-                <p className="font-semibold text-green-600">
+              <div className="bg-white rounded-lg p-4 border border-green-200">
+                <p className="text-xs text-gray-600 mb-1">Total Questions</p>
+                <p className="text-2xl font-bold text-green-600">
                   {selectedAIQuestions.length + selectedTeacherQuestions.length}
                 </p>
               </div>
-              <div>
-                <p className="text-gray-600">Estimated Total Marks:</p>
-                <p className="font-semibold text-green-600">
-                  ~{(selectedAIQuestions.length + selectedTeacherQuestions.length) * 2}
+              <div className="bg-white rounded-lg p-4 border border-orange-200">
+                <p className="text-xs text-gray-600 mb-1">Est. Total Marks</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {(selectedAIQuestions.length + selectedTeacherQuestions.length) * 2}
                 </p>
               </div>
             </div>
           </div>
 
           {/* Submit Button */}
-          <div className="flex gap-4">
+          <div className="flex gap-4 pt-4">
             <button
               type="submit"
-              disabled={createMutation.isPending}
-              className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold transition flex items-center justify-center gap-2"
+              disabled={createMutation.isPending || (selectedAIQuestions.length === 0 && selectedTeacherQuestions.length === 0)}
+              className="flex-1 px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-bold text-lg transition flex items-center justify-center gap-3 shadow-lg"
             >
               {createMutation.isPending ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  Creating...
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                  Creating Assessment...
                 </>
               ) : (
                 <>
-                  <CheckSquare className="w-5 h-5" />
+                  <CheckSquare className="w-6 h-6" />
                   Create Assessment
                 </>
               )}
