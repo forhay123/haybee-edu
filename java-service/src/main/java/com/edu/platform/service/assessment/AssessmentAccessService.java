@@ -5,6 +5,7 @@ import com.edu.platform.model.StudentProfile;
 import com.edu.platform.model.assessment.Assessment;
 import com.edu.platform.model.assessment.AssessmentWindowReschedule;
 import com.edu.platform.model.progress.StudentLessonProgress;
+import com.edu.platform.repository.assessment.AssessmentRepository;
 import com.edu.platform.repository.assessment.AssessmentSubmissionRepository;
 import com.edu.platform.repository.assessment.AssessmentWindowRescheduleRepository;
 import com.edu.platform.repository.progress.StudentLessonProgressRepository;
@@ -23,7 +24,7 @@ import java.util.Optional;
 
 /**
  * Assessment Access Control Service
- * ✅ UPDATED: Now checks for teacher reschedules before granting access
+ * ✅ FIXED: Now properly handles assessment access with reschedules
  */
 @Service
 @RequiredArgsConstructor
@@ -33,11 +34,12 @@ public class AssessmentAccessService {
     private final StudentLessonProgressRepository progressRepository;
     private final AssessmentSubmissionRepository submissionRepository;
     private final StudentProfileRepository studentProfileRepository;
-    private final AssessmentWindowRescheduleRepository rescheduleRepository; // ✅ NEW
+    private final AssessmentWindowRescheduleRepository rescheduleRepository;
+    private final AssessmentRepository assessmentRepository;
     
     /**
-     * ✅ UPDATED: Check if student can access assessment right now
-     * Now checks for reschedules FIRST before using original windows
+     * ✅ FIXED: Check if student can access assessment right now
+     * Properly handles null assessment by fetching it from progress
      */
     @Transactional
     public AccessCheckResult canAccessAssessment(
@@ -46,7 +48,13 @@ public class AssessmentAccessService {
             LocalDateTime now) {
         
         log.debug("Checking assessment access: student={}, assessment={}, time={}", 
-                 student.getId(), assessment.getId(), now);
+                 student.getId(), assessment != null ? assessment.getId() : "null", now);
+        
+        // ✅ FIX: Handle case where assessment is null
+        if (assessment == null) {
+            log.warn("Assessment is null, cannot check access");
+            return AccessCheckResult.notFound("Assessment not found");
+        }
         
         // ✅ STEP 1: Check for active reschedule FIRST
         Optional<AssessmentWindowReschedule> activeReschedule = 
@@ -66,8 +74,7 @@ public class AssessmentAccessService {
         // Filter to find the currently accessible progress record
         Optional<StudentLessonProgress> accessibleProgress = progressList.stream()
                 .filter(p -> p.isAssessmentAccessible() && !p.isCompleted())
-                .filter(p -> !now.isBefore(p.getAssessmentWindowStart()) && 
-                             !now.isAfter(p.getAssessmentWindowEnd()))
+                .filter(p -> p.getAssessmentWindowStart() != null && p.getAssessmentWindowEnd() != null)
                 .min(Comparator.comparing(StudentLessonProgress::getPeriodSequence));
         
         StudentLessonProgress progress = accessibleProgress.orElse(null);
@@ -197,7 +204,6 @@ public class AssessmentAccessService {
                 inGracePeriod
         );
         
-        // ✅ NEW: Add reschedule info to result if applicable
         if (hasReschedule) {
             log.info("✅ Access granted with rescheduled window: {} to {}", 
                      windowStart, windowEnd);
@@ -223,15 +229,14 @@ public class AssessmentAccessService {
             .subject(assessment.getSubject())
             .assessment(assessment)
             .scheduledDate(date)
-            .date(date) // Required field
+            .date(date)
             .completed(false)
-            .periodNumber(1) // Default period
-            .priority(3) // Default priority
-            .weight(1.0) // Default weight
-            .assessmentAccessible(true) // Allow access
+            .periodNumber(1)
+            .priority(3)
+            .weight(1.0)
+            .assessmentAccessible(true)
             .build();
         
-        // Configure assessment window
         configureAssessmentWindow(progress, date);
         
         progress = progressRepository.save(progress);
@@ -244,7 +249,6 @@ public class AssessmentAccessService {
      * ✅ NEW: Configure assessment window with default values
      */
     private void configureAssessmentWindow(StudentLessonProgress progress, LocalDate date) {
-        // Default: Assessment available all day
         LocalDateTime windowStart = date.atStartOfDay();
         LocalDateTime windowEnd = date.atTime(23, 59, 59);
         
@@ -256,7 +260,6 @@ public class AssessmentAccessService {
     
     /**
      * ✅ UPDATED: Check if currently in grace period
-     * Now considers reschedule grace period if reschedule exists
      */
     private boolean isInGracePeriod(
             StudentLessonProgress progress, 
@@ -266,13 +269,10 @@ public class AssessmentAccessService {
         LocalDateTime graceEnd;
         
         if (reschedule.isPresent() && reschedule.get().getNewGraceEnd() != null) {
-            // Use rescheduled grace period
             graceEnd = reschedule.get().getNewGraceEnd();
         } else if (progress.getGracePeriodEnd() != null) {
-            // Use original grace period
             graceEnd = progress.getGracePeriodEnd();
         } else {
-            // Default: 30 minutes after window end
             LocalDateTime windowEnd = reschedule.isPresent() 
                 ? reschedule.get().getNewWindowEnd()
                 : progress.getAssessmentWindowEnd();
@@ -294,17 +294,20 @@ public class AssessmentAccessService {
     }
     
     /**
-     * Batch check access for multiple assessments
+     * ✅ FIXED: Batch check access for multiple assessments
+     * Now properly fetches the assessment before checking
      */
     @Transactional
     public AccessCheckResult canAccessAssessment(Long studentId, Long assessmentId) {
-        // Simplified version for when you only have IDs
         log.debug("Checking access by IDs: student={}, assessment={}", studentId, assessmentId);
         
         StudentProfile student = studentProfileRepository.findById(studentId)
             .orElseThrow(() -> new IllegalArgumentException("Student not found: " + studentId));
         
-        // This will be handled by the main method now
-        return canAccessAssessment(student, null, LocalDateTime.now());
+        // ✅ FIX: Fetch the assessment before passing it
+        Assessment assessment = assessmentRepository.findById(assessmentId)
+            .orElseThrow(() -> new IllegalArgumentException("Assessment not found: " + assessmentId));
+        
+        return canAccessAssessment(student, assessment, LocalDateTime.now());
     }
 }

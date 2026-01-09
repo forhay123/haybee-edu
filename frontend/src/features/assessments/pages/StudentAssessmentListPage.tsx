@@ -322,7 +322,7 @@ export const StudentAssessmentListPage: React.FC = () => {
                 <AssessmentAccessCard
                   assessment={assessment}
                   studentProfileId={studentProfileId}
-                  onStartAssessment={() => navigate(`/assessments/student/${assessment.id}`)}
+                  onStartAssessment={() => navigate(`/assessments/${assessment.id}/take`)}
                   onViewResults={() => 
                     navigate(`/submissions/${assessment.submissionId}/results`)
                   }
