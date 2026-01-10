@@ -62,33 +62,34 @@ public interface AssessmentRepository extends JpaRepository<Assessment, Long> {
         );
     
 	
-	/**
-	 * ✅ FIXED: Find all gradebook assessments for a student
-	 * Gets subjects through Enrollment relationship
-	 */
-	@Query("SELECT DISTINCT a FROM Assessment a " +
-	       "JOIN Enrollment e ON e.classEntity.id = a.subject.classEntity.id " +
-	       "WHERE e.studentProfile.id = :studentId " +
-	       "AND a.type IN :gradebookTypes " +
-	       "AND a.published = true " +
-	       "ORDER BY a.subject.name, a.type")
-	List<Assessment> findGradebookAssessmentsByStudentId(
-	    @Param("studentId") Long studentId,
-	    @Param("gradebookTypes") List<AssessmentType> gradebookTypes
-	);
-	
-	// Convenience method with default types
-	default List<Assessment> findGradebookAssessmentsByStudentId(Long studentId) {
-	    List<AssessmentType> gradebookTypes = Arrays.asList(
-	        AssessmentType.QUIZ,
-	        AssessmentType.CLASSWORK,
-	        AssessmentType.TEST1,
-	        AssessmentType.TEST2,
-	        AssessmentType.ASSIGNMENT,
-	        AssessmentType.EXAM
-	    );
-	    return findGradebookAssessmentsByStudentId(studentId, gradebookTypes);
-	}
+    /**
+     * ✅ FIXED: Find all gradebook assessments for a student
+     * Removed DISTINCT to allow ORDER BY on subject.name
+     */
+    @Query("SELECT a FROM Assessment a " +
+           "JOIN a.subject s " +
+           "JOIN Enrollment e ON e.classEntity.id = s.classEntity.id " +
+           "WHERE e.studentProfile.id = :studentId " +
+           "AND a.type IN :gradebookTypes " +
+           "AND a.published = true " +
+           "ORDER BY s.name, a.type")
+    List<Assessment> findGradebookAssessmentsByStudentId(
+        @Param("studentId") Long studentId,
+        @Param("gradebookTypes") List<AssessmentType> gradebookTypes
+    );
+
+    // Convenience method with default types
+    default List<Assessment> findGradebookAssessmentsByStudentId(Long studentId) {
+        List<AssessmentType> gradebookTypes = Arrays.asList(
+            AssessmentType.QUIZ,
+            AssessmentType.CLASSWORK,
+            AssessmentType.TEST1,
+            AssessmentType.TEST2,
+            AssessmentType.ASSIGNMENT,
+            AssessmentType.EXAM
+        );
+        return findGradebookAssessmentsByStudentId(studentId, gradebookTypes);
+    }
 	
 	/**
 	 * ✅ FIXED: Find all gradebook assessments for a student in ONE subject
