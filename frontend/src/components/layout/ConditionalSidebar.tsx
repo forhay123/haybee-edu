@@ -141,8 +141,6 @@ const links: Record<Role, NavSection[]> = {
         { name: "Subject Lessons", path: "/subjects/teacher", icon: "📖" },
         { name: "Lesson Topics", path: "/lesson-topics/teacher", icon: "🗂️" },
         { name: "Create Assessments", path: "/lesson-topics/teacher", icon: "📝" },
-        { name: "AI Questions", path: "/ai-questions", icon: "🤖" },
-        { name: "Student Profiles", path: "/student-profiles/teacher", icon: "🧑‍🎓" },
         { name: "Schedule Lessons", path: "/schedules/teacher", icon: "📋" },
         { name: "Comprehensive Lessons", path: "/teacher/comprehensive-lessons", icon: "📊" },
         { name: "Incomplete Lessons", path: "/teacher/incomplete-lessons", icon: "⚠️" },
@@ -152,16 +150,13 @@ const links: Record<Role, NavSection[]> = {
       title: "Individual Students",
       collapsible: true,
       links: [
-        { name: "My Students' Timetables", path: "/teacher/individual/students", icon: "📅" },
-        { name: "Individual Schedule", path: "/teacher/schedule", icon: "👁️" },
-        { name: "Pending Assignments", path: "/teacher/individual/pending/assignments", icon: "👁️" },
+       // { name: "My Students' Timetables", path: "/teacher/individual/students", icon: "📅" },
+       // { name: "Individual Schedule", path: "/teacher/schedule", icon: "👁️" },
+       // { name: "Pending Assignments", path: "/teacher/individual/pending/assignments", icon: "👁️" },
 
         // ✅ NEW
-        {
-          name: "Multi-Period Overview",
-          path: "/teacher/individual/multi-period-overview",
-          icon: "📈",
-        },
+       // { name: "Multi-Period Overview", path: "/teacher/individual/multi-period-overview",icon: "📈" },
+        
         {
           name: "Pending Custom Assessments",
           path: "/teacher/individual/pending-custom-assessments",

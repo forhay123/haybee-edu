@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useAssessment, useAssessmentQuestions, useTogglePublish, useDeleteAssessment } from '../hooks/useAssessments';
+import { useAssessment, useAssessmentQuestions, useTogglePublish, useDeleteAssessment, useAssessmentSubmissions } from '../hooks/useAssessments';
 import { Pencil, Trash2, Eye, EyeOff, ArrowLeft, Users, FileText, Clock } from 'lucide-react';
 
 export const TeacherAssessmentDetailPage: React.FC = () => {
@@ -13,6 +13,7 @@ export const TeacherAssessmentDetailPage: React.FC = () => {
   const assessmentId = Number(id);
   const { data: assessment, isLoading: assessmentLoading } = useAssessment(assessmentId);
   const { data: questions = [], isLoading: questionsLoading } = useAssessmentQuestions(assessmentId, true);
+  const { data: submissions = [] } = useAssessmentSubmissions(assessmentId);
   
   const togglePublishMutation = useTogglePublish();
   const deleteAssessmentMutation = useDeleteAssessment();
@@ -121,7 +122,7 @@ export const TeacherAssessmentDetailPage: React.FC = () => {
             <div>
               <p className="text-sm text-gray-600">Time Limit</p>
               <p className="text-2xl font-bold text-gray-900">
-                {assessment.timeLimit ? `${assessment.timeLimit}m` : 'None'}
+                {assessment.durationMinutes ? `${assessment.durationMinutes}m` : 'None'}
               </p>
             </div>
           </div>
@@ -130,7 +131,7 @@ export const TeacherAssessmentDetailPage: React.FC = () => {
             <Users className="w-8 h-8 text-green-600" />
             <div>
               <p className="text-sm text-gray-600">Submissions</p>
-              <p className="text-2xl font-bold text-gray-900">{assessment.submissionCount || 0}</p>
+              <p className="text-2xl font-bold text-gray-900">{submissions.length}</p>
             </div>
           </div>
 
@@ -180,7 +181,7 @@ export const TeacherAssessmentDetailPage: React.FC = () => {
             className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
           >
             <Users className="w-4 h-4" />
-            View Submissions ({assessment.submissionCount || 0})
+            View Submissions ({submissions.length})
           </button>
 
           <button
@@ -210,43 +211,55 @@ export const TeacherAssessmentDetailPage: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            {questions.map((question, index) => (
-              <div key={question.id} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <span className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
-                    {index + 1}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-gray-900 font-medium mb-2">{question.questionText}</p>
-                    <div className="space-y-1">
-                      {question.options?.map((option, optIdx) => (
-                        <div
-                          key={optIdx}
-                          className={`flex items-center gap-2 text-sm ${
-                            question.correctAnswer === String.fromCharCode(65 + optIdx)
-                              ? 'text-green-600 font-medium'
-                              : 'text-gray-600'
-                          }`}
-                        >
-                          <span className="font-medium">
-                            {String.fromCharCode(65 + optIdx)}.
-                          </span>
-                          {option}
-                          {question.correctAnswer === String.fromCharCode(65 + optIdx) && (
-                            <span className="text-xs bg-green-100 px-2 py-0.5 rounded">
-                              Correct
-                            </span>
-                          )}
+            {questions.map((question, index) => {
+              // Build options array from optionA, optionB, optionC, optionD
+              const options = [
+                question.optionA,
+                question.optionB,
+                question.optionC,
+                question.optionD
+              ].filter(Boolean);
+
+              return (
+                <div key={question.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
+                      {index + 1}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-gray-900 font-medium mb-2">{question.questionText}</p>
+                      {options.length > 0 && (
+                        <div className="space-y-1">
+                          {options.map((option, optIdx) => (
+                            <div
+                              key={optIdx}
+                              className={`flex items-center gap-2 text-sm ${
+                                question.correctAnswer === String.fromCharCode(65 + optIdx)
+                                  ? 'text-green-600 font-medium'
+                                  : 'text-gray-600'
+                              }`}
+                            >
+                              <span className="font-medium">
+                                {String.fromCharCode(65 + optIdx)}.
+                              </span>
+                              {option}
+                              {question.correctAnswer === String.fromCharCode(65 + optIdx) && (
+                                <span className="text-xs bg-green-100 px-2 py-0.5 rounded">
+                                  Correct
+                                </span>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                    <div className="mt-2 text-sm text-gray-500">
-                      Points: {question.points || 1}
+                      )}
+                      <div className="mt-2 text-sm text-gray-500">
+                        Points: {question.marks}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
