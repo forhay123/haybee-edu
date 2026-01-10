@@ -1,10 +1,10 @@
-// ✅ FIXED: LessonAIQuestionsPage.tsx with Subject and Week Filters
+// ✅ OPTIMIZED: LessonAIQuestionsPage.tsx with Pagination & Lazy Loading
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import LessonAIQuestions from "../components/LessonAIQuestions";
 import { useGetEnrolledSubjects } from "../../subjects/api/subjectsApi";
 import { useAuth } from "../../auth/useAuth";
-import { Filter, X } from "lucide-react";
+import { Filter, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 const LessonAIQuestionsPage: React.FC = () => {
   const { user } = useAuth();
@@ -15,11 +15,20 @@ const LessonAIQuestionsPage: React.FC = () => {
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(true);
 
+  // ✅ Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [questionsPerPage, setQuestionsPerPage] = useState(10);
+
   // Extract allowed subject IDs from backend
   const subjectIds = useMemo(() => {
     if (!enrolledSubjects) return [];
     return enrolledSubjects.map((s) => s.id);
   }, [enrolledSubjects]);
+
+  // ✅ Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedSubjectId, selectedWeek]);
 
   // ✅ Filter: Only selected subject (or all if none selected)
   const filteredSubjectIds = useMemo(() => {
@@ -37,10 +46,22 @@ const LessonAIQuestionsPage: React.FC = () => {
     }));
   }, []);
 
-  // ✅ Reset filters
+  // ✅ Reset filters and pagination
   const handleResetFilters = () => {
     setSelectedSubjectId(null);
     setSelectedWeek(null);
+    setCurrentPage(1);
+  };
+
+  // ✅ Handle filter change - reset to page 1
+  const handleSubjectChange = (subjectId: number | null) => {
+    setSelectedSubjectId(subjectId);
+    setCurrentPage(1);
+  };
+
+  const handleWeekChange = (week: string | null) => {
+    setSelectedWeek(week);
+    setCurrentPage(1);
   };
 
   // ✅ Check if filters are active
@@ -133,7 +154,7 @@ const LessonAIQuestionsPage: React.FC = () => {
         {/* Filter Controls */}
         {showFilters && (
           <div className="p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Subject Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -141,7 +162,7 @@ const LessonAIQuestionsPage: React.FC = () => {
                 </label>
                 <select
                   value={selectedSubjectId || ""}
-                  onChange={(e) => setSelectedSubjectId(e.target.value ? Number(e.target.value) : null)}
+                  onChange={(e) => handleSubjectChange(e.target.value ? Number(e.target.value) : null)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 >
                   <option value="">All Subjects ({enrolledSubjects?.length || 0})</option>
@@ -160,7 +181,7 @@ const LessonAIQuestionsPage: React.FC = () => {
                 </label>
                 <select
                   value={selectedWeek || ""}
-                  onChange={(e) => setSelectedWeek(e.target.value || null)}
+                  onChange={(e) => handleWeekChange(e.target.value || null)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 >
                   <option value="">All Weeks</option>
@@ -169,6 +190,27 @@ const LessonAIQuestionsPage: React.FC = () => {
                       {week.label}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              {/* Questions Per Page */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Questions Per Page
+                </label>
+                <select
+                  value={questionsPerPage}
+                  onChange={(e) => {
+                    setQuestionsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value={5}>5 questions</option>
+                  <option value={10}>10 questions</option>
+                  <option value={20}>20 questions</option>
+                  <option value={50}>50 questions</option>
+                  <option value={100}>100 questions</option>
                 </select>
               </div>
             </div>
@@ -181,7 +223,7 @@ const LessonAIQuestionsPage: React.FC = () => {
                   <span className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm">
                     {enrolledSubjects?.find(s => s.id === selectedSubjectId)?.name || "Subject"}
                     <button
-                      onClick={() => setSelectedSubjectId(null)}
+                      onClick={() => handleSubjectChange(null)}
                       className="hover:bg-indigo-200 rounded-full p-0.5"
                     >
                       <X className="w-3 h-3" />
@@ -192,7 +234,7 @@ const LessonAIQuestionsPage: React.FC = () => {
                   <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
                     {availableWeeks.find(w => w.value === selectedWeek)?.label || selectedWeek}
                     <button
-                      onClick={() => setSelectedWeek(null)}
+                      onClick={() => handleWeekChange(null)}
                       className="hover:bg-purple-200 rounded-full p-0.5"
                     >
                       <X className="w-3 h-3" />
@@ -205,10 +247,13 @@ const LessonAIQuestionsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Questions Display */}
+      {/* Questions Display with Pagination */}
       <LessonAIQuestions 
         subjectIds={filteredSubjectIds} 
         selectedWeek={selectedWeek}
+        currentPage={currentPage}
+        questionsPerPage={questionsPerPage}
+        onPageChange={setCurrentPage}
       />
     </div>
   );

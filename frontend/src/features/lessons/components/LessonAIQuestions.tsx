@@ -1,28 +1,32 @@
-// ✅ ENHANCED: LessonAIQuestions.tsx with Workings Support
+// ✅ OPTIMIZED: LessonAIQuestions.tsx with Pagination & Workings Support
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useLessonAIQuestions } from "../hooks/useLessonAIQuestions";
 import { LessonAIQuestionDto, EnhancedQuestionDto, hasWorkings } from "../types/lessonAIQuestionsTypes";
 import { useAuth } from "../../auth/useAuth";
 import { useGetCurrentTermWithWeek } from "../../terms/api/termsApi";
-import { Lock, Calculator, ChevronDown, ChevronUp } from "lucide-react";
+import { Lock, Calculator, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from "lucide-react";
 import axios from "../../../api/axios";
 
 interface LessonAIQuestionsProps {
   subjectIds: number[];
   selectedWeek?: string | null;
+  currentPage: number;
+  questionsPerPage: number;
+  onPageChange: (page: number) => void;
 }
 
 const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({ 
   subjectIds, 
-  selectedWeek 
+  selectedWeek,
+  currentPage,
+  questionsPerPage,
+  onPageChange,
 }) => {
   const { data, isLoading, isError, error } = useLessonAIQuestions(subjectIds);
   const [showAnswers, setShowAnswers] = useState(false);
   const [enhancedQuestions, setEnhancedQuestions] = useState<EnhancedQuestionDto[]>([]);
   const [loadingLessons, setLoadingLessons] = useState(false);
-  
-  // ✅ NEW: Track expanded workings per question
   const [expandedWorkings, setExpandedWorkings] = useState<Set<number>>(new Set());
   
   const { user } = useAuth();
@@ -32,7 +36,6 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
                     !user?.roles?.includes('ADMIN') && 
                     !user?.roles?.includes('TEACHER');
 
-  // ✅ Toggle workings for a specific question
   const toggleWorkings = (questionId: number) => {
     setExpandedWorkings(prev => {
       const newSet = new Set(prev);
@@ -131,6 +134,49 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
     return enhancedQuestions.filter(q => q.week === selectedWeek);
   }, [enhancedQuestions, selectedWeek]);
 
+  // ✅ Pagination calculations
+  const totalQuestions = filteredQuestions.length;
+  const totalPages = Math.ceil(totalQuestions / questionsPerPage);
+  const startIndex = (currentPage - 1) * questionsPerPage;
+  const endIndex = Math.min(startIndex + questionsPerPage, totalQuestions);
+  const currentPageQuestions = filteredQuestions.slice(startIndex, endIndex);
+
+  // ✅ Pagination helpers
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      onPageChange(page);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+      if (currentPage > 3) {
+        pages.push('...');
+      }
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      if (currentPage < totalPages - 2) {
+        pages.push('...');
+      }
+      if (totalPages > 1) {
+        pages.push(totalPages);
+      }
+    }
+    return pages;
+  };
+
   const canViewAnswerForQuestion = (question: EnhancedQuestionDto): boolean => {
     if (!isStudent) return true;
     if (!question.week) return true;
@@ -185,44 +231,49 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
 
   const hasLockedQuestions = isStudent && filteredQuestions.some(q => !canViewAnswerForQuestion(q));
   const isViewingCurrentWeek = selectedWeek === currentWeek;
-
-  // ✅ Count questions with workings
   const questionsWithWorkings = filteredQuestions.filter(q => hasWorkings(q)).length;
 
   return (
-    <div>
-      {/* Header with Toggle */}
-      <div className="flex justify-between items-center mb-6 bg-white rounded-lg border border-gray-200 p-4">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">
-            AI Generated Questions
-          </h2>
-          <p className="text-sm text-gray-600 mt-1">
-            {filteredQuestions.length} question{filteredQuestions.length !== 1 ? 's' : ''} found
-            {selectedWeek && ` for ${selectedWeek}`}
-            {questionsWithWorkings > 0 && (
-              <span className="ml-2 text-indigo-600 font-medium">
-                • {questionsWithWorkings} with step-by-step workings
-              </span>
+    <div className="space-y-6">
+      {/* Header with Stats */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">
+              AI Generated Questions
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              {totalQuestions} question{totalQuestions !== 1 ? 's' : ''} found
+              {selectedWeek && ` for ${selectedWeek}`}
+              {questionsWithWorkings > 0 && (
+                <span className="ml-2 text-indigo-600 font-medium">
+                  • {questionsWithWorkings} with step-by-step workings
+                </span>
+              )}
+            </p>
+            {totalPages > 1 && (
+              <p className="text-xs text-gray-500 mt-1">
+                Showing {startIndex + 1}-{endIndex} of {totalQuestions}
+              </p>
             )}
-          </p>
-        </div>
+          </div>
 
-        <button
-          onClick={() => setShowAnswers(!showAnswers)}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            showAnswers
-              ? "bg-red-500 text-white hover:bg-red-600"
-              : "bg-green-500 text-white hover:bg-green-600"
-          }`}
-        >
-          {showAnswers ? "Hide Answers" : "Show Answers"}
-        </button>
+          <button
+            onClick={() => setShowAnswers(!showAnswers)}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              showAnswers
+                ? "bg-red-500 text-white hover:bg-red-600"
+                : "bg-green-500 text-white hover:bg-green-600"
+            }`}
+          >
+            {showAnswers ? "Hide Answers" : "Show Answers"}
+          </button>
+        </div>
       </div>
 
       {/* Warning Banner */}
       {isStudent && hasLockedQuestions && (
-        <div className="mb-6 p-4 bg-amber-50 border-2 border-amber-200 rounded-lg">
+        <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-lg">
           <div className="flex items-start gap-3">
             <Lock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
@@ -243,9 +294,10 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
         </div>
       )}
 
-      {/* Questions Grid */}
+      {/* Questions Display */}
       <div className="space-y-6">
-        {filteredQuestions.map((q, index) => {
+        {currentPageQuestions.map((q, pageIndex) => {
+          const globalIndex = startIndex + pageIndex;
           const canViewThisAnswer = canViewAnswerForQuestion(q);
           const questionHasWorkings = hasWorkings(q);
           const isWorkingsExpanded = expandedWorkings.has(q.id);
@@ -256,7 +308,7 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2 flex-wrap">
                     <span className="flex items-center justify-center w-8 h-8 bg-indigo-600 text-white rounded-full font-bold text-sm flex-shrink-0">
-                      {index + 1}
+                      {globalIndex + 1}
                     </span>
                     
                     {q.week && (
@@ -289,7 +341,6 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
                       </span>
                     )}
                     
-                    {/* ✅ NEW: Workings indicator */}
                     {questionHasWorkings && (
                       <span className="text-xs px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-medium flex items-center gap-1">
                         <Calculator className="w-3 h-3" />
@@ -380,7 +431,7 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
                 )
               )}
 
-              {/* ✅ NEW: Workings Display */}
+              {/* Workings Display */}
               {showAnswers && canViewThisAnswer && questionHasWorkings && q.workings && (
                 <div className="mt-4">
                   <button
@@ -453,14 +504,75 @@ const LessonAIQuestions: React.FC<LessonAIQuestionsProps> = ({
         })}
       </div>
 
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-medium transition-colors ${
+                currentPage === 1
+                  ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </button>
+
+            <div className="flex items-center gap-1">
+              {getPageNumbers().map((page, index) => (
+                <React.Fragment key={index}>
+                  {page === '...' ? (
+                    <span className="px-3 py-2 text-gray-400">...</span>
+                  ) : (
+                    <button
+                      onClick={() => goToPage(page as number)}
+                      className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                        currentPage === page
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-medium transition-colors ${
+                currentPage === totalPages
+                  ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-200 text-center">
+            <p className="text-sm text-gray-600">
+              Page <span className="font-semibold text-gray-900">{currentPage}</span> of{' '}
+              <span className="font-semibold text-gray-900">{totalPages}</span>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Summary Footer */}
-      <div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-purple-200">
+      <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-purple-200">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4 flex-wrap">
             <span className="text-sm text-gray-700">
-              <strong>{filteredQuestions.length}</strong> questions displayed
+              <strong>{totalQuestions}</strong> questions total
             </span>
-            {filteredQuestions.length > 0 && (
+            {totalQuestions > 0 && (
               <>
                 <span className="text-gray-300">•</span>
                 <span className="text-sm text-gray-700">

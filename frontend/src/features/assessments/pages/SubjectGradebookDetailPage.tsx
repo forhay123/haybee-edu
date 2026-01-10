@@ -8,21 +8,29 @@ import { Badge } from '@/components/ui/badge';
 import { ComponentScoreRow } from '../components/ComponentScoreRow';
 import { GradeLetterBadge } from '../components/GradeLetterBadge';
 import { useSubjectGradebook } from '../hooks/useGradebookReport';
+import { useStudentAssessments } from '../hooks/useAssessments';
+import { useCurrentStudentProfileId } from '../../studentProfiles/hooks/useStudentProfiles';
 import { AssessmentType } from '../types/assessmentTypes';
-import { ArrowLeft, Printer, Download, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { getStatusBadgeColor } from '../utils/gradebookUtils';
 
 /**
  * 📚 Subject Gradebook Detail Page
- * Detailed view of ONE subject's gradebook
+ * Detailed view of ONE subject's gradebook with assessment scores
  */
 export const SubjectGradebookDetailPage: React.FC = () => {
-  const { subjectId } = useParams<{ subjectId: string }>();
+  const { studentId, subjectId } = useParams<{ studentId: string; subjectId: string }>();
   const navigate = useNavigate();
+  const { studentProfileId } = useCurrentStudentProfileId();
 
   const { data: subject, isLoading, error } = useSubjectGradebook(
     Number(subjectId),
     !!subjectId
+  );
+
+  // Fetch all student assessments to get scores
+  const { data: allAssessments = [] } = useStudentAssessments(
+    studentProfileId || Number(studentId) || 0
   );
 
   // Component order
@@ -44,7 +52,24 @@ export const SubjectGradebookDetailPage: React.FC = () => {
   };
 
   const handleViewAssessment = (assessmentId: number) => {
-    navigate(`/assessments/${assessmentId}`);
+    // Find the assessment to check if it has a submission
+    const assessment = allAssessments.find(a => a.id === assessmentId);
+    
+    if (assessment?.submissionId) {
+      // If submitted, go to results page
+      navigate(`/submissions/${assessment.submissionId}/results`);
+    } else if (assessment) {
+      // If not submitted but exists, go to take assessment page
+      navigate(`/assessments/take/${assessmentId}`);
+    } else {
+      // Fallback - try to view the assessment details
+      navigate(`/assessments/${assessmentId}`);
+    }
+  };
+
+  // Get assessment details for a specific ID
+  const getAssessmentDetails = (assessmentId: number) => {
+    return allAssessments.find(a => a.id === assessmentId);
   };
 
   if (isLoading) {
@@ -197,30 +222,87 @@ export const SubjectGradebookDetailPage: React.FC = () => {
                     </span>
                   </h3>
                   <div className="space-y-2">
-                    {component.assessmentIds.map((assessmentId, index) => (
-                      <div
-                        key={assessmentId}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                      >
-                        <div>
-                          <p className="text-sm font-medium">
-                            Assessment #{index + 1}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            ID: {assessmentId}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewAssessment(assessmentId)}
-                          className="gap-2"
+                    {component.assessmentIds.map((assessmentId, index) => {
+                      const assessmentDetails = getAssessmentDetails(assessmentId);
+                      
+                      return (
+                        <div
+                          key={assessmentId}
+                          className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
                         >
-                          View Details
-                          <ExternalLink className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <p className="text-sm font-medium">
+                                  {assessmentDetails?.title || `Assessment #${index + 1}`}
+                                </p>
+                                {assessmentDetails?.hasSubmitted && (
+                                  <Badge variant="outline" className="text-green-600 border-green-600">
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Submitted
+                                  </Badge>
+                                )}
+                                {assessmentDetails && !assessmentDetails.hasSubmitted && (
+                                  <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    Pending
+                                  </Badge>
+                                )}
+                              </div>
+                              
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground">
+                                <div>
+                                  <span className="font-medium">ID:</span> {assessmentId}
+                                </div>
+                                {assessmentDetails && (
+                                  <>
+                                    <div>
+                                      <span className="font-medium">Total Marks:</span> {assessmentDetails.totalMarks}
+                                    </div>
+                                    {assessmentDetails.hasSubmitted && assessmentDetails.studentScore !== null && (
+                                      <>
+                                        <div className="flex items-center gap-1">
+                                          <span className="font-medium">Score:</span>
+                                          <span className={`font-bold ${
+                                            assessmentDetails.studentPassed 
+                                              ? 'text-green-600' 
+                                              : 'text-red-600'
+                                          }`}>
+                                            {assessmentDetails.studentScore}/{assessmentDetails.totalMarks}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          {assessmentDetails.studentPassed ? (
+                                            <span className="text-green-600 font-semibold flex items-center gap-1">
+                                              <CheckCircle className="h-3 w-3" />
+                                              Passed
+                                            </span>
+                                          ) : (
+                                            <span className="text-red-600 font-semibold flex items-center gap-1">
+                                              <XCircle className="h-3 w-3" />
+                                              Failed
+                                            </span>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewAssessment(assessmentId)}
+                              className="gap-2 flex-shrink-0"
+                            >
+                              {assessmentDetails?.hasSubmitted ? 'View Results' : 'View Details'}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
