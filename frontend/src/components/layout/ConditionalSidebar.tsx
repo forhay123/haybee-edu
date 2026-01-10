@@ -32,6 +32,7 @@ const links: Record<Role, NavSection[]> = {
       links: [
         { name: "Dashboard", path: "/dashboard", icon: "🏠" },
         { name: "Students", path: "/students", icon: "📅" },
+        { name: "Gradebook Reports", path: "/admin/gradebook/reports", icon: "📊" },
         { name: "Notifications", path: "/notifications", icon: "🔔" },
         { name: "Messages", path: "/chat", icon: "💬" },
         { name: "Manage Announcements", path: "/admin/announcements", icon: "📢" },
@@ -131,6 +132,7 @@ const links: Record<Role, NavSection[]> = {
       links: [
         { name: "Dashboard", path: "/dashboard", icon: "🏠" },
         { name: "Students", path: "/students", icon: "📅" },
+        { name: "Gradebook Reports", path: "/admin/gradebook/reports", icon: "📊" },
         { name: "Notifications", path: "/notifications", icon: "🔔" },
         { name: "Messages", path: "/chat", icon: "💬" },
         { name: "Announcements", path: "/announcements", icon: "📢" },
@@ -226,7 +228,7 @@ const links: Record<Role, NavSection[]> = {
         { name: "Subject Lessons", path: "/subjects/student", icon: "📚" },
         { name: "Lesson Topics", path: "/lesson-topics/student", icon: "🗂️" },
         { name: "AI Questions", path: "/ai-questions", icon: "🤖" },
-        { name: "Result Details", path: "/student/assessment-results", icon: "📈" },
+        { name: "Result Details", path: "/student/assessment-results", icon: "📈" },{ name: "My Gradebook", path: "/assessments/gradebook/report", icon: "📊" },
       ],
     },
     {
