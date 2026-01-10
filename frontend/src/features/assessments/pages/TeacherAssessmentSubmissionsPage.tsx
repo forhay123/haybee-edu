@@ -156,7 +156,7 @@ const TeacherAssessmentSubmissionsPage: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
       <button
-        onClick={() => navigate(`/assessments/${assessmentId}`)}
+        onClick={() => navigate(`/teacher/assessments/${assessmentId}`)}
         className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-900"
       >
         <ArrowLeft className="w-5 h-5" />

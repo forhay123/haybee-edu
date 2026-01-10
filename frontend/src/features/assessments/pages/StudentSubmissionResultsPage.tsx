@@ -1,11 +1,12 @@
 // src/features/assessments/pages/StudentSubmissionResultsPage.tsx
 
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../api/axios';
 import { ArrowLeft, CheckCircle, XCircle, Award, BookOpen, Clock } from 'lucide-react';
 import { format } from 'date-fns';
+import { useAuth } from '../../auth/hooks/useAuth';
 
 interface SubmissionAnswer {
   id: number;
@@ -38,6 +39,8 @@ interface AssessmentSubmission {
 const StudentSubmissionResultsPage: React.FC = () => {
   const { submissionId } = useParams<{ submissionId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
 
   // ✅ Use the CORRECT endpoint - same as LessonAssessmentResultsPage
   const { data: submission, isLoading, error } = useQuery<AssessmentSubmission>({
@@ -91,16 +94,48 @@ const StudentSubmissionResultsPage: React.FC = () => {
          a.marksObtained === null
   );
 
+  // ✅ Determine if user is a teacher
+  const isTeacher = user?.roles?.includes('TEACHER');
+  
+  // ✅ Smart back navigation - check state first, then role
+  const handleBackClick = () => {
+    // If came from a specific page (passed via state), go back there
+    if (location.state?.from) {
+      navigate(location.state.from);
+      return;
+    } 
+    
+    // If teacher and we have assessmentId, go to assessment submissions page
+    if (isTeacher && submission?.assessmentId) {
+      navigate(`/teacher/assessments/${submission.assessmentId}/submissions`);
+      return;
+    }
+    
+    // Default for students - go to their results page
+    navigate('/assessments/results');
+  };
+
+  // ✅ Get back button text based on context
+  const getBackButtonText = () => {
+    if (location.state?.from) {
+      return 'Back to Submissions';
+    }
+    if (isTeacher) {
+      return 'Back to Submissions';
+    }
+    return 'Back to All Results';
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <button
-          onClick={() => navigate('/assessments/results')}
+          onClick={handleBackClick}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition"
         >
           <ArrowLeft className="w-5 h-5" />
-          Back to All Results
+          {getBackButtonText()}
         </button>
 
         <div className="text-center">
@@ -303,10 +338,10 @@ const StudentSubmissionResultsPage: React.FC = () => {
       {/* Action Buttons */}
       <div className="mt-6 flex gap-4">
         <button
-          onClick={() => navigate('/assessments/results')}
+          onClick={handleBackClick}
           className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition"
         >
-          Back to All Results
+          {getBackButtonText()}
         </button>
         <button
           onClick={() => window.print()}
