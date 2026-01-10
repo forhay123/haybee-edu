@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useSelector } from 'react-redux';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { RootState } from '../../../store/store';
 import { 
   useMyComprehensiveLessons, 
@@ -46,6 +46,10 @@ export const ComprehensiveLessonsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date' | 'subject' | 'status'>('date');
   const [groupBy, setGroupBy] = useState<'none' | 'week' | 'subject' | 'student'>('none');
+
+  // ✅ PAGINATION STATE
+  const [currentPage, setCurrentPage] = useState(1);
+  const [lessonsPerPage, setLessonsPerPage] = useState(10);
 
   // Teacher/Admin specific filters (only used when NOT viewing specific student)
   const [subjectId, setSubjectId] = useState<number | undefined>();
@@ -176,7 +180,7 @@ export const ComprehensiveLessonsPage: React.FC = () => {
     ? adminStatsQuery.data 
     : null;
 
-  // Sort and group lessons
+  // Sort lessons
   const processedLessons = useMemo(() => {
     if (!lessons) return [];
 
@@ -205,37 +209,80 @@ export const ComprehensiveLessonsPage: React.FC = () => {
     return sorted;
   }, [lessons, sortBy]);
 
-  // Group lessons
+  // ✅ PAGINATION CALCULATIONS
+  const totalLessons = processedLessons.length;
+  const totalPages = Math.ceil(totalLessons / lessonsPerPage);
+  const startIndex = (currentPage - 1) * lessonsPerPage;
+  const endIndex = Math.min(startIndex + lessonsPerPage, totalLessons);
+  const currentPageLessons = processedLessons.slice(startIndex, endIndex);
+
+  // ✅ Group lessons (NOW USING currentPageLessons)
   const groupedLessons = useMemo(() => {
-    if (groupBy === 'none') return { '': processedLessons };
+    if (groupBy === 'none') return { '': currentPageLessons };
 
     if (groupBy === 'subject') {
-      return processedLessons.reduce((acc, lesson) => {
+      return currentPageLessons.reduce((acc, lesson) => {
         const key = lesson.subjectName;
         if (!acc[key]) acc[key] = [];
         acc[key].push(lesson);
         return acc;
-      }, {} as Record<string, typeof processedLessons>);
+      }, {} as Record<string, typeof currentPageLessons>);
     }
 
     if (groupBy === 'student' && (isTeacher || isAdmin) && !viewingSpecificStudent) {
-      return processedLessons.reduce((acc, lesson) => {
+      return currentPageLessons.reduce((acc, lesson) => {
         const key = lesson.studentName || 'Unknown Student';
         if (!acc[key]) acc[key] = [];
         acc[key].push(lesson);
         return acc;
-      }, {} as Record<string, typeof processedLessons>);
+      }, {} as Record<string, typeof currentPageLessons>);
     }
 
     // Group by week
-    return processedLessons.reduce((acc, lesson) => {
+    return currentPageLessons.reduce((acc, lesson) => {
       const date = new Date(lesson.scheduledDate);
       const weekStart = format(date, 'MMM dd');
       if (!acc[weekStart]) acc[weekStart] = [];
       acc[weekStart].push(lesson);
       return acc;
-    }, {} as Record<string, typeof processedLessons>);
-  }, [processedLessons, groupBy, isTeacher, isAdmin, viewingSpecificStudent]);
+    }, {} as Record<string, typeof currentPageLessons>);
+  }, [currentPageLessons, groupBy, isTeacher, isAdmin, viewingSpecificStudent]);
+
+  // ✅ PAGINATION HELPER FUNCTIONS
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+      if (currentPage > 3) {
+        pages.push('...');
+      }
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      if (currentPage < totalPages - 2) {
+        pages.push('...');
+      }
+      if (totalPages > 1) {
+        pages.push(totalPages);
+      }
+    }
+    return pages;
+  };
 
   // Export to CSV
   const handleExport = () => {
@@ -411,13 +458,16 @@ export const ComprehensiveLessonsPage: React.FC = () => {
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-4 space-y-4">
         {/* Date Range */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">From:</label>
             <input
               type="date"
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
+              onChange={(e) => {
+                setFromDate(e.target.value);
+                setCurrentPage(1);
+              }}
               className="px-3 py-1 border border-gray-300 rounded text-sm"
             />
           </div>
@@ -426,9 +476,31 @@ export const ComprehensiveLessonsPage: React.FC = () => {
             <input
               type="date"
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              onChange={(e) => {
+                setToDate(e.target.value);
+                setCurrentPage(1);
+              }}
               className="px-3 py-1 border border-gray-300 rounded text-sm"
             />
+          </div>
+
+          {/* ✅ Lessons Per Page Selector */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Per Page:</label>
+            <select
+              value={lessonsPerPage}
+              onChange={(e) => {
+                setLessonsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-3 py-1 border border-gray-300 rounded text-sm"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
           </div>
         </div>
 
@@ -437,7 +509,10 @@ export const ComprehensiveLessonsPage: React.FC = () => {
           <label className="text-sm font-medium text-gray-700">Status:</label>
           <select
             value={statusFilter || 'ALL'}
-            onChange={(e) => setStatusFilter(e.target.value === 'ALL' ? null : e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value === 'ALL' ? null : e.target.value);
+              setCurrentPage(1);
+            }}
             className="px-3 py-1 border border-gray-300 rounded text-sm"
           >
             <option value="ALL">All</option>
@@ -457,7 +532,10 @@ export const ComprehensiveLessonsPage: React.FC = () => {
                 type="number"
                 placeholder="Filter by class"
                 value={classId || ''}
-                onChange={(e) => setClassId(e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => {
+                  setClassId(e.target.value ? Number(e.target.value) : undefined);
+                  setCurrentPage(1);
+                }}
                 className="px-3 py-1 border border-gray-300 rounded text-sm w-32"
               />
             </div>
@@ -467,7 +545,10 @@ export const ComprehensiveLessonsPage: React.FC = () => {
                 type="number"
                 placeholder="Filter by subject"
                 value={subjectId || ''}
-                onChange={(e) => setSubjectId(e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => {
+                  setSubjectId(e.target.value ? Number(e.target.value) : undefined);
+                  setCurrentPage(1);
+                }}
                 className="px-3 py-1 border border-gray-300 rounded text-sm w-32"
               />
             </div>
@@ -477,13 +558,32 @@ export const ComprehensiveLessonsPage: React.FC = () => {
                 type="number"
                 placeholder="Filter by student"
                 value={studentId || ''}
-                onChange={(e) => setStudentId(e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => {
+                  setStudentId(e.target.value ? Number(e.target.value) : undefined);
+                  setCurrentPage(1);
+                }}
                 className="px-3 py-1 border border-gray-300 rounded text-sm w-32"
               />
             </div>
           </div>
         )}
       </div>
+
+      {/* ✅ Results Summary */}
+      {totalLessons > 0 && (
+        <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-gray-700">
+              <span className="font-semibold">{totalLessons}</span> lesson{totalLessons !== 1 ? 's' : ''} found
+            </p>
+            {totalPages > 1 && (
+              <p className="text-sm text-gray-600">
+                Showing {startIndex + 1}-{endIndex} of {totalLessons}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Sort and Group Controls */}
       <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
@@ -516,8 +616,11 @@ export const ComprehensiveLessonsPage: React.FC = () => {
           </div>
         </div>
 
+        {/* ✅ Updated page info */}
         <div className="text-sm text-gray-600">
-          Showing <strong>{processedLessons.length}</strong> lesson{processedLessons.length !== 1 ? 's' : ''}
+          Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+          {' • '}
+          Showing <strong>{currentPageLessons.length}</strong> lesson{currentPageLessons.length !== 1 ? 's' : ''}
         </div>
       </div>
 
@@ -548,6 +651,67 @@ export const ComprehensiveLessonsPage: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ✅ PAGINATION CONTROLS */}
+      {totalPages > 1 && (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-md p-4 mt-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-medium transition-colors ${
+                currentPage === 1
+                  ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </button>
+
+            <div className="flex items-center gap-1">
+              {getPageNumbers().map((page, index) => (
+                <React.Fragment key={index}>
+                  {page === '...' ? (
+                    <span className="px-3 py-2 text-gray-400">...</span>
+                  ) : (
+                    <button
+                      onClick={() => goToPage(page as number)}
+                      className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                        currentPage === page
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-medium transition-colors ${
+                currentPage === totalPages
+                  ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-200 text-center">
+            <p className="text-sm text-gray-600">
+              Page <span className="font-semibold text-gray-900">{currentPage}</span> of{' '}
+              <span className="font-semibold text-gray-900">{totalPages}</span>
+            </p>
+          </div>
         </div>
       )}
     </div>
