@@ -1,6 +1,6 @@
 // src/features/assessments/pages/AdminGradebookReportPage.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,23 +15,65 @@ import {
 import { GradebookReportCard } from '../components/GradebookReportCard';
 import { SubjectGradebookCard } from '../components/SubjectGradebookCard';
 import { useStudentGradebookReport } from '../hooks/useGradebookReport';
+import { useClasses } from '@/features/classes/hooks/useClasses';
+import { useStudentProfiles } from '@/features/studentProfiles/hooks/useStudentProfiles';
 import { GradeStatus } from '../types/gradebookTypes';
-import { Download, Printer, Search, Filter, Users } from 'lucide-react';
+import { Download, Printer, Search, Filter, Users, GraduationCap } from 'lucide-react';
 
 /**
  * 👨‍💼 Admin Gradebook Report Page
  * Admin/Teacher view of student gradebook reports
+ * Excludes INDIVIDUAL students (they don't have gradebook assessments)
  */
 export const AdminGradebookReportPage: React.FC = () => {
   const navigate = useNavigate();
-  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<GradeStatus | 'ALL'>('ALL');
 
+  // Fetch classes (excluding INDIVIDUAL type)
+  const { classes, isLoading: classesLoading } = useClasses();
+  
+  // Fetch all student profiles
+  const { studentProfilesQuery } = useStudentProfiles();
+  const { data: allStudents = [], isLoading: studentsLoading } = studentProfilesQuery;
+
+  // Filter classes to exclude INDIVIDUAL students
+  const nonIndividualClasses = useMemo(() => {
+    return classes.filter(
+      (cls) => cls.studentType !== 'INDIVIDUAL'
+    );
+  }, [classes]);
+
+  // Filter students by selected class and exclude INDIVIDUAL type
+  const studentsInClass = useMemo(() => {
+    if (!selectedClassId) return [];
+    
+    return allStudents.filter(
+      (student) => 
+        student.classId === Number(selectedClassId) &&
+        student.studentType !== 'INDIVIDUAL'
+    );
+  }, [allStudents, selectedClassId]);
+
+  // Get selected student's data
+  const selectedStudent = useMemo(() => {
+    if (!selectedStudentId) return null;
+    return allStudents.find((s) => s.id === Number(selectedStudentId));
+  }, [allStudents, selectedStudentId]);
+
+  // Fetch gradebook report
   const { data: report, isLoading, error } = useStudentGradebookReport(
-    selectedStudentId!,
+    Number(selectedStudentId),
     !!selectedStudentId
   );
+
+  // Handle class change
+  const handleClassChange = (value: string) => {
+    setSelectedClassId(value);
+    setSelectedStudentId(''); // Reset student selection
+  };
 
   // Handle view subject details
   const handleViewSubjectDetails = (subjectId: number) => {
@@ -45,6 +87,10 @@ export const AdminGradebookReportPage: React.FC = () => {
 
   // Handle export
   const handleExport = () => {
+    // TODO: Implement CSV/PDF export
+    if (!report) return;
+    
+    console.log('Exporting report for:', selectedStudent?.fullName);
     alert('Export functionality - implement CSV/PDF download here');
   };
 
@@ -68,7 +114,7 @@ export const AdminGradebookReportPage: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold">Student Gradebook Reports</h1>
           <p className="text-muted-foreground mt-1">
-            View and manage student grade reports
+            View and manage student grade reports (School/Home/Aspirant students only)
           </p>
         </div>
         {selectedStudentId && (
@@ -87,21 +133,115 @@ export const AdminGradebookReportPage: React.FC = () => {
 
       {/* Student Selector */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <Users className="h-5 w-5 text-muted-foreground" />
-            <div className="flex-1">
-              <Input
-                type="number"
-                placeholder="Enter Student ID..."
-                value={selectedStudentId || ''}
-                onChange={(e) => setSelectedStudentId(Number(e.target.value) || null)}
-                className="max-w-xs"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Enter a student ID to view their gradebook report
-              </p>
+        <CardContent className="p-6">
+          <div className="space-y-4">
+            <div className="flex items-start gap-4">
+              <GraduationCap className="h-5 w-5 text-muted-foreground mt-2" />
+              <div className="flex-1 space-y-4">
+                {/* Class Selector */}
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    1. Select Class
+                  </label>
+                  <Select
+                    value={selectedClassId}
+                    onValueChange={handleClassChange}
+                    disabled={classesLoading}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choose a class..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classesLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading classes...
+                        </SelectItem>
+                      ) : nonIndividualClasses.length === 0 ? (
+                        <SelectItem value="none" disabled>
+                          No classes available
+                        </SelectItem>
+                      ) : (
+                        nonIndividualClasses.map((cls) => (
+                          <SelectItem key={cls.id} value={String(cls.id)}>
+                            {cls.name} {cls.level && `(${cls.level})`}
+                            {cls.departmentName && (
+                              <span className="text-xs text-muted-foreground ml-2">
+                                - {cls.departmentName}
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Select a class to see students in that class
+                  </p>
+                </div>
+
+                {/* Student Selector */}
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    2. Select Student
+                  </label>
+                  <Select
+                    value={selectedStudentId}
+                    onValueChange={setSelectedStudentId}
+                    disabled={!selectedClassId || studentsLoading}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choose a student..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {!selectedClassId ? (
+                        <SelectItem value="none" disabled>
+                          Please select a class first
+                        </SelectItem>
+                      ) : studentsLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading students...
+                        </SelectItem>
+                      ) : studentsInClass.length === 0 ? (
+                        <SelectItem value="none" disabled>
+                          No students in this class
+                        </SelectItem>
+                      ) : (
+                        studentsInClass.map((student) => (
+                          <SelectItem key={student.id} value={String(student.id)}>
+                            {student.fullName || `Student #${student.id}`}
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({student.studentType})
+                            </span>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedClassId
+                      ? `${studentsInClass.length} student${studentsInClass.length !== 1 ? 's' : ''} in this class`
+                      : 'Select a class to see students'}
+                  </p>
+                </div>
+              </div>
             </div>
+
+            {/* Selected Student Info */}
+            {selectedStudent && (
+              <div className="mt-4 p-4 bg-muted rounded-lg border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Selected Student:</p>
+                    <p className="text-lg font-semibold">{selectedStudent.fullName}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {selectedStudent.className} • {selectedStudent.studentType}
+                      {selectedStudent.departmentName && ` • ${selectedStudent.departmentName}`}
+                    </p>
+                  </div>
+                  <Users className="h-8 w-8 text-muted-foreground" />
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -110,18 +250,24 @@ export const AdminGradebookReportPage: React.FC = () => {
       {!selectedStudentId ? (
         <Card>
           <CardContent className="p-12 text-center">
-            <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+            <GraduationCap className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">Select a Student</h3>
             <p className="text-muted-foreground">
-              Enter a student ID above to view their gradebook report
+              Choose a class and student above to view their gradebook report
             </p>
+            <div className="mt-4 text-sm text-muted-foreground">
+              <p>📚 Step 1: Select a class</p>
+              <p>👨‍🎓 Step 2: Select a student from that class</p>
+            </div>
           </CardContent>
         </Card>
       ) : isLoading ? (
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading student report...</p>
+            <p className="text-muted-foreground">
+              Loading report for {selectedStudent?.fullName}...
+            </p>
           </div>
         </div>
       ) : error ? (
@@ -130,6 +276,9 @@ export const AdminGradebookReportPage: React.FC = () => {
             <div className="text-center text-red-600">
               <p className="font-semibold">Error loading report</p>
               <p className="text-sm mt-2">{error.message}</p>
+              <p className="text-xs text-muted-foreground mt-4">
+                Student: {selectedStudent?.fullName} (ID: {selectedStudentId})
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -137,7 +286,10 @@ export const AdminGradebookReportPage: React.FC = () => {
         <Card>
           <CardContent className="p-6">
             <div className="text-center text-muted-foreground">
-              <p>No gradebook data found for this student</p>
+              <p>No gradebook data found for {selectedStudent?.fullName}</p>
+              <p className="text-xs mt-2">
+                This student may not have any gradebook assessments yet.
+              </p>
             </div>
           </CardContent>
         </Card>
