@@ -4,8 +4,17 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AssessmentType } from '../types/gradebookTypes';
 
+// ✅ Type for only gradebook assessment types (excludes LESSON_TOPIC_ASSESSMENT)
+type GradebookAssessmentType = 
+  | AssessmentType.QUIZ
+  | AssessmentType.CLASSWORK
+  | AssessmentType.TEST1
+  | AssessmentType.TEST2
+  | AssessmentType.ASSIGNMENT
+  | AssessmentType.EXAM;
+
 interface WeightDistributionChartProps {
-  weights?: Record<AssessmentType, number>;
+  weights?: Partial<Record<AssessmentType, number>>;
 }
 
 /**
@@ -16,7 +25,7 @@ export const WeightDistributionChart: React.FC<WeightDistributionChartProps> = (
   weights,
 }) => {
   // Default weights if not provided
-  const defaultWeights = {
+  const defaultWeights: Record<GradebookAssessmentType, number> = {
     [AssessmentType.QUIZ]: 20,
     [AssessmentType.CLASSWORK]: 10,
     [AssessmentType.TEST1]: 10,
@@ -28,7 +37,7 @@ export const WeightDistributionChart: React.FC<WeightDistributionChartProps> = (
   const displayWeights = weights || defaultWeights;
 
   // Color mapping
-  const colors: Record<AssessmentType, string> = {
+  const colors: Record<GradebookAssessmentType, string> = {
     [AssessmentType.QUIZ]: '#3b82f6',
     [AssessmentType.CLASSWORK]: '#10b981',
     [AssessmentType.TEST1]: '#f59e0b',
@@ -38,7 +47,7 @@ export const WeightDistributionChart: React.FC<WeightDistributionChartProps> = (
   };
 
   // Labels
-  const labels: Record<AssessmentType, string> = {
+  const labels: Record<GradebookAssessmentType, string> = {
     [AssessmentType.QUIZ]: 'Quiz',
     [AssessmentType.CLASSWORK]: 'Classwork',
     [AssessmentType.TEST1]: 'Test 1',
@@ -55,7 +64,7 @@ export const WeightDistributionChart: React.FC<WeightDistributionChartProps> = (
     const centerY = 100;
 
     return Object.entries(displayWeights).map(([type, weight]) => {
-      const angle = (weight / 100) * 360;
+      const angle = ((weight as number) / 100) * 360;
       const startAngle = currentAngle;
       const endAngle = currentAngle + angle;
 
@@ -80,11 +89,13 @@ export const WeightDistributionChart: React.FC<WeightDistributionChartProps> = (
         'Z',
       ].join(' ');
 
+      const assessmentType = type as GradebookAssessmentType;
+
       return {
-        type: type as AssessmentType,
-        weight,
+        type: assessmentType,
+        weight: weight as number,
         pathData,
-        color: colors[type as AssessmentType],
+        color: colors[assessmentType],
       };
     });
   };

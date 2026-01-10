@@ -2,6 +2,8 @@
 
 import { AssessmentType } from './assessmentTypes';
 
+
+export { AssessmentType };
 /**
  * Access status for gradebook assessments (due-date based)
  */
