@@ -184,7 +184,7 @@ import { StudentListPage } from '@/features/students/pages/StudentListPage';
 import { StudentGradebookReportPage } from "./features/assessments/pages/StudentGradebookReportPage";
 import { SubjectGradebookDetailPage } from "./features/assessments/pages/SubjectGradebookDetailPage";
 import { AdminGradebookReportPage } from "./features/assessments/pages/AdminGradebookReportPage";
-
+import TeacherAssessmentSubmissionsPage from "./features/assessments/pages/TeacherAssessmentSubmissionsPage";
 // OAuth Callback
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
 
@@ -1137,6 +1137,18 @@ const App = () => {
                 <ProtectedRoute roles={["TEACHER"]}>
                   <AppLayout>
                     <PendingSubmissionsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ✅ NEW: Teacher Assessment Submissions Page */}
+            <Route
+              path="/teacher/assessments/:assessmentId/submissions"
+              element={
+                <ProtectedRoute roles={["TEACHER"]}>
+                  <AppLayout>
+                    <TeacherAssessmentSubmissionsPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
