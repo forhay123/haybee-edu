@@ -366,136 +366,140 @@ export const StudentListPage: React.FC = () => {
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Student
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Total Lessons
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Completed
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Incomplete
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Completion Rate
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Last Active
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredStudents.map((student) => {
-                const completionRate = student.totalLessons > 0 
-                  ? Math.round((student.completedLessons / student.totalLessons) * 100) 
-                  : 0;
-                const isAtRisk = student.incompleteLessons > 5;
+          {/* ✅ MOBILE FIX: Add horizontal scroll wrapper */}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Student
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total Lessons
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Completed
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Incomplete
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Completion Rate
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Last Active
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredStudents.map((student) => {
+                  const completionRate = student.totalLessons > 0 
+                    ? Math.round((student.completedLessons / student.totalLessons) * 100) 
+                    : 0;
+                  const isAtRisk = student.incompleteLessons > 5;
 
-                return (
-                  <tr 
-                    key={student.studentId}
-                    className={`hover:bg-gray-50 transition ${isAtRisk ? 'bg-red-50' : ''}`}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <span className="text-blue-700 font-semibold">
-                            {student.studentName.charAt(0).toUpperCase()}
+                  return (
+                    <tr 
+                      key={student.studentId}
+                      className={`hover:bg-gray-50 transition ${isAtRisk ? 'bg-red-50' : ''}`}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-700 font-semibold">
+                              {student.studentName.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {student.studentName}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              ID: {student.studentId}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{student.totalLessons}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span className="text-sm font-medium text-green-600">
+                            {student.completedLessons}
                           </span>
                         </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {student.studentName}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            ID: {student.studentId}
-                          </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className={`w-4 h-4 ${isAtRisk ? 'text-red-500' : 'text-yellow-500'}`} />
+                          <span className={`text-sm font-medium ${isAtRisk ? 'text-red-600' : 'text-yellow-600'}`}>
+                            {student.incompleteLessons}
+                          </span>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{student.totalLessons}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                        <span className="text-sm font-medium text-green-600">
-                          {student.completedLessons}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className={`w-4 h-4 ${isAtRisk ? 'text-red-500' : 'text-yellow-500'}`} />
-                        <span className={`text-sm font-medium ${isAtRisk ? 'text-red-600' : 'text-yellow-600'}`}>
-                          {student.incompleteLessons}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-gray-200 rounded-full h-2 w-20">
-                          <div
-                            className={`h-2 rounded-full ${
-                              completionRate >= 80 
-                                ? 'bg-green-500' 
-                                : completionRate >= 50 
-                                ? 'bg-yellow-500' 
-                                : 'bg-red-500'
-                            }`}
-                            style={{ width: `${completionRate}%` }}
-                          ></div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-gray-200 rounded-full h-2 w-20">
+                            <div
+                              className={`h-2 rounded-full ${
+                                completionRate >= 80 
+                                  ? 'bg-green-500' 
+                                  : completionRate >= 50 
+                                  ? 'bg-yellow-500' 
+                                  : 'bg-red-500'
+                              }`}
+                              style={{ width: `${completionRate}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-sm font-medium text-gray-700">
+                            {completionRate}%
+                          </span>
                         </div>
-                        <span className="text-sm font-medium text-gray-700">
-                          {completionRate}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1 text-sm text-gray-500">
-                        <Calendar className="w-4 h-4" />
-                        {student.lastActive 
-                          ? new Date(student.lastActive).toLocaleDateString()
-                          : 'N/A'
-                        }
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                      <button
-                        onClick={() => navigate(`/progress/comprehensive/${student.studentId}`)}
-                        className="text-blue-600 hover:text-blue-900"
-                        title="View all lessons"
-                      >
-                        <BookOpen className="w-5 h-5 inline" />
-                      </button>
-                      <button
-                        onClick={() => navigate(`/progress/incomplete-lessons/${student.studentId}`)}
-                        className="text-yellow-600 hover:text-yellow-900"
-                        title="View incomplete lessons"
-                      >
-                        <AlertCircle className="w-5 h-5 inline" />
-                      </button>
-                      <button
-                        onClick={() => navigate(`/students/${student.studentId}`)}
-                        className="text-gray-600 hover:text-gray-900"
-                        title="View student details"
-                      >
-                        <ChevronRight className="w-5 h-5 inline" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1 text-sm text-gray-500">
+                          <Calendar className="w-4 h-4" />
+                          {student.lastActive 
+                            ? new Date(student.lastActive).toLocaleDateString()
+                            : 'N/A'
+                          }
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                        <button
+                          onClick={() => navigate(`/progress/comprehensive/${student.studentId}`)}
+                          className="text-blue-600 hover:text-blue-900"
+                          title="View all lessons"
+                        >
+                          <BookOpen className="w-5 h-5 inline" />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/progress/incomplete-lessons/${student.studentId}`)}
+                          className="text-yellow-600 hover:text-yellow-900"
+                          title="View incomplete lessons"
+                        >
+                          <AlertCircle className="w-5 h-5 inline" />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/students/${student.studentId}`)}
+                          className="text-gray-600 hover:text-gray-900"
+                          title="View student details"
+                        >
+                          <ChevronRight className="w-5 h-5 inline" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {/* ✅ END of overflow-x-auto wrapper */}
         </div>
       )}
     </div>
