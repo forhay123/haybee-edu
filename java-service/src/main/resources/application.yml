@@ -1,9 +1,19 @@
 spring:
+  # 🚀 Memory Optimization - Lazy initialization
+  main:
+    lazy-initialization: true
+  
+  # 🗄️ Database Configuration
   datasource:
     url: jdbc:postgresql://postgres:5432/edu_db
     username: edu_admin
     password: edu_password
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5      # Reduced from default 10
+      minimum-idle: 2            # Reduced connections
+      connection-timeout: 20000
+      idle-timeout: 300000
 
   jpa:
     hibernate:
@@ -13,6 +23,24 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+  
+  # 📦 Deferred JPA repository loading
+  data:
+    jpa:
+      repositories:
+        bootstrap-mode: deferred
+    # 🔴 Redis Configuration
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DB:0}
+      timeout: 60000
+      lettuce:
+        pool:
+          max-active: 4      # Reduced from default 8
+          max-idle: 2        # Reduced from default 8
+          min-idle: 1        # Reduced from default 0
+          max-wait: -1ms
 
   sql:
     init:
@@ -23,14 +51,6 @@ spring:
     multipart:
       max-file-size: 500MB
       max-request-size: 500MB
-
-  # 🔴 Redis Configuration
-  data:
-    redis:
-      host: ${REDIS_HOST:redis}
-      port: ${REDIS_PORT:6379}
-      database: ${REDIS_DB:0}
-      timeout: 60000
 
 # 🔐 JWT Configuration
 jwt:
@@ -45,6 +65,10 @@ server:
   address: 0.0.0.0
   servlet:
     context-path: /api/v1
+  tomcat:
+    threads:
+      max: 50              # Reduced from default 200
+      min-spare: 5         # Reduced from default 10
 
 # 📱 Application Configuration
 app:
