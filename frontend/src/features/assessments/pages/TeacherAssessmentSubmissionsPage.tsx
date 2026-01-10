@@ -120,7 +120,9 @@ const TeacherAssessmentSubmissionsPage: React.FC = () => {
   };
 
   const handleViewDetails = (submissionId: number) => {
-    navigate(`/submissions/${submissionId}/results`);
+    navigate(`/submissions/${submissionId}/results`, {
+      state: { from: `/teacher/assessments/${assessmentId}/submissions` }
+    });
   };
 
   if (isLoading) {
