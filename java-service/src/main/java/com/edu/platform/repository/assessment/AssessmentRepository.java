@@ -61,67 +61,67 @@ public interface AssessmentRepository extends JpaRepository<Assessment, Long> {
             AssessmentType type
         );
     
+	
+	/**
+	 * ✅ FIXED: Find all gradebook assessments for a student
+	 * Gets subjects through Enrollment relationship
+	 */
+	@Query("SELECT DISTINCT a FROM Assessment a " +
+	       "JOIN Enrollment e ON e.classEntity.id = a.subject.classEntity.id " +
+	       "WHERE e.studentProfile.id = :studentId " +
+	       "AND a.type IN :gradebookTypes " +
+	       "AND a.published = true " +
+	       "ORDER BY a.subject.name, a.type")
+	List<Assessment> findGradebookAssessmentsByStudentId(
+	    @Param("studentId") Long studentId,
+	    @Param("gradebookTypes") List<AssessmentType> gradebookTypes
+	);
+	
+	// Convenience method with default types
+	default List<Assessment> findGradebookAssessmentsByStudentId(Long studentId) {
+	    List<AssessmentType> gradebookTypes = Arrays.asList(
+	        AssessmentType.QUIZ,
+	        AssessmentType.CLASSWORK,
+	        AssessmentType.TEST1,
+	        AssessmentType.TEST2,
+	        AssessmentType.ASSIGNMENT,
+	        AssessmentType.EXAM
+	    );
+	    return findGradebookAssessmentsByStudentId(studentId, gradebookTypes);
+	}
+	
+	/**
+	 * ✅ FIXED: Find all gradebook assessments for a student in ONE subject
+	 * Simplified - doesn't need enrollment check since we already have subjectId
+	 */
+	@Query("SELECT a FROM Assessment a " +
+	       "WHERE a.type IN :gradebookTypes " +
+	       "AND a.subject.id = :subjectId " +
+	       "AND a.published = true " +
+	       "ORDER BY a.type")
+	List<Assessment> findGradebookAssessmentsByStudentIdAndSubjectId(
+	    @Param("studentId") Long studentId,
+	    @Param("subjectId") Long subjectId,
+	    @Param("gradebookTypes") List<AssessmentType> gradebookTypes
+	);
+	
+	// Convenience method with default types
+	default List<Assessment> findGradebookAssessmentsByStudentIdAndSubjectId(
+	        Long studentId, 
+	        Long subjectId) {
+	    List<AssessmentType> gradebookTypes = Arrays.asList(
+	        AssessmentType.QUIZ,
+	        AssessmentType.CLASSWORK,
+	        AssessmentType.TEST1,
+	        AssessmentType.TEST2,
+	        AssessmentType.ASSIGNMENT,
+	        AssessmentType.EXAM
+	    );
+	    return findGradebookAssessmentsByStudentIdAndSubjectId(
+	        studentId, 
+	        subjectId, 
+	        gradebookTypes
+	    );
+	}
 
-    /**
-     * ✅ Find all gradebook assessments for a student
-     * Returns only QUIZ, CLASSWORK, TEST1, TEST2, ASSIGNMENT, EXAM types
-     */
-    @Query("SELECT a FROM Assessment a " +
-           "WHERE a.type IN :gradebookTypes " +
-           "AND a.subject.id IN (" +
-           "    SELECT sp.subjectId FROM StudentProfile sp WHERE sp.id = :studentId" +
-           ") " +
-           "AND a.published = true " +
-           "ORDER BY a.subject.name, a.type")
-    List<Assessment> findGradebookAssessmentsByStudentId(
-        @Param("studentId") Long studentId,
-        @Param("gradebookTypes") List<AssessmentType> gradebookTypes
-    );
-
-    // Convenience method with default types
-    default List<Assessment> findGradebookAssessmentsByStudentId(Long studentId) {
-        List<AssessmentType> gradebookTypes = Arrays.asList(
-            AssessmentType.QUIZ,
-            AssessmentType.CLASSWORK,
-            AssessmentType.TEST1,
-            AssessmentType.TEST2,
-            AssessmentType.ASSIGNMENT,
-            AssessmentType.EXAM
-        );
-        return findGradebookAssessmentsByStudentId(studentId, gradebookTypes);
-    }
-
-    /**
-     * ✅ Find all gradebook assessments for a student in ONE subject
-     */
-    @Query("SELECT a FROM Assessment a " +
-           "WHERE a.type IN :gradebookTypes " +
-           "AND a.subject.id = :subjectId " +
-           "AND a.published = true " +
-           "ORDER BY a.type")
-    List<Assessment> findGradebookAssessmentsByStudentIdAndSubjectId(
-        @Param("studentId") Long studentId,
-        @Param("subjectId") Long subjectId,
-        @Param("gradebookTypes") List<AssessmentType> gradebookTypes
-    );
-
-    // Convenience method with default types
-    default List<Assessment> findGradebookAssessmentsByStudentIdAndSubjectId(
-            Long studentId, 
-            Long subjectId) {
-        List<AssessmentType> gradebookTypes = Arrays.asList(
-            AssessmentType.QUIZ,
-            AssessmentType.CLASSWORK,
-            AssessmentType.TEST1,
-            AssessmentType.TEST2,
-            AssessmentType.ASSIGNMENT,
-            AssessmentType.EXAM
-        );
-        return findGradebookAssessmentsByStudentIdAndSubjectId(
-            studentId, 
-            subjectId, 
-            gradebookTypes
-        );
-    }
-        
 }
