@@ -74,17 +74,9 @@ export const AdminGradebookReportPage: React.FC = () => {
     if (!selectedLevel) return [];
     
     return classes.filter((cls) => {
-      // Exclude INDIVIDUAL classes
       if (cls.studentType === 'INDIVIDUAL') return false;
       
-      // Check level (Junior: JSS, Senior: SSS)
-      const isJunior = cls.level?.toUpperCase().includes('JSS');
-      const isSenior = cls.level?.toUpperCase().includes('SSS');
-      
-      if (selectedLevel === 'JUNIOR') return isJunior;
-      if (selectedLevel === 'SENIOR') return isSenior;
-      
-      return false;
+      return cls.level?.toUpperCase() === selectedLevel;
     });
   }, [classes, selectedLevel]);
 
