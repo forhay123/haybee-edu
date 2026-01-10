@@ -18,35 +18,95 @@ import { useStudentGradebookReport } from '../hooks/useGradebookReport';
 import { useClasses } from '@/features/classes/hooks/useClasses';
 import { useStudentProfiles } from '@/features/studentProfiles/hooks/useStudentProfiles';
 import { GradeStatus } from '../types/gradebookTypes';
-import { Download, Printer, Search, Filter, Users, GraduationCap } from 'lucide-react';
+import { Download, Printer, Search, Filter, Users, GraduationCap, Building2, School, Home as HomeIcon, Award } from 'lucide-react';
+
+type ClassLevel = 'JUNIOR' | 'SENIOR';
+type StudentTypeFilter = 'SCHOOL' | 'HOME' | 'ASPIRANT';
 
 /**
  * 👨‍💼 Admin Gradebook Report Page
  * Admin/Teacher view of student gradebook reports
- * Excludes INDIVIDUAL students (they don't have gradebook assessments)
+ * 
+ * Filter Hierarchy:
+ * 1. Class Level (Junior/Senior)
+ * 2. Department
+ * 3. Student Type (School/Home/Aspirant)
+ * 4. Class
+ * 5. Student
  */
 export const AdminGradebookReportPage: React.FC = () => {
   const navigate = useNavigate();
+  
+  // Filter states
+  const [selectedLevel, setSelectedLevel] = useState<ClassLevel | ''>('');
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
+  const [selectedStudentType, setSelectedStudentType] = useState<StudentTypeFilter | ''>('');
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+  
+  // Search and filters
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<GradeStatus | 'ALL'>('ALL');
 
-  // Fetch classes (excluding INDIVIDUAL type)
+  // Fetch data
   const { classes, isLoading: classesLoading } = useClasses();
-  
-  // Fetch all student profiles
   const { studentProfilesQuery } = useStudentProfiles();
   const { data: allStudents = [], isLoading: studentsLoading } = studentProfilesQuery;
 
-  // Filter classes to exclude INDIVIDUAL students
-  const nonIndividualClasses = useMemo(() => {
-    return classes.filter(
-      (cls) => cls.studentType !== 'INDIVIDUAL'
-    );
+  // Extract unique departments from classes
+  const departments = useMemo(() => {
+    const deptMap = new Map<number, { id: number; name: string }>();
+    
+    classes.forEach((cls) => {
+      if (cls.departmentId && cls.departmentName) {
+        deptMap.set(cls.departmentId, {
+          id: cls.departmentId,
+          name: cls.departmentName,
+        });
+      }
+    });
+    
+    return Array.from(deptMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [classes]);
 
-  // Filter students by selected class and exclude INDIVIDUAL type
+  // Filter classes by level
+  const classesByLevel = useMemo(() => {
+    if (!selectedLevel) return [];
+    
+    return classes.filter((cls) => {
+      // Exclude INDIVIDUAL classes
+      if (cls.studentType === 'INDIVIDUAL') return false;
+      
+      // Check level (Junior: JSS, Senior: SSS)
+      const isJunior = cls.level?.toUpperCase().includes('JSS');
+      const isSenior = cls.level?.toUpperCase().includes('SSS');
+      
+      if (selectedLevel === 'JUNIOR') return isJunior;
+      if (selectedLevel === 'SENIOR') return isSenior;
+      
+      return false;
+    });
+  }, [classes, selectedLevel]);
+
+  // Filter classes by department
+  const classesByDepartment = useMemo(() => {
+    if (!selectedDepartmentId) return classesByLevel;
+    
+    return classesByLevel.filter(
+      (cls) => cls.departmentId === Number(selectedDepartmentId)
+    );
+  }, [classesByLevel, selectedDepartmentId]);
+
+  // Filter classes by student type
+  const classesByStudentType = useMemo(() => {
+    if (!selectedStudentType) return classesByDepartment;
+    
+    return classesByDepartment.filter(
+      (cls) => cls.studentType === selectedStudentType
+    );
+  }, [classesByDepartment, selectedStudentType]);
+
+  // Filter students by selected class
   const studentsInClass = useMemo(() => {
     if (!selectedClassId) return [];
     
@@ -69,10 +129,31 @@ export const AdminGradebookReportPage: React.FC = () => {
     !!selectedStudentId
   );
 
-  // Handle class change
+  // Reset handlers for cascading dropdowns
+  const handleLevelChange = (value: string) => {
+    setSelectedLevel(value as ClassLevel);
+    setSelectedDepartmentId('');
+    setSelectedStudentType('');
+    setSelectedClassId('');
+    setSelectedStudentId('');
+  };
+
+  const handleDepartmentChange = (value: string) => {
+    setSelectedDepartmentId(value);
+    setSelectedStudentType('');
+    setSelectedClassId('');
+    setSelectedStudentId('');
+  };
+
+  const handleStudentTypeChange = (value: string) => {
+    setSelectedStudentType(value as StudentTypeFilter);
+    setSelectedClassId('');
+    setSelectedStudentId('');
+  };
+
   const handleClassChange = (value: string) => {
     setSelectedClassId(value);
-    setSelectedStudentId(''); // Reset student selection
+    setSelectedStudentId('');
   };
 
   // Handle view subject details
@@ -87,9 +168,7 @@ export const AdminGradebookReportPage: React.FC = () => {
 
   // Handle export
   const handleExport = () => {
-    // TODO: Implement CSV/PDF export
     if (!report) return;
-    
     console.log('Exporting report for:', selectedStudent?.fullName);
     alert('Export functionality - implement CSV/PDF download here');
   };
@@ -114,7 +193,7 @@ export const AdminGradebookReportPage: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold">Student Gradebook Reports</h1>
           <p className="text-muted-foreground mt-1">
-            View and manage student grade reports (School/Home/Aspirant students only)
+            View weighted grade reports for School, Home, and Aspirant students
           </p>
         </div>
         {selectedStudentId && (
@@ -131,42 +210,156 @@ export const AdminGradebookReportPage: React.FC = () => {
         )}
       </div>
 
-      {/* Student Selector */}
+      {/* Multi-Level Filter Selector */}
       <Card>
         <CardContent className="p-6">
           <div className="space-y-4">
             <div className="flex items-start gap-4">
               <GraduationCap className="h-5 w-5 text-muted-foreground mt-2" />
               <div className="flex-1 space-y-4">
-                {/* Class Selector */}
+                
+                {/* 1. Class Level */}
                 <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    1. Select Class
+                  <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                    <School className="h-4 w-4" />
+                    1. Select Class Level
+                  </label>
+                  <Select value={selectedLevel} onValueChange={handleLevelChange}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choose level (Junior or Senior)..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="JUNIOR">Junior Secondary (JSS)</SelectItem>
+                      <SelectItem value="SENIOR">Senior Secondary (SSS)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    First, select whether you want Junior or Senior classes
+                  </p>
+                </div>
+
+                {/* 2. Department */}
+                <div>
+                  <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    2. Select Department
+                  </label>
+                  <Select
+                    value={selectedDepartmentId}
+                    onValueChange={handleDepartmentChange}
+                    disabled={!selectedLevel}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choose department..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {!selectedLevel ? (
+                        <SelectItem value="none" disabled>
+                          Please select a level first
+                        </SelectItem>
+                      ) : departments.length === 0 ? (
+                        <SelectItem value="none" disabled>
+                          No departments available
+                        </SelectItem>
+                      ) : (
+                        <>
+                          <SelectItem value="ALL">All Departments</SelectItem>
+                          {departments.map((dept) => (
+                            <SelectItem key={dept.id} value={String(dept.id)}>
+                              {dept.name}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedLevel
+                      ? `${departments.length} department${departments.length !== 1 ? 's' : ''} available`
+                      : 'Select a level to see departments'}
+                  </p>
+                </div>
+
+                {/* 3. Student Type */}
+                <div>
+                  <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    3. Select Student Type
+                  </label>
+                  <Select
+                    value={selectedStudentType}
+                    onValueChange={handleStudentTypeChange}
+                    disabled={!selectedLevel || !selectedDepartmentId}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choose student type..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {!selectedDepartmentId ? (
+                        <SelectItem value="none" disabled>
+                          Please select a department first
+                        </SelectItem>
+                      ) : (
+                        <>
+                          <SelectItem value="ALL">All Types</SelectItem>
+                          <SelectItem value="SCHOOL">
+                            <span className="flex items-center gap-2">
+                              <School className="h-4 w-4" /> School Students
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="HOME">
+                            <span className="flex items-center gap-2">
+                              <HomeIcon className="h-4 w-4" /> Home Students
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="ASPIRANT">
+                            <span className="flex items-center gap-2">
+                              <Award className="h-4 w-4" /> Aspirant Students
+                            </span>
+                          </SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Filter by student enrollment type
+                  </p>
+                </div>
+
+                {/* 4. Class */}
+                <div>
+                  <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4" />
+                    4. Select Class
                   </label>
                   <Select
                     value={selectedClassId}
                     onValueChange={handleClassChange}
-                    disabled={classesLoading}
+                    disabled={!selectedLevel || !selectedDepartmentId || classesLoading}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Choose a class..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {classesLoading ? (
+                      {!selectedDepartmentId ? (
+                        <SelectItem value="none" disabled>
+                          Please complete previous selections
+                        </SelectItem>
+                      ) : classesLoading ? (
                         <SelectItem value="loading" disabled>
                           Loading classes...
                         </SelectItem>
-                      ) : nonIndividualClasses.length === 0 ? (
+                      ) : classesByStudentType.length === 0 ? (
                         <SelectItem value="none" disabled>
-                          No classes available
+                          No classes match your filters
                         </SelectItem>
                       ) : (
-                        nonIndividualClasses.map((cls) => (
+                        classesByStudentType.map((cls) => (
                           <SelectItem key={cls.id} value={String(cls.id)}>
                             {cls.name} {cls.level && `(${cls.level})`}
-                            {cls.departmentName && (
+                            {cls.studentType && (
                               <span className="text-xs text-muted-foreground ml-2">
-                                - {cls.departmentName}
+                                • {cls.studentType}
                               </span>
                             )}
                           </SelectItem>
@@ -175,14 +368,15 @@ export const AdminGradebookReportPage: React.FC = () => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Select a class to see students in that class
+                    {classesByStudentType.length} class{classesByStudentType.length !== 1 ? 'es' : ''} match your filters
                   </p>
                 </div>
 
-                {/* Student Selector */}
+                {/* 5. Student */}
                 <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    2. Select Student
+                  <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    5. Select Student
                   </label>
                   <Select
                     value={selectedStudentId}
@@ -223,6 +417,7 @@ export const AdminGradebookReportPage: React.FC = () => {
                       : 'Select a class to see students'}
                   </p>
                 </div>
+
               </div>
             </div>
 
@@ -252,12 +447,15 @@ export const AdminGradebookReportPage: React.FC = () => {
           <CardContent className="p-12 text-center">
             <GraduationCap className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">Select a Student</h3>
-            <p className="text-muted-foreground">
-              Choose a class and student above to view their gradebook report
+            <p className="text-muted-foreground mb-4">
+              Complete all filter steps above to view a gradebook report
             </p>
-            <div className="mt-4 text-sm text-muted-foreground">
-              <p>📚 Step 1: Select a class</p>
-              <p>👨‍🎓 Step 2: Select a student from that class</p>
+            <div className="mt-4 text-sm text-muted-foreground space-y-1">
+              <p>📚 Step 1: Select class level (Junior/Senior)</p>
+              <p>🏢 Step 2: Select department</p>
+              <p>👥 Step 3: Select student type</p>
+              <p>🎓 Step 4: Select a class</p>
+              <p>👨‍🎓 Step 5: Select a student</p>
             </div>
           </CardContent>
         </Card>
