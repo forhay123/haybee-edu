@@ -220,7 +220,7 @@ export const AdminGradebookReportPage: React.FC = () => {
                 
                 {/* 1. Class Level */}
                 <div>
-                  <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                  <label className="text-sm font-medium mb-2 flex items-center gap-2">
                     <School className="h-4 w-4" />
                     1. Select Class Level
                   </label>
@@ -240,7 +240,7 @@ export const AdminGradebookReportPage: React.FC = () => {
 
                 {/* 2. Department */}
                 <div>
-                  <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                  <label className="text-sm font-medium mb-2 flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
                     2. Select Department
                   </label>
@@ -282,7 +282,7 @@ export const AdminGradebookReportPage: React.FC = () => {
 
                 {/* 3. Student Type */}
                 <div>
-                  <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                  <label className="text-sm font-medium mb-2 flex items-center gap-2">
                     <Users className="h-4 w-4" />
                     3. Select Student Type
                   </label>
@@ -328,7 +328,7 @@ export const AdminGradebookReportPage: React.FC = () => {
 
                 {/* 4. Class */}
                 <div>
-                  <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                  <label className="text-sm font-medium mb-2 flex items-center gap-2">
                     <GraduationCap className="h-4 w-4" />
                     4. Select Class
                   </label>
@@ -374,7 +374,7 @@ export const AdminGradebookReportPage: React.FC = () => {
 
                 {/* 5. Student */}
                 <div>
-                  <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                  <label className="text-sm font-medium mb-2 flex items-center gap-2">
                     <Users className="h-4 w-4" />
                     5. Select Student
                   </label>
