@@ -286,6 +286,7 @@ public class GradebookCalculationService {
     
     /**
      * ✅ Calculate overall report statistics
+     * UPDATED: Includes ALL subjects (even incomplete) in overall average
      */
     private GradebookReportDto calculateOverallReport(
             Long studentId,
@@ -295,27 +296,41 @@ public class GradebookCalculationService {
             return GradebookReportDto.empty(studentId);
         }
         
-        // Calculate overall average (only complete subjects)
+        // ✅ NEW: Calculate overall average INCLUDING incomplete subjects
         double totalPercentage = 0.0;
         int completeSubjects = 0;
         int passedSubjects = 0;
+        int failedSubjects = 0;
         
         for (SubjectGradebookDto subject : subjectReports) {
+            // ✅ Include ALL subjects in average (even incomplete ones)
+            totalPercentage += subject.getFinalPercentage();
+            
+            // Count complete subjects
             if (Boolean.TRUE.equals(subject.getIsComplete())) {
-                totalPercentage += subject.getFinalPercentage();
                 completeSubjects++;
-                
-                if ("PASS".equals(subject.getStatus())) {
-                    passedSubjects++;
-                }
+            }
+            
+            // ✅ Count passed/failed based on percentage, not completion status
+            if (subject.getFinalPercentage() >= 50.0) {
+                passedSubjects++;
+            } else if (subject.getComponentsSubmitted() > 0) {
+                // Only count as failed if they've submitted at least 1 component
+                // (avoids counting subjects with no assessments as "failed")
+                failedSubjects++;
             }
         }
         
-        double overallAverage = completeSubjects > 0 
-            ? totalPercentage / completeSubjects 
+        // ✅ Calculate average from ALL subjects
+        double overallAverage = subjectReports.size() > 0 
+            ? totalPercentage / subjectReports.size() 
             : 0.0;
         
         String overallGrade = calculateGradeLetter(overallAverage);
+        
+        log.info("📊 Overall Report: {} subjects, {} complete, {} passed, {} failed, {}% average",
+                subjectReports.size(), completeSubjects, passedSubjects, failedSubjects,
+                String.format("%.2f", overallAverage));
         
         return GradebookReportDto.builder()
             .studentId(studentId)
@@ -324,7 +339,7 @@ public class GradebookCalculationService {
             .completeSubjects(completeSubjects)
             .incompleteSubjects(subjectReports.size() - completeSubjects)
             .passedSubjects(passedSubjects)
-            .failedSubjects(completeSubjects - passedSubjects)
+            .failedSubjects(failedSubjects)
             .overallAverage(round(overallAverage, 2))
             .overallGrade(overallGrade)
             .build();
