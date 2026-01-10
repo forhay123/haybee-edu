@@ -21,7 +21,8 @@ import { GradeStatus } from '../types/gradebookTypes';
 import { Download, Printer, Search, Filter, Users, GraduationCap, Building2, School, Home as HomeIcon, Award } from 'lucide-react';
 
 type ClassLevel = 'JUNIOR' | 'SENIOR';
-type StudentTypeFilter = 'SCHOOL' | 'HOME' | 'ASPIRANT';
+// ✅ FIX: Added 'ALL' to the type
+type StudentTypeFilter = 'SCHOOL' | 'HOME' | 'ASPIRANT' | 'ALL';
 
 /**
  * 👨‍💼 Admin Gradebook Report Page
@@ -69,36 +70,42 @@ export const AdminGradebookReportPage: React.FC = () => {
     return Array.from(deptMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [classes]);
 
-  // Filter classes by level
+  // ✅ FIX: Filter classes by level - direct comparison instead of includes()
   const classesByLevel = useMemo(() => {
     if (!selectedLevel) return [];
     
     return classes.filter((cls) => {
+      // Exclude INDIVIDUAL classes
       if (cls.studentType === 'INDIVIDUAL') return false;
       
+      // Match level directly - API returns "JUNIOR" or "SENIOR"
       return cls.level?.toUpperCase() === selectedLevel;
     });
   }, [classes, selectedLevel]);
 
-  // Filter classes by department
+  // ✅ FIX: Filter classes by department with proper 'ALL' handling
   const classesByDepartment = useMemo(() => {
-    if (!selectedDepartmentId) return classesByLevel;
-    
+    if (!selectedDepartmentId || selectedDepartmentId === 'ALL') {
+      return classesByLevel;
+    }
+
     return classesByLevel.filter(
       (cls) => cls.departmentId === Number(selectedDepartmentId)
     );
   }, [classesByLevel, selectedDepartmentId]);
 
-  // Filter classes by student type
+  // ✅ FIX: Filter classes by student type with proper 'ALL' handling
   const classesByStudentType = useMemo(() => {
-    if (!selectedStudentType) return classesByDepartment;
+    if (!selectedStudentType || selectedStudentType === 'ALL') {
+      return classesByDepartment;
+    }
     
     return classesByDepartment.filter(
       (cls) => cls.studentType === selectedStudentType
     );
   }, [classesByDepartment, selectedStudentType]);
 
-  // Filter students by selected class
+  // ✅ FIX: Filter STUDENTS (not classes!) by selected class
   const studentsInClass = useMemo(() => {
     if (!selectedClassId) return [];
     
