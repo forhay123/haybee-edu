@@ -168,4 +168,16 @@ public interface AssessmentSubmissionRepository extends JpaRepository<Assessment
 	 * Used when deleting custom assessments
 	 */
 	boolean existsByAssessmentId(Long assessmentId);
+
+	/**
+	 * ✅ NEW: Find submissions by student and list of assessment IDs
+	 * Used for gradebook calculations
+	 */
+	@Query("SELECT s FROM AssessmentSubmission s " +
+	       "WHERE s.student.id = :studentId " +
+	       "AND s.assessment.id IN :assessmentIds")
+	List<AssessmentSubmission> findByStudentIdAndAssessmentIdIn(
+	    @Param("studentId") Long studentId,
+	    @Param("assessmentIds") List<Long> assessmentIds
+	);
 }

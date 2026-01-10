@@ -180,7 +180,10 @@ import {
 } from './features/individual';
 
 import { StudentListPage } from '@/features/students/pages/StudentListPage';
-
+// Add these imports at the top with your other assessment imports
+import { StudentGradebookReportPage } from "./features/assessments/pages/StudentGradebookReportPage";
+import { SubjectGradebookDetailPage } from "./features/assessments/pages/SubjectGradebookDetailPage";
+import { AdminGradebookReportPage } from "./features/assessments/pages/AdminGradebookReportPage";
 
 // OAuth Callback
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
@@ -1219,6 +1222,52 @@ const App = () => {
                 <ProtectedRoute roles={["ADMIN"]}>
                   <AppLayout>
                     <AdminPendingGradingPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* 📊 Gradebook Routes - STUDENT */}
+            <Route
+              path="/assessments/gradebook/report"
+              element={
+                <ProtectedRoute roles={["STUDENT"]}>
+                  <AppLayout>
+                    <StudentGradebookReportPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/assessments/gradebook/subject/:subjectId"
+              element={
+                <ProtectedRoute roles={["STUDENT"]}>
+                  <AppLayout>
+                    <SubjectGradebookDetailPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* 📊 Gradebook Routes - ADMIN/TEACHER */}
+            <Route
+              path="/admin/gradebook/reports"
+              element={
+                <ProtectedRoute roles={["ADMIN", "TEACHER"]}>
+                  <AppLayout>
+                    <AdminGradebookReportPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/gradebook/student/:studentId/subject/:subjectId"
+              element={
+                <ProtectedRoute roles={["ADMIN", "TEACHER"]}>
+                  <AppLayout>
+                    <SubjectGradebookDetailPage />
                   </AppLayout>
                 </ProtectedRoute>
               }

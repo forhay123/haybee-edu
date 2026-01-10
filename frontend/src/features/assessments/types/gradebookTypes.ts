@@ -175,3 +175,106 @@ export const formatDueDate = (dueDate: string | undefined): string => {
     minute: '2-digit'
   });
 };
+
+// ============================================================
+// GRADEBOOK REPORT TYPES (NEW)
+// ============================================================
+
+/**
+ * Assessment Weights Map
+ * Maps each assessment type to its percentage weight
+ */
+export type AssessmentWeights = {
+  [key in AssessmentType]: number;
+};
+
+/**
+ * 📝 Component Score DTO
+ * Represents score for ONE assessment type (e.g., all QUIZes)
+ */
+export interface ComponentScoreDto {
+  type: AssessmentType;
+  weight: number; // Percentage weight (20, 40, etc.)
+  score: number; // Points earned
+  totalPossible: number; // Total points possible
+  percentage: number; // (score / total) * 100
+  weightedScore: number; // Contribution to final grade
+  submitted: boolean; // Has student submitted?
+  count: number; // Number of assessments (if multiple)
+  assessmentIds: number[]; // IDs of assessments in this component
+}
+
+/**
+ * 📚 Subject Gradebook DTO
+ * Contains weighted grade calculation for ONE subject
+ */
+export interface SubjectGradebookDto {
+  subjectId: number;
+  subjectName: string;
+  subjectCode: string;
+  
+  // Component scores (Quiz, Exam, etc.)
+  components: {
+    [key in AssessmentType]?: ComponentScoreDto;
+  };
+  
+  // Calculated totals
+  totalWeightedScore: number; // Sum of all weighted scores
+  totalWeightCovered: number; // Total weight of submitted components
+  finalPercentage: number; // Final calculated percentage
+  
+  gradeLetter: string; // A, B, C, D, F
+  status: 'PASS' | 'FAIL' | 'INCOMPLETE';
+  
+  isComplete: boolean; // All components submitted?
+  componentsSubmitted: number;
+  totalComponents: number;
+}
+
+/**
+ * 📊 Complete Gradebook Report DTO
+ * Contains all subjects with weighted grades for a student
+ */
+export interface GradebookReportDto {
+  studentId: number;
+  studentName?: string;
+  termName?: string;
+  
+  // Subject-level data
+  subjects: SubjectGradebookDto[];
+  
+  // Overall statistics
+  totalSubjects: number;
+  completeSubjects: number;
+  incompleteSubjects: number;
+  passedSubjects: number;
+  failedSubjects: number;
+  
+  overallAverage: number; // Average of all complete subjects
+  overallGrade: string; // Letter grade (A, B, C, etc.)
+}
+
+/**
+ * Grade Status Types
+ */
+export type GradeStatus = 'PASS' | 'FAIL' | 'INCOMPLETE';
+
+/**
+ * Grade Letter Types
+ */
+export type GradeLetter = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F' | 'N/A';
+
+/**
+ * Component Status
+ */
+export type ComponentStatus = 'SUBMITTED' | 'PENDING' | 'MISSING' | 'NOT_AVAILABLE';
+
+/**
+ * Helper type for filtering subjects
+ */
+export interface SubjectFilter {
+  status?: GradeStatus;
+  minPercentage?: number;
+  maxPercentage?: number;
+  complete?: boolean;
+}
