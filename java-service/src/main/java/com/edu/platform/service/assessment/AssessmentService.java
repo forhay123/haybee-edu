@@ -86,16 +86,52 @@ public class AssessmentService {
         return convertToDto(assessment, null);
     }
 
-    /**
-     * ✅ FIXED: Add questions with proper type detection
-     */
     private void addQuestionsToAssessment(Assessment assessment, AssessmentRequest request) {
         List<AssessmentQuestion> questions = new ArrayList<>();
         int orderNumber = 1;
 
-        // Add AI-generated questions with smart type detection
-        if (request.getNumberOfAIQuestions() != null && request.getNumberOfAIQuestions() > 0 
+        // ✅ NEW: Add SPECIFIC AI questions (selected by teacher)
+        if (request.getAiQuestionIds() != null && !request.getAiQuestionIds().isEmpty()) {
+            log.info("📝 Adding {} selected AI questions", request.getAiQuestionIds().size());
+            
+            List<LessonAIQuestion> selectedAIQuestions = aiQuestionRepository
+                    .findAllById(request.getAiQuestionIds());
+            
+            for (LessonAIQuestion aiQ : selectedAIQuestions) {
+                // Smart type detection
+                AssessmentQuestion.QuestionType questionType;
+                boolean hasAllOptions = aiQ.getOptionA() != null && !aiQ.getOptionA().trim().isEmpty()
+                        && aiQ.getOptionB() != null && !aiQ.getOptionB().trim().isEmpty()
+                        && aiQ.getOptionC() != null && !aiQ.getOptionC().trim().isEmpty()
+                        && aiQ.getOptionD() != null && !aiQ.getOptionD().trim().isEmpty();
+                
+                questionType = hasAllOptions 
+                        ? AssessmentQuestion.QuestionType.MULTIPLE_CHOICE 
+                        : AssessmentQuestion.QuestionType.ESSAY;
+                
+                AssessmentQuestion question = AssessmentQuestion.builder()
+                        .assessment(assessment)
+                        .questionText(aiQ.getQuestionText())
+                        .questionType(questionType)
+                        .optionA(aiQ.getOptionA())
+                        .optionB(aiQ.getOptionB())
+                        .optionC(aiQ.getOptionC())
+                        .optionD(aiQ.getOptionD())
+                        .correctAnswer(aiQ.getCorrectOption())
+                        .marks(aiQ.getMaxScore() != null ? aiQ.getMaxScore() : 1)
+                        .orderNumber(orderNumber++)
+                        .aiGenerated(true)
+                        .build();
+                questions.add(question);
+                
+                log.debug("✅ Added selected AI question {}: {}", aiQ.getId(), aiQ.getQuestionText());
+            }
+        }
+        // ✅ FALLBACK: Auto-generate random AI questions if no specific ones selected
+        else if (request.getNumberOfAIQuestions() != null && request.getNumberOfAIQuestions() > 0 
                 && assessment.getLessonTopic() != null) {
+            
+            log.info("📝 Auto-generating {} random AI questions", request.getNumberOfAIQuestions());
             
             List<LessonAIQuestion> aiQuestions = aiQuestionRepository
                     .findByLessonAIResult_LessonTopic_Id(assessment.getLessonTopic().getId())
@@ -104,26 +140,20 @@ public class AssessmentService {
                     .toList();
 
             for (LessonAIQuestion aiQ : aiQuestions) {
-                // ✅ SMART TYPE DETECTION: Check if question has options
                 AssessmentQuestion.QuestionType questionType;
                 boolean hasAllOptions = aiQ.getOptionA() != null && !aiQ.getOptionA().trim().isEmpty()
                         && aiQ.getOptionB() != null && !aiQ.getOptionB().trim().isEmpty()
                         && aiQ.getOptionC() != null && !aiQ.getOptionC().trim().isEmpty()
                         && aiQ.getOptionD() != null && !aiQ.getOptionD().trim().isEmpty();
                 
-                if (hasAllOptions) {
-                    questionType = AssessmentQuestion.QuestionType.MULTIPLE_CHOICE;
-                    log.debug("Question '{}' detected as MULTIPLE_CHOICE", aiQ.getQuestionText());
-                } else {
-                    // No options = theory/essay question
-                    questionType = AssessmentQuestion.QuestionType.ESSAY;
-                    log.debug("Question '{}' detected as ESSAY (no options)", aiQ.getQuestionText());
-                }
+                questionType = hasAllOptions 
+                        ? AssessmentQuestion.QuestionType.MULTIPLE_CHOICE 
+                        : AssessmentQuestion.QuestionType.ESSAY;
                 
                 AssessmentQuestion question = AssessmentQuestion.builder()
                         .assessment(assessment)
                         .questionText(aiQ.getQuestionText())
-                        .questionType(questionType) // ✅ Dynamic type
+                        .questionType(questionType)
                         .optionA(aiQ.getOptionA())
                         .optionB(aiQ.getOptionB())
                         .optionC(aiQ.getOptionC())
@@ -137,7 +167,7 @@ public class AssessmentService {
             }
         }
 
-        // Add teacher-created questions
+        // Add teacher-created questions (unchanged)
         if (request.getTeacherQuestionIds() != null && !request.getTeacherQuestionIds().isEmpty()) {
             List<TeacherQuestionBank> teacherQuestions = teacherQuestionRepository
                     .findAllById(request.getTeacherQuestionIds());
@@ -171,6 +201,8 @@ public class AssessmentService {
             
             log.info("✅ Added {} questions to assessment {} (total marks: {})", 
                     questions.size(), assessment.getId(), totalMarks);
+        } else {
+            log.warn("⚠️ No questions added to assessment {}", assessment.getId());
         }
     }
 

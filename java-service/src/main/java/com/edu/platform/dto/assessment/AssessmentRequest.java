@@ -27,7 +27,8 @@ public class AssessmentRequest {
     private LocalDateTime dueDate;
     
     // Question selection
-    private Integer numberOfAIQuestions; // How many AI questions to pull
-    private List<Long> teacherQuestionIds; // Specific teacher questions to include
+    private Integer numberOfAIQuestions;        // How many AI questions to auto-generate (fallback)
+    private List<Long> aiQuestionIds;          // ✅ NEW: Specific AI questions selected by teacher
+    private List<Long> teacherQuestionIds;     // Specific teacher questions to include
     private Boolean mixAIAndTeacherQuestions;
 }
