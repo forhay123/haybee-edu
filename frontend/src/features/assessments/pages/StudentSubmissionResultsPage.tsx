@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../../api/axios';
 import { ArrowLeft, CheckCircle, XCircle, Award, BookOpen, Clock } from 'lucide-react';
 import { format } from 'date-fns';
-import { useAuth } from '../../auth/hooks/useAuth';
+import { useAuth } from '../../../features/auth/useAuth';
 
 interface SubmissionAnswer {
   id: number;
